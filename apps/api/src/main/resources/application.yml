@@ -1,0 +1,12 @@
+spring:
+  application:
+    name: angico-api
+  datasource:
+    url: jdbc:h2:mem:angico;DB_CLOSE_DELAY=-1
+    username: sa
+    password: ""
+  jpa:
+    hibernate:
+      ddl-auto: update
+    open-in-view: false
+
