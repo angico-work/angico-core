@@ -2,7 +2,10 @@ spring:
   application:
     name: angico-api
   datasource:
-    url: jdbc:h2:mem:angico;DB_CLOSE_DELAY=-1
+    # File-based H2 in PostgreSQL-compatibility mode: data survives restarts,
+    # zero external infra, and the SQL dialect matches a future Postgres swap
+    # (which becomes essentially a url/driver change).
+    url: jdbc:h2:file:./data/angico;MODE=PostgreSQL;DB_CLOSE_DELAY=-1;AUTO_SERVER=TRUE
     username: sa
     password: ""
   jpa:
@@ -10,3 +13,5 @@ spring:
       ddl-auto: update
     open-in-view: false
 
+server:
+  port: 8082

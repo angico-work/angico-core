@@ -1,8 +1,8 @@
-package com.angico.problemas;
+package com.angico.potencialidades;
 
 import java.time.Instant;
 
-public record ProblemaResponse(
+public record PotencialidadeResponse(
         Long id,
         String workspaceId,
         String territorioId,
@@ -12,15 +12,13 @@ public record ProblemaResponse(
         String localizacao,
         Double latitude,
         Double longitude,
-        String severidade,
         String status,
-        String origemObservacaoId,
         String autorId,
         Instant createdAt
 ) {
 
-    public static ProblemaResponse from(ProblemaSocioambiental p) {
-        return new ProblemaResponse(
+    public static PotencialidadeResponse from(PotencialidadeTerritorial p) {
+        return new PotencialidadeResponse(
                 p.getId(),
                 p.getWorkspaceId(),
                 p.getTerritorioId(),
@@ -30,9 +28,7 @@ public record ProblemaResponse(
                 p.getLocalizacao(),
                 p.getLatitude(),
                 p.getLongitude(),
-                p.getSeveridade(),
                 p.getStatus(),
-                p.getOrigemObservacaoId(),
                 p.getAutorId(),
                 p.getCreatedAt()
         );
