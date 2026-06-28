@@ -48,14 +48,14 @@ public class GeocodingService {
             return new GeocodingSearchResponse(
                     normalizedQuery,
                     List.of(),
-                    "Geocodificador indisponivel no momento."
+                    "Geocodificador indisponível no momento."
             );
         }
     }
 
     public GeocodingResult reverse(Double latitude, Double longitude) {
         if (latitude == null || longitude == null) {
-            throw new IllegalArgumentException("lat e lng sao obrigatorios.");
+            throw new IllegalArgumentException("lat e lng são obrigatórios.");
         }
         String key = String.format(Locale.ROOT, "%.6f:%.6f", latitude, longitude);
         return reverseCache.computeIfAbsent(key, ignored -> provider.reverse(latitude, longitude));

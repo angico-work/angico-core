@@ -12,17 +12,17 @@ const sessionTokenKey = 'angico.sessionToken';
 
 const navItems = [
   ['home', 'Home'],
-  ['resumo', 'Resumo do Territorio'],
+  ['resumo', 'Resumo do Território'],
   ['mapa', 'Mapa'],
-  ['observacoes', 'Observacoes'],
+  ['observacoes', 'Observações'],
   ['problemas', 'Problemas'],
   ['potencialidades', 'Potencialidades'],
-  ['missoes', 'Missoes'],
-  ['acoes', 'Acoes'],
-  ['liderancas', 'Liderancas'],
+  ['missoes', 'Missões'],
+  ['acoes', 'Ações'],
+  ['liderancas', 'Lideranças'],
   ['mensagens', 'Mensagens'],
-  ['memoria', 'Memoria'],
-  ['relatorios', 'Relatorios']
+  ['memoria', 'Memória'],
+  ['relatorios', 'Relatórios']
 ];
 
 function viewFromHash() {
@@ -52,13 +52,13 @@ function replaceWithAppRoute(view = state.activeView || 'home') {
 }
 
 const observationCategories = [
-  'Residuos',
-  'Agua e saneamento',
-  'Areas verdes',
+  'Resíduos',
+  'Água e saneamento',
+  'Áreas verdes',
   'Calor',
   'Mobilidade',
-  'Seguranca alimentar',
-  'Educacao ambiental',
+  'Segurança alimentar',
+  'Educação ambiental',
   'Outro'
 ];
 
@@ -72,6 +72,57 @@ const linkableTypes = [
   'RESULTADO',
   'INDICADOR'
 ];
+
+const typeLabels = {
+  TODOS: 'Todos',
+  OBSERVACAO: 'Observação',
+  PROBLEMA: 'Problema',
+  POTENCIALIDADE: 'Potencialidade',
+  MISSAO: 'Missão',
+  ACAO: 'Ação',
+  TERRITORIO: 'Território',
+  INDICADOR: 'Indicador',
+  MEDICAO: 'Medição',
+  RESULTADO: 'Resultado',
+  CONVERSA: 'Conversa',
+  MENSAGEM: 'Mensagem',
+  LOCALIZACAO: 'Localização',
+  ANEXO: 'Anexo'
+};
+
+const statusLabels = {
+  TODOS: 'Todos',
+  SUBMETIDA: 'Submetida',
+  VALIDADA: 'Validada',
+  IDENTIFICADO: 'Identificado',
+  PRIORIZADO: 'Priorizado',
+  PLANEJADA: 'Planejada',
+  EM_ANDAMENTO: 'Em andamento',
+  CONCLUIDA: 'Concluída',
+  RASCUNHO: 'Rascunho',
+  ATIVO: 'Ativo',
+  ATIVA: 'Ativa',
+  ENVIADA: 'Enviada',
+  PENDENTE: 'Pendente'
+};
+
+const priorityLabels = {
+  BAIXA: 'Baixa',
+  MEDIA: 'Média',
+  ALTA: 'Alta'
+};
+
+function typeLabel(type) {
+  return typeLabels[type] || type || '';
+}
+
+function statusLabel(status) {
+  return statusLabels[status] || status || '';
+}
+
+function priorityLabel(priority) {
+  return priorityLabels[priority] || priority || '';
+}
 
 const state = {
   loading: true,
@@ -105,11 +156,11 @@ const demoDashboard = {
   territory: {
     id: 1,
     workspaceId: 'angico-publico',
-    nome: 'Pinheiros, Sao Paulo',
+    nome: 'Pinheiros, São Paulo',
     tipo: 'BAIRRO',
-    cidade: 'Sao Paulo',
+    cidade: 'São Paulo',
     bairro: 'Pinheiros',
-    estado: 'Sao Paulo',
+    estado: 'São Paulo',
     pais: 'Brasil',
     latitude: -23.5614,
     longitude: -46.7019,
@@ -117,19 +168,19 @@ const demoDashboard = {
   },
   territories: [],
   stats: [
-    { label: 'Observacoes', value: 1 },
+    { label: 'Observações', value: 1 },
     { label: 'Problemas ativos', value: 1 },
     { label: 'Potencialidades', value: 0 },
-    { label: 'Missoes em andamento', value: 1 },
-    { label: 'Acoes concluidas', value: 1 },
-    { label: 'Medicoes', value: 1 },
+    { label: 'Missões em andamento', value: 1 },
+    { label: 'Ações concluídas', value: 1 },
+    { label: 'Medições', value: 1 },
     { label: 'Mensagens', value: 0 }
   ],
   markers: [
     {
       id: 1,
       type: 'OBSERVACAO',
-      title: 'Acumulo de residuos perto de ponto de onibus',
+      title: 'Acúmulo de resíduos perto de ponto de ônibus',
       status: 'SUBMETIDA',
       priority: 4,
       latitude: -23.5602,
@@ -183,7 +234,7 @@ function apiPath(path) {
 
 async function apiFetch(path, options = {}) {
   if (useDemoData && options.method && options.method !== 'GET') {
-    throw new Error('VITE_USE_DEMO_DATA esta ativo; escrita desabilitada no modo local.');
+    throw new Error('VITE_USE_DEMO_DATA está ativo; escrita desabilitada no modo local.');
   }
   if (useDemoData && path.includes('/api/glimpse/dashboard')) {
     return structuredClone(demoDashboard);
@@ -203,9 +254,9 @@ async function apiFetch(path, options = {}) {
 
   if (response.status === 401 && !path.includes('/api/auth/login')) {
     clearSession();
-    state.loginError = 'Sessao expirada. Entre novamente.';
+    state.loginError = 'Sessão expirada. Entre novamente.';
     render();
-    throw new Error('Sessao expirada.');
+    throw new Error('Sessão expirada.');
   }
 
   if (!response.ok) {
@@ -238,7 +289,7 @@ async function responseMessage(response) {
 function friendlyLoginError(error) {
   const message = error?.message || '';
   if (message.includes('No static resource') || message.includes('/api/auth/login') || message.includes('Invalid CORS request') || message.includes('Failed to fetch')) {
-    return 'Nao consegui conectar ao servico de login. Verifique se o servidor local esta ativo e tente novamente.';
+    return 'Não consegui conectar ao serviço de login. Verifique se o servidor local está ativo e tente novamente.';
   }
   if (message.includes('Credenciais') || message.includes('Senha') || message.includes('email')) {
     return message;
@@ -365,7 +416,7 @@ function render() {
   }
 
   if (state.loading && !state.dashboard) {
-    app.innerHTML = `<main class="boot-screen"><img src="${logoUrl}" alt="Angico"><p>Carregando territorio...</p></main>`;
+    app.innerHTML = `<main class="boot-screen"><img src="${logoUrl}" alt="Angico"><p>Carregando território...</p></main>`;
     return;
   }
 
@@ -373,7 +424,7 @@ function render() {
     app.innerHTML = `
       <main class="boot-screen error">
         <img src="${logoUrl}" alt="Angico">
-        <h1>Servico indisponivel</h1>
+        <h1>Serviço indisponível</h1>
         <p>${html(state.error)}</p>
         <button class="button primary" data-action="reload">Tentar novamente</button>
         <button class="button" data-action="logout">Sair</button>
@@ -412,21 +463,21 @@ function renderLandingPage() {
   return `
     <main class="public-shell">
       <section class="landing-hero">
-        <nav class="landing-nav" aria-label="Navegacao principal">
+        <nav class="landing-nav" aria-label="Navegação principal">
           <a class="landing-logo" href="#top" aria-label="Angico">
             <img src="${logoUrl}" alt="Angico">
           </a>
           <div>
             <a href="#como-funciona">Como funciona</a>
-            <a href="#liderancas">Liderancas</a>
+            <a href="#liderancas">Lideranças</a>
             <a href="/login" data-route>Entrar</a>
           </div>
         </nav>
         <div class="hero-grid" id="top">
           <section class="hero-copy" aria-labelledby="landing-title">
-            <span class="eyebrow">Memoria territorial viva</span>
-            <h1 id="landing-title">Angico conecta territorio, evidencias e liderancas locais.</h1>
-            <p>Uma base segura para registrar observacoes, transformar problemas em missoes, acompanhar impacto e manter a memoria coletiva de cada lugar.</p>
+            <span class="eyebrow">Memória territorial viva</span>
+            <h1 id="landing-title">Angico conecta território, evidências e lideranças locais.</h1>
+            <p>Uma base segura para registrar observações, transformar problemas em missões, acompanhar impacto e manter a memória coletiva de cada lugar.</p>
             <div class="hero-actions">
               <a class="button primary" href="/login" data-route>Acessar o Core</a>
               <a class="button ghost" href="#como-funciona">Conhecer o Angico</a>
@@ -435,15 +486,15 @@ function renderLandingPage() {
           <aside class="landing-snapshot" aria-label="Resumo do Angico Core">
             <img src="${logoUrl}" alt="Angico">
             <div>
-              <span>Territorio</span>
-              <b>Observacoes, missoes e impacto conectados</b>
+              <span>Território</span>
+              <b>Observações, missões e impacto conectados</b>
             </div>
             <div>
               <span>Rede interna</span>
-              <b>Conversas entre liderancas com contexto local</b>
+              <b>Conversas entre lideranças com contexto local</b>
             </div>
             <div>
-              <span>Memoria</span>
+              <span>Memória</span>
               <b>Ontologia operacional preservada com acesso controlado</b>
             </div>
           </aside>
@@ -454,28 +505,28 @@ function renderLandingPage() {
         <div class="landing-grid">
           <article>
             <b>Registrar</b>
-            <p>Observacoes, fotos, anexos e localizacoes entram como memoria territorial estruturada.</p>
+            <p>Observações, fotos, anexos e localizações entram como memória territorial estruturada.</p>
           </article>
           <article>
             <b>Conectar</b>
-            <p>A ontologia relaciona territorio, problemas, potencialidades, missoes, acoes e resultados.</p>
+            <p>A ontologia relaciona território, problemas, potencialidades, missões, ações e resultados.</p>
           </article>
           <article>
             <b>Coordenar</b>
-            <p>Lideres acompanham conversas internas, missoes e prioridades sem perder o contexto local.</p>
+            <p>Líderes acompanham conversas internas, missões e prioridades sem perder o contexto local.</p>
           </article>
           <article>
             <b>Medir</b>
-            <p>Indicadores e relatorios mostram impacto agregado e historico confiavel para cada territorio.</p>
+            <p>Indicadores e relatórios mostram impacto agregado e histórico confiável para cada território.</p>
           </article>
         </div>
       </section>
       <section class="landing-band" id="liderancas">
         <div>
-          <span class="eyebrow">Core para liderancas</span>
+          <span class="eyebrow">Core para lideranças</span>
           <h2>Do primeiro registro ao aprendizado coletivo.</h2>
         </div>
-        <p>O Angico foi desenhado para equipes que precisam agir no territorio com seguranca, rastreabilidade e uma linguagem comum entre campo, gestao e impacto.</p>
+        <p>O Angico foi desenhado para equipes que precisam agir no território com segurança, rastreabilidade e uma linguagem comum entre campo, gestão e impacto.</p>
       </section>
     </main>
   `;
@@ -494,11 +545,11 @@ function renderAuthPage() {
           <h1>${mode === 'register' ? 'Crie sua identidade Angico.' : 'Entre no Angico Core.'}</h1>
           <p>${mode === 'register'
             ? 'Seu Angico ID conecta perfil, conversas e registros territoriais.'
-            : 'Use seu email e senha de lider Angico para acessar o painel interno.'}</p>
+            : 'Use seu email e senha de líder Angico para acessar o painel interno.'}</p>
         </div>
       </section>
       <section class="auth-card" aria-labelledby="auth-title">
-        <div class="auth-switch" role="tablist" aria-label="Autenticacao">
+        <div class="auth-switch" role="tablist" aria-label="Autenticação">
           <a class="${mode === 'login' ? 'active' : ''}" href="/login" data-route>Entrar</a>
           <a class="${mode === 'register' ? 'active' : ''}" href="/cadastro" data-route>Criar conta</a>
         </div>
@@ -513,13 +564,13 @@ function renderLoginForm() {
     <form class="login-panel" data-form="login">
       <div>
         <h2 id="auth-title">Entrar</h2>
-        <p>Acesso seguro para liderancas cadastradas.</p>
+        <p>Acesso seguro para lideranças cadastradas.</p>
       </div>
       ${state.loginError ? `<span class="inline-error">${html(state.loginError)}</span>` : ''}
       <label class="field"><span>Email</span><input name="email" type="email" autocomplete="username" required></label>
       <label class="field"><span>Senha</span><input name="password" type="password" autocomplete="current-password" required></label>
-      <button class="button primary" type="submit">Entrar com seguranca</button>
-      <p class="auth-note">Ainda nao tem acesso? <a href="/cadastro" data-route>Crie sua conta</a>.</p>
+      <button class="button primary" type="submit">Entrar com segurança</button>
+      <p class="auth-note">Ainda não tem acesso? <a href="/cadastro" data-route>Crie sua conta</a>.</p>
     </form>
   `;
 }
@@ -542,7 +593,7 @@ function renderRegisterForm() {
       </label>
       <label class="field"><span>Senha</span><input name="password" type="password" autocomplete="new-password" minlength="8" required></label>
       <button class="button primary" type="submit">Criar e acessar</button>
-      <p class="auth-note">Ja tem cadastro? <a href="/login" data-route>Entre aqui</a>.</p>
+      <p class="auth-note">Já tem cadastro? <a href="/login" data-route>Entre aqui</a>.</p>
     </form>
   `;
 }
@@ -555,11 +606,11 @@ function renderSidebar(data) {
         <span>Core</span>
       </div>
       <div class="leader-card">
-        <b>${html(state.me?.nome || 'Lider')}</b>
+        <b>${html(state.me?.nome || 'Líder')}</b>
         <span>${html(state.me?.papel || 'ANGICO')}</span>
       </div>
       <label class="field compact">
-        <span>Territorio</span>
+        <span>Território</span>
         <select data-action="select-territory">
           ${(data.territories?.length ? data.territories : [data.territory]).map((territory) => `
             <option value="${territory.id}" ${Number(territory.id) === Number(state.selectedTerritoryId) ? 'selected' : ''}>
@@ -576,7 +627,7 @@ function renderSidebar(data) {
         `).join('')}
       </nav>
       <div class="connection ${state.apiOnline ? 'online' : 'offline'}">
-        <b>${state.apiOnline ? 'Sessao ativa' : 'Conexao instavel'}</b>
+        <b>${state.apiOnline ? 'Sessão ativa' : 'Conexão instável'}</b>
         <span>${useDemoData ? 'Dados demonstrativos' : 'Ambiente seguro'}</span>
       </div>
     </aside>
@@ -591,8 +642,8 @@ function renderTopbar(data) {
         <div class="search-results" data-geocode-global-results></div>
       </div>
       <div class="top-actions">
-        <button class="button" data-action="open-observation">Nova observacao</button>
-        <button class="button" data-action="open-mission">Nova missao</button>
+        <button class="button" data-action="open-observation">Nova observação</button>
+        <button class="button" data-action="open-mission">Nova missão</button>
         <button class="button" data-action="open-conversation">Nova conversa</button>
         <button class="button primary" data-action="sync">Sincronizar</button>
         <button class="button" data-action="logout">Sair</button>
@@ -612,15 +663,15 @@ function renderActiveView(data) {
     case 'mapa':
       return renderMapView(data, true);
     case 'observacoes':
-      return renderListView('Observacoes', data.observacoes, renderObservationRow, 'open-observation');
+      return renderListView('Observações', data.observacoes, renderObservationRow, 'open-observation');
     case 'problemas':
       return renderListView('Problemas', data.problemas, renderProblemRow);
     case 'potencialidades':
       return renderListView('Potencialidades', data.potencialidades, renderPotentialRow);
     case 'missoes':
-      return renderListView('Missoes', data.missoes, renderMissionRow, 'open-mission');
+      return renderListView('Missões', data.missoes, renderMissionRow, 'open-mission');
     case 'acoes':
-      return renderListView('Acoes', data.acoes, renderActionRow);
+      return renderListView('Ações', data.acoes, renderActionRow);
     case 'liderancas':
       return renderLeadersView(data);
     case 'mensagens':
@@ -664,8 +715,8 @@ function renderHomeView(data) {
         <div class="message-preview-list">
           ${recentMessages.length ? recentMessages.map((message) => `
             <div class="message-preview">
-              <b>${html(message.senderNome || 'Lider')}</b>
-              <span>${html(message.corpo || (message.hasLocation ? 'Localizacao compartilhada' : 'Anexo enviado'))}</span>
+              <b>${html(message.senderNome || 'Líder')}</b>
+              <span>${html(message.corpo || (message.hasLocation ? 'Localização compartilhada' : 'Anexo enviado'))}</span>
               <small>${formatDate(message.createdAt)}</small>
             </div>
           `).join('') : renderEmptyState('Nenhuma mensagem recente.')}
@@ -675,9 +726,9 @@ function renderHomeView(data) {
         <div class="section-toolbar">
           <div>
             <h2>Ontologia</h2>
-            <p>${state.ontology?.valid ? 'Base operacional sincronizada' : 'Aguardando validacao'}</p>
+            <p>${state.ontology?.valid ? 'Base operacional sincronizada' : 'Aguardando validação'}</p>
           </div>
-          <span class="status-pill ${state.ontology?.valid ? 'ok' : 'warn'}">${state.ontology?.valid ? 'VALIDA' : 'PENDENTE'}</span>
+          <span class="status-pill ${state.ontology?.valid ? 'ok' : 'warn'}">${state.ontology?.valid ? 'Válida' : 'Pendente'}</span>
         </div>
         <p class="panel-note">Operando nos fluxos ativos.</p>
       </article>
@@ -691,7 +742,7 @@ function renderSummaryView(data) {
   return `
     <section class="page-head">
       <div>
-        <h1>Resumo do Territorio</h1>
+        <h1>Resumo do Território</h1>
         <p>${html(data.territory?.tipo)} em ${html(data.territory?.cidade || data.territory?.pais)}</p>
       </div>
       ${state.error ? `<span class="inline-error">${html(state.error)}</span>` : ''}
@@ -723,12 +774,12 @@ function renderMapView(data, full) {
         <div class="filters">
           <select data-action="filter-type">
             ${['TODOS', 'OBSERVACAO', 'PROBLEMA', 'POTENCIALIDADE', 'MISSAO', 'ACAO'].map((type) => `
-              <option value="${type}" ${state.filterType === type ? 'selected' : ''}>${type}</option>
+              <option value="${type}" ${state.filterType === type ? 'selected' : ''}>${typeLabel(type)}</option>
             `).join('')}
           </select>
           <select data-action="filter-status">
             ${['TODOS', 'SUBMETIDA', 'VALIDADA', 'IDENTIFICADO', 'PRIORIZADO', 'PLANEJADA', 'EM_ANDAMENTO', 'CONCLUIDA'].map((status) => `
-              <option value="${status}" ${state.filterStatus === status ? 'selected' : ''}>${status}</option>
+              <option value="${status}" ${state.filterStatus === status ? 'selected' : ''}>${statusLabel(status)}</option>
             `).join('')}
           </select>
         </div>
@@ -736,7 +787,7 @@ function renderMapView(data, full) {
       <div id="territory-map" class="territory-map"></div>
       <div class="legend-row">
         ${['OBSERVACAO', 'PROBLEMA', 'POTENCIALIDADE', 'MISSAO', 'ACAO'].map((type) => `
-          <span><i class="dot ${type.toLowerCase()}"></i>${type}</span>
+          <span><i class="dot ${type.toLowerCase()}"></i>${typeLabel(type)}</span>
         `).join('')}
       </div>
     </section>
@@ -767,7 +818,7 @@ function renderObservationRow(item) {
         <p>${html(item.descricao || item.evidenciaInicial || '')}</p>
       </div>
       <span>${html(item.categoria)}</span>
-      <strong>${html(item.status)}</strong>
+      <strong>${html(statusLabel(item.status))}</strong>
     </article>
   `;
 }
@@ -780,7 +831,7 @@ function renderProblemRow(item) {
         <b>${html(item.titulo)}</b>
         <p>${html(item.descricao || '')}</p>
       </div>
-      <span>${html(item.prioridade)}</span>
+      <span>${html(priorityLabel(item.prioridade))}</span>
       <button class="button small" data-action="prioritize-problem" data-id="${item.id}">Priorizar</button>
     </article>
   `;
@@ -795,7 +846,7 @@ function renderPotentialRow(item) {
         <p>${html(item.descricao || '')}</p>
       </div>
       <span>${html(item.categoria)}</span>
-      <strong>${html(item.status)}</strong>
+      <strong>${html(statusLabel(item.status))}</strong>
     </article>
   `;
 }
@@ -809,7 +860,7 @@ function renderMissionRow(item) {
         <p>${html(item.descricao || '')}</p>
         <div class="progress"><i style="width:${Number(item.progresso || 0)}%"></i></div>
       </div>
-      <span>${html(item.status)}</span>
+      <span>${html(statusLabel(item.status))}</span>
       <div class="row-actions">
         <button class="button small" data-action="start-mission" data-id="${item.id}">Iniciar</button>
         <button class="button small" data-action="complete-mission" data-id="${item.id}">Concluir</button>
@@ -821,12 +872,12 @@ function renderMissionRow(item) {
 function renderActionRow(item) {
   return `
     <article class="record-row" data-detail-type="ACAO" data-detail-id="${item.id}">
-      <span class="type-badge acao">ACAO</span>
+      <span class="type-badge acao">AÇÃO</span>
       <div>
         <b>${html(item.titulo)}</b>
         <p>${html(item.resultadoDescricao || item.descricao || '')}</p>
       </div>
-      <span>${html(item.status)}</span>
+      <span>${html(statusLabel(item.status))}</span>
       <button class="button small" data-action="complete-action" data-id="${item.id}">Concluir</button>
     </article>
   `;
@@ -847,8 +898,8 @@ function renderLeadersView(data) {
     <section class="leaders-hero">
       <div>
         <span class="eyebrow">Rede interna</span>
-        <h1>Liderancas Angico</h1>
-        <p>Identidade, contato e presenca dos lideres conectados ao territorio ${html(data.territory?.nome)}.</p>
+        <h1>Lideranças Angico</h1>
+        <p>Identidade, contato e presença dos líderes conectados ao território ${html(data.territory?.nome)}.</p>
       </div>
       <div class="leaders-identity-card">
         <span>Seu Angico ID</span>
@@ -859,8 +910,8 @@ function renderLeadersView(data) {
     <section class="leaders-grid">
       <article class="leader-profile-panel">
         <div>
-          <span class="leader-avatar">${html(initials(state.me?.nome || 'Lider'))}</span>
-          <h2>${html(state.me?.nome || 'Lider Angico')}</h2>
+          <span class="leader-avatar">${html(initials(state.me?.nome || 'Líder'))}</span>
+          <h2>${html(state.me?.nome || 'Líder Angico')}</h2>
           <p>${html(state.me?.papel || 'ANGICO')}</p>
         </div>
         <form class="angico-id-form" data-form="angico-id">
@@ -875,8 +926,8 @@ function renderLeadersView(data) {
       <article class="leaders-directory">
         <div class="section-toolbar">
           <div>
-            <h2>Diretorio de lideres</h2>
-            <p>${leaders.length} de ${state.leaders.length} lideres</p>
+            <h2>Diretório de líderes</h2>
+            <p>${leaders.length} de ${state.leaders.length} líderes</p>
           </div>
           <input class="leader-search" data-leader-search placeholder="Buscar por nome, @id ou email" value="${html(state.leaderQuery)}">
         </div>
@@ -886,7 +937,7 @@ function renderLeadersView(data) {
               <span class="leader-avatar">${html(initials(leader.nome))}</span>
               <div>
                 <b>${html(leader.nome)}</b>
-                <p>${html(leader.papel || 'Lider')}</p>
+                <p>${html(leader.papel || 'Líder')}</p>
               </div>
               <div class="leader-identities">
                 <span>${html(leader.angicoId ? `@${leader.angicoId}` : 'sem Angico ID')}</span>
@@ -894,7 +945,7 @@ function renderLeadersView(data) {
               </div>
               <button class="button small" data-action="start-conversation-with" data-identity="${html(leader.angicoId ? `@${leader.angicoId}` : leader.email)}">Mensagem</button>
             </article>
-          `).join('') || renderEmptyState('Nenhuma lideranca encontrada.')}
+          `).join('') || renderEmptyState('Nenhuma liderança encontrada.')}
         </div>
       </article>
     </section>
@@ -918,7 +969,7 @@ function renderMessagesView() {
             <b>${html(conversation.titulo)}</b>
             <span>${formatDate(conversation.updatedAt)}</span>
           </button>
-        `).join('') : renderEmptyState('Crie uma conversa para lideres Angico.')}
+        `).join('') : renderEmptyState('Crie uma conversa para líderes Angico.')}
       </aside>
       <article class="chat-panel">
         ${active ? renderConversation(active) : renderEmptyState('Selecione uma conversa.')}
@@ -933,9 +984,9 @@ function renderConversation(conversation) {
     <div class="chat-head">
       <div>
         <h2>${html(conversation.titulo)}</h2>
-        <p>Territorio ${html(conversation.territorioId)}</p>
+        <p>Território ${html(conversation.territorioId)}</p>
       </div>
-      <span class="status-pill ok">${html(conversation.status)}</span>
+      <span class="status-pill ok">${html(statusLabel(conversation.status))}</span>
     </div>
     <div class="message-stream">
       ${messages.length ? messages.map(renderMessageBubble).join('') : renderEmptyState('Nenhuma mensagem nesta conversa.')}
@@ -949,13 +1000,13 @@ function renderMessageBubble(message) {
   return `
     <div class="message-bubble ${mine ? 'mine' : ''}">
       <div class="message-meta">
-        <b>${html(message.senderNome || 'Lider')}</b>
+        <b>${html(message.senderNome || 'Líder')}</b>
         <span>${formatDate(message.createdAt)}</span>
       </div>
       ${message.corpo ? `<p>${html(message.corpo)}</p>` : ''}
       ${message.latitude != null && message.longitude != null ? `
         <a class="location-link" href="https://www.openstreetmap.org/?mlat=${encodeURIComponent(message.latitude)}&mlon=${encodeURIComponent(message.longitude)}#map=17/${encodeURIComponent(message.latitude)}/${encodeURIComponent(message.longitude)}" target="_blank" rel="noreferrer">
-          ${html(message.localDescricao || 'Localizacao compartilhada')} (${html(message.latitude)}, ${html(message.longitude)})
+          ${html(message.localDescricao || 'Localização compartilhada')} (${html(message.latitude)}, ${html(message.longitude)})
         </a>
       ` : ''}
       ${(message.anexos || []).length ? `
@@ -974,7 +1025,7 @@ function renderMessageBubble(message) {
 function renderMessageComposer(conversation) {
   return `
     <form class="message-composer" data-form="message" data-conversa-id="${conversation.id}">
-      <textarea name="corpo" rows="3" placeholder="Mensagem para os lideres"></textarea>
+      <textarea name="corpo" rows="3" placeholder="Mensagem para os líderes"></textarea>
       <div class="composer-grid">
         <label class="field">
           <span>Objeto mencionado</span>
@@ -994,13 +1045,13 @@ function renderMessageComposer(conversation) {
       </div>
       ${state.messageLocation ? `
         <div class="selected-location">
-          <span>${html(state.messageLocation.localDescricao || 'Minha localizacao')}</span>
+          <span>${html(state.messageLocation.localDescricao || 'Minha localização')}</span>
           <b>${html(state.messageLocation.latitude)}, ${html(state.messageLocation.longitude)}</b>
           <button type="button" class="button small" data-action="clear-message-location">Remover</button>
         </div>
       ` : ''}
       <div class="composer-actions">
-        <button type="button" class="button" data-action="use-message-location">Minha localizacao</button>
+        <button type="button" class="button" data-action="use-message-location">Minha localização</button>
         <button class="button primary" type="submit">Enviar</button>
       </div>
     </form>
@@ -1013,7 +1064,7 @@ function renderMemoryView(data) {
   return `
     <section class="page-head">
       <div>
-        <h1>Memoria do Territorio</h1>
+        <h1>Memória do Território</h1>
         <p>${(data.timeline || []).length} eventos registrados</p>
       </div>
     </section>
@@ -1021,7 +1072,7 @@ function renderMemoryView(data) {
       ${renderRecentTimeline(data.timeline)}
       <article class="panel">
         <div class="section-toolbar">
-          <h2>Grafo ontologico</h2>
+          <h2>Grafo ontológico</h2>
         </div>
         ${nodes.length && relations.length ? `
           <div class="graph-list">
@@ -1037,7 +1088,7 @@ function renderMemoryView(data) {
               <div>${html(relation.from)} <b>${html(relation.relationType)}</b> ${html(relation.to)}</div>
             `).join('')}
           </div>
-        ` : renderEmptyState('Grafo disponivel apenas em visualizacao autorizada.')}
+        ` : renderEmptyState('Grafo disponível apenas em visualização autorizada.')}
       </article>
     </section>
   `;
@@ -1070,15 +1121,15 @@ function renderReportsView(data, compact = false) {
   return `
     <article class="panel ${compact ? '' : 'wide-panel'}">
       <div class="section-toolbar">
-        <h2>Relatorios</h2>
-        <p>Baseado em eventos e medicoes</p>
+        <h2>Relatórios</h2>
+        <p>Baseado em eventos e medições</p>
       </div>
       <div class="report-grid">
         <div>
           <h3>Impacto agregado</h3>
           ${impact.length ? impact.map((item) => `
             <div class="metric-line"><b>${html(item.value)}</b><span>${html(item.label)}</span><small>${html(item.period)}</small></div>
-          `).join('') : renderEmptyState('Sem medicoes registradas.')}
+          `).join('') : renderEmptyState('Sem medições registradas.')}
         </div>
         <div>
           <h3>Categorias</h3>
@@ -1099,11 +1150,11 @@ function renderDrawer() {
   return `
     <aside class="drawer">
       <button class="icon-button close" data-action="close-drawer">x</button>
-      <span class="type-badge ${item.type?.toLowerCase()}">${html(item.type)}</span>
+      <span class="type-badge ${item.type?.toLowerCase()}">${html(typeLabel(item.type))}</span>
       <h2>${html(item.title || item.titulo || item.name)}</h2>
       <dl>
-        <div><dt>Status</dt><dd>${html(item.status)}</dd></div>
-        <div><dt>Prioridade</dt><dd>${html(item.priority || item.prioridade || '-')}</dd></div>
+        <div><dt>Status</dt><dd>${html(statusLabel(item.status))}</dd></div>
+        <div><dt>Prioridade</dt><dd>${html(priorityLabel(item.priority || item.prioridade || '-'))}</dd></div>
         <div><dt>Atualizado</dt><dd>${formatDate(item.updatedAt)}</dd></div>
         <div><dt>Coordenadas</dt><dd>${html(item.latitude)}, ${html(item.longitude)}</dd></div>
       </dl>
@@ -1131,16 +1182,16 @@ function renderObservationModal(data) {
     <div class="modal-backdrop">
       <form class="modal" data-form="observation">
         <button type="button" class="icon-button close" data-action="close-modal">x</button>
-        <h2>Nova Observacao</h2>
+        <h2>Nova Observação</h2>
         <div class="form-grid">
-          <label class="field"><span>Titulo</span><input name="titulo" required></label>
+          <label class="field"><span>Título</span><input name="titulo" required></label>
           <label class="field"><span>Categoria</span><select name="categoria">${observationCategories.map((item) => `<option>${html(item)}</option>`).join('')}</select></label>
           <label class="field"><span>Tipo</span><select name="tipo"><option value="PROBLEMA">Problema</option><option value="POTENCIALIDADE">Potencialidade</option></select></label>
-          <label class="field"><span>Status inicial</span><select name="status"><option value="SUBMETIDA">SUBMETIDA</option><option value="RASCUNHO">RASCUNHO</option></select></label>
+          <label class="field"><span>Status inicial</span><select name="status"><option value="SUBMETIDA">Submetida</option><option value="RASCUNHO">Rascunho</option></select></label>
           <label class="field"><span>Severidade</span><input name="severidade" type="number" min="1" max="5" value="3"></label>
-          <label class="field"><span>Territorio</span><select name="territorioId">${(data.territories?.length ? data.territories : [data.territory]).map((territory) => `<option value="${territory.id}" ${territory.id === data.territory.id ? 'selected' : ''}>${html(territory.nome)}</option>`).join('')}</select></label>
-          <label class="field wide"><span>Descricao</span><textarea name="descricao" rows="3"></textarea></label>
-          <label class="field wide"><span>Evidencia textual inicial</span><textarea name="evidenciaInicial" rows="2"></textarea></label>
+          <label class="field"><span>Território</span><select name="territorioId">${(data.territories?.length ? data.territories : [data.territory]).map((territory) => `<option value="${territory.id}" ${territory.id === data.territory.id ? 'selected' : ''}>${html(territory.nome)}</option>`).join('')}</select></label>
+          <label class="field wide"><span>Descrição</span><textarea name="descricao" rows="3"></textarea></label>
+          <label class="field wide"><span>Evidência textual inicial</span><textarea name="evidenciaInicial" rows="2"></textarea></label>
           <label class="field wide geocode-field">
             <span>Cidade, bairro ou local</span>
             <input name="localDescricao" data-geocode-modal autocomplete="off">
@@ -1153,7 +1204,7 @@ function renderObservationModal(data) {
         </div>
         <div class="modal-actions">
           <button type="button" class="button" data-action="close-modal">Cancelar</button>
-          <button class="button primary" type="submit">Salvar observacao</button>
+          <button class="button primary" type="submit">Salvar observação</button>
         </div>
       </form>
     </div>
@@ -1166,19 +1217,19 @@ function renderMissionModal(data) {
     <div class="modal-backdrop">
       <form class="modal" data-form="mission">
         <button type="button" class="icon-button close" data-action="close-modal">x</button>
-        <h2>Nova Missao</h2>
+        <h2>Nova Missão</h2>
         <div class="form-grid">
-          <label class="field wide"><span>Titulo</span><input name="titulo" required></label>
-          <label class="field wide"><span>Descricao</span><textarea name="descricao" rows="3"></textarea></label>
+          <label class="field wide"><span>Título</span><input name="titulo" required></label>
+          <label class="field wide"><span>Descrição</span><textarea name="descricao" rows="3"></textarea></label>
           <label class="field"><span>Problema</span><select name="problemaId">${problems.map((problem) => `<option value="${problem.id}">${html(problem.titulo)}</option>`).join('')}</select></label>
-          <label class="field"><span>Prioridade</span><select name="prioridade"><option>MEDIA</option><option>ALTA</option><option>BAIXA</option></select></label>
+          <label class="field"><span>Prioridade</span><select name="prioridade"><option value="MEDIA">Média</option><option value="ALTA">Alta</option><option value="BAIXA">Baixa</option></select></label>
           <label class="field"><span>Latitude</span><input name="latitude" type="number" step="any" value="${html(data.territory?.latitude || '')}"></label>
           <label class="field"><span>Longitude</span><input name="longitude" type="number" step="any" value="${html(data.territory?.longitude || '')}"></label>
-          <label class="field wide"><span>Organizacao mobilizada</span><input name="organizacaoId"></label>
+          <label class="field wide"><span>Organização mobilizada</span><input name="organizacaoId"></label>
         </div>
         <div class="modal-actions">
           <button type="button" class="button" data-action="close-modal">Cancelar</button>
-          <button class="button primary" type="submit" ${problems.length ? '' : 'disabled'}>Criar missao</button>
+          <button class="button primary" type="submit" ${problems.length ? '' : 'disabled'}>Criar missão</button>
         </div>
       </form>
     </div>
@@ -1194,16 +1245,16 @@ function renderConversationModal(data) {
         <h2>Nova conversa</h2>
         ${state.modalError ? `<span class="inline-error">${html(state.modalError)}</span>` : ''}
         <div class="form-grid">
-          <label class="field wide"><span>Titulo</span><input name="titulo" required></label>
-          <label class="field"><span>Territorio</span><select name="territorioId">${(data.territories?.length ? data.territories : [data.territory]).map((territory) => `<option value="${territory.id}" ${territory.id === data.territory.id ? 'selected' : ''}>${html(territory.nome)}</option>`).join('')}</select></label>
-          <label class="field"><span>Buscar lider</span><input name="participanteRefs" list="leader-identity-options" placeholder="@campo ou campo@angico.local" autocomplete="off"></label>
+          <label class="field wide"><span>Título</span><input name="titulo" required></label>
+          <label class="field"><span>Território</span><select name="territorioId">${(data.territories?.length ? data.territories : [data.territory]).map((territory) => `<option value="${territory.id}" ${territory.id === data.territory.id ? 'selected' : ''}>${html(territory.nome)}</option>`).join('')}</select></label>
+          <label class="field"><span>Buscar líder</span><input name="participanteRefs" list="leader-identity-options" placeholder="@campo ou campo@angico.local" autocomplete="off"></label>
           <datalist id="leader-identity-options">
             ${leaders.flatMap((leader) => [
               leader.angicoId ? `<option value="@${html(leader.angicoId)}">${html(leader.nome)}</option>` : '',
               leader.email ? `<option value="${html(leader.email)}">${html(leader.nome)}</option>` : ''
             ]).join('')}
           </datalist>
-          <label class="field wide"><span>Selecao rapida</span><select name="participanteIds" multiple size="5">${leaders.map((leader) => `<option value="${leader.id}">${html(leader.angicoId ? `@${leader.angicoId}` : leader.email)} · ${html(leader.nome)}</option>`).join('')}</select></label>
+          <label class="field wide"><span>Seleção rápida</span><select name="participanteIds" multiple size="5">${leaders.map((leader) => `<option value="${leader.id}">${html(leader.angicoId ? `@${leader.angicoId}` : leader.email)} · ${html(leader.nome)}</option>`).join('')}</select></label>
         </div>
         <div class="modal-actions">
           <button type="button" class="button" data-action="close-modal">Cancelar</button>
@@ -1260,7 +1311,7 @@ function initMap(data) {
       })
     });
     leafletMarker.addTo(state.map);
-    leafletMarker.bindPopup(`<b>${html(marker.title)}</b><br>${html(marker.type)} · ${html(marker.status)}`);
+    leafletMarker.bindPopup(`<b>${html(marker.title)}</b><br>${html(typeLabel(marker.type))} · ${html(statusLabel(marker.status))}`);
     leafletMarker.on('click', () => {
       state.drawer = marker;
       render();
@@ -1435,7 +1486,7 @@ function bindAngicoIdAvailability() {
         status.textContent = response.message;
         status.className = `availability ${response.available ? 'ok' : 'warn'}`;
       } catch (error) {
-        status.textContent = error.message || 'Nao foi possivel validar o Angico ID.';
+        status.textContent = error.message || 'Não foi possível validar o Angico ID.';
         status.className = 'availability warn';
       }
     }, 350);
@@ -1595,7 +1646,7 @@ async function submitAngicoId(event) {
     await loadLeaders();
     render();
   } catch (error) {
-    state.leaderError = error.message || 'Nao foi possivel salvar o Angico ID.';
+    state.leaderError = error.message || 'Não foi possível salvar o Angico ID.';
     render();
   }
 }
@@ -1629,7 +1680,7 @@ async function submitConversation(event) {
     await loadConversations();
     render();
   } catch (error) {
-    state.modalError = error.message || 'Nao foi possivel criar a conversa.';
+    state.modalError = error.message || 'Não foi possível criar a conversa.';
     render();
   }
 }
@@ -1651,7 +1702,7 @@ async function submitMessage(event) {
   if (state.messageLocation) {
     payload.append('latitude', state.messageLocation.latitude);
     payload.append('longitude', state.messageLocation.longitude);
-    payload.append('localDescricao', state.messageLocation.localDescricao || 'Minha localizacao');
+    payload.append('localDescricao', state.messageLocation.localDescricao || 'Minha localização');
   }
   [...form.elements.attachments.files].forEach((file) => {
     payload.append('attachments', file);
@@ -1698,7 +1749,7 @@ async function completeAction(id) {
 
 function useMessageLocation() {
   if (!navigator.geolocation) {
-    state.error = 'Geolocalizacao nao disponivel neste navegador.';
+    state.error = 'Geolocalização não disponível neste navegador.';
     render();
     return;
   }
@@ -1707,12 +1758,12 @@ function useMessageLocation() {
       state.messageLocation = {
         latitude: Number(position.coords.latitude.toFixed(6)),
         longitude: Number(position.coords.longitude.toFixed(6)),
-        localDescricao: 'Minha localizacao'
+        localDescricao: 'Minha localização'
       };
       render();
     },
     () => {
-      state.error = 'Nao foi possivel obter a localizacao local.';
+      state.error = 'Não foi possível obter a localização local.';
       render();
     },
     { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
@@ -1746,7 +1797,7 @@ function formPayload(form) {
 }
 
 function initials(name) {
-  const parts = String(name || 'Lider')
+  const parts = String(name || 'Líder')
     .trim()
     .split(/\s+/)
     .filter(Boolean)

@@ -89,13 +89,13 @@ public class TerritorioService {
 
     public Territorio requireTerritorio(Long id) {
         return territorioRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("Territorio nao encontrado: " + id));
+                .orElseThrow(() -> new IllegalArgumentException("Território não encontrado: " + id));
     }
 
     public Territorio defaultTerritory() {
         return territorioRepository.findFirstByWorkspaceIdOrderByIdAsc(DEFAULT_WORKSPACE_ID)
                 .orElseGet(() -> territorioRepository.findAll().stream().findFirst()
-                        .orElseThrow(() -> new IllegalStateException("Nenhum territorio cadastrado.")));
+                        .orElseThrow(() -> new IllegalStateException("Nenhum território cadastrado.")));
     }
 
     @Transactional
@@ -220,12 +220,12 @@ public class TerritorioService {
         dashboard.put("territory", toResponse(territorio));
         dashboard.put("territories", list(workspaceId));
         dashboard.put("stats", List.of(
-                        Map.of("label", "Observacoes", "value", observacoes.size()),
+                        Map.of("label", "Observações", "value", observacoes.size()),
                         Map.of("label", "Problemas ativos", "value", problemas.stream().filter(p -> !"RESOLVIDO".equals(p.getStatus())).count()),
                         Map.of("label", "Potencialidades", "value", potencialidades.size()),
-                        Map.of("label", "Missoes em andamento", "value", missoes.stream().filter(m -> "EM_ANDAMENTO".equals(m.getStatus())).count()),
-                        Map.of("label", "Acoes concluidas", "value", acoes.stream().filter(a -> "CONCLUIDA".equals(a.getStatus())).count()),
-                        Map.of("label", "Medicoes", "value", medicaoRepository.countByWorkspaceId(workspaceId)),
+                        Map.of("label", "Missões em andamento", "value", missoes.stream().filter(m -> "EM_ANDAMENTO".equals(m.getStatus())).count()),
+                        Map.of("label", "Ações concluídas", "value", acoes.stream().filter(a -> "CONCLUIDA".equals(a.getStatus())).count()),
+                        Map.of("label", "Medições", "value", medicaoRepository.countByWorkspaceId(workspaceId)),
                         Map.of("label", "Mensagens", "value", mensagemRepository.countByWorkspaceId(workspaceId))
                 ));
         dashboard.put("markers", markers);
@@ -261,7 +261,7 @@ public class TerritorioService {
                                 "value", medicaoRepository.findByIndicadorIdOrderByCreatedAtDesc(indicador.getId()).stream()
                                         .findFirst()
                                         .map(medicao -> medicao.getValor() + " " + defaultText(medicao.getUnidade(), indicador.getUnidade()))
-                                        .orElse("Sem medicao"),
+                                        .orElse("Sem medição"),
                                 "label", indicador.getNome(),
                                 "period", "ultimo registro"
                         ))
@@ -282,7 +282,7 @@ public class TerritorioService {
         Territorio territorio = requireTerritorio(territorioId);
         ensureWorkspaceAccess(territorio.getWorkspaceId());
         if (!canViewOntologyDetails()) {
-            throw new ForbiddenException("Detalhes ontologicos protegidos.");
+            throw new ForbiddenException("Detalhes ontológicos protegidos.");
         }
         return memoryQueryService.graphForTerritory(
                 territorio.getWorkspaceId(),
@@ -332,7 +332,7 @@ public class TerritorioService {
 
     public static String requireText(String value, String fieldName) {
         if (value == null || value.isBlank()) {
-            throw new IllegalArgumentException(fieldName + " e obrigatorio.");
+            throw new IllegalArgumentException(fieldName + " é obrigatório.");
         }
         return value.trim();
     }
@@ -352,7 +352,7 @@ public class TerritorioService {
         try {
             return objectMapper.writeValueAsString(values);
         } catch (JsonProcessingException ex) {
-            throw new IllegalArgumentException("boundingBox invalido.", ex);
+            throw new IllegalArgumentException("boundingBox inválido.", ex);
         }
     }
 

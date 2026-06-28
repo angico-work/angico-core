@@ -46,9 +46,9 @@ public class AuthController {
     @GetMapping("/me")
     public AuthResponse me() {
         Long pessoaId = currentActorProvider.currentPessoaId()
-                .orElseThrow(() -> new UnauthorizedException("Sessao invalida."));
+                .orElseThrow(() -> new UnauthorizedException("Sessão inválida."));
         var pessoa = pessoaRepository.findById(pessoaId)
-                .orElseThrow(() -> new UnauthorizedException("Sessao invalida."));
+                .orElseThrow(() -> new UnauthorizedException("Sessão inválida."));
         return new AuthResponse(
                 null,
                 pessoa.getId(),
@@ -63,7 +63,7 @@ public class AuthController {
     @PostMapping("/logout")
     public void logout() {
         Long pessoaId = currentActorProvider.currentPessoaId()
-                .orElseThrow(() -> new UnauthorizedException("Sessao invalida."));
+                .orElseThrow(() -> new UnauthorizedException("Sessão inválida."));
         authService.logout(pessoaId);
     }
 }

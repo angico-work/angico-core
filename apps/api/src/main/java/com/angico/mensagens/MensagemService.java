@@ -119,9 +119,9 @@ public class MensagemService {
         Pessoa actor = currentPessoa();
         String workspaceId = authorizedWorkspace(request.workspaceId());
         Territorio territorio = territorioRepository.findById(request.territorioId())
-                .orElseThrow(() -> new IllegalArgumentException("Territorio nao encontrado: " + request.territorioId()));
+                .orElseThrow(() -> new IllegalArgumentException("Território não encontrado: " + request.territorioId()));
         if (!workspaceId.equals(territorio.getWorkspaceId())) {
-            throw new IllegalArgumentException("Territorio nao pertence ao workspace informado.");
+            throw new IllegalArgumentException("Território não pertence ao workspace informado.");
         }
 
         Instant now = Instant.now();
@@ -163,7 +163,7 @@ public class MensagemService {
         resolvedParticipantIds.stream()
                 .filter(id -> !id.equals(actor.getId()))
                 .map(id -> pessoaRepository.findById(id)
-                        .orElseThrow(() -> new IllegalArgumentException("Pessoa nao encontrada: " + id)))
+                        .orElseThrow(() -> new IllegalArgumentException("Pessoa não encontrada: " + id)))
                 .forEach(pessoa -> registerParticipant(workspaceId, conversaId, pessoa));
         memoryService.registrarEvento(new MemoryEvent(
                 workspaceId,
@@ -225,7 +225,7 @@ public class MensagemService {
 
     public MensagemAnexo requireAttachment(Long anexoId) {
         MensagemAnexo anexo = anexoRepository.findById(anexoId)
-                .orElseThrow(() -> new IllegalArgumentException("Anexo nao encontrado: " + anexoId));
+                .orElseThrow(() -> new IllegalArgumentException("Anexo não encontrado: " + anexoId));
         ensureWorkspaceAccess(anexo.getWorkspaceId());
         return anexo;
     }
@@ -233,26 +233,26 @@ public class MensagemService {
     public Resource attachmentResource(MensagemAnexo anexo) {
         Path path = Path.of(anexo.getStoragePath()).toAbsolutePath().normalize();
         if (!path.startsWith(uploadRoot) || !Files.exists(path)) {
-            throw new IllegalArgumentException("Arquivo nao encontrado.");
+            throw new IllegalArgumentException("Arquivo não encontrado.");
         }
         return new PathResource(path);
     }
 
     private Conversa requireConversa(Long id) {
         return conversaRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("Conversa nao encontrada: " + id));
+                .orElseThrow(() -> new IllegalArgumentException("Conversa não encontrada: " + id));
     }
 
     private Pessoa currentPessoa() {
         Long pessoaId = currentActorProvider.currentPessoaId()
-                .orElseThrow(() -> new UnauthorizedException("Sessao invalida."));
+                .orElseThrow(() -> new UnauthorizedException("Sessão inválida."));
         return pessoaRepository.findById(pessoaId)
-                .orElseThrow(() -> new UnauthorizedException("Sessao invalida."));
+                .orElseThrow(() -> new UnauthorizedException("Sessão inválida."));
     }
 
     private String authorizedWorkspace(String requestedWorkspaceId) {
         String actorWorkspace = currentActorProvider.currentWorkspaceId()
-                .orElseThrow(() -> new UnauthorizedException("Sessao invalida."));
+                .orElseThrow(() -> new UnauthorizedException("Sessão inválida."));
         String normalized = requestedWorkspaceId == null || requestedWorkspaceId.isBlank()
                 ? actorWorkspace
                 : requestedWorkspaceId.trim();
@@ -271,16 +271,16 @@ public class MensagemService {
         if (reference.startsWith("@")) {
             String angicoId = AngicoIdNormalizer.normalize(reference);
             return pessoaRepository.findByWorkspaceIdAndAngicoIdIgnoreCase(workspaceId, angicoId)
-                    .orElseThrow(() -> new IllegalArgumentException("Angico ID nao encontrado: @" + angicoId));
+                    .orElseThrow(() -> new IllegalArgumentException("Angico ID não encontrado: @" + angicoId));
         }
         if (reference.contains("@")) {
             String email = reference.toLowerCase(Locale.ROOT);
             return pessoaRepository.findByWorkspaceIdAndEmailIgnoreCase(workspaceId, email)
-                    .orElseThrow(() -> new IllegalArgumentException("Email nao encontrado: " + email));
+                    .orElseThrow(() -> new IllegalArgumentException("Email não encontrado: " + email));
         }
         String angicoId = AngicoIdNormalizer.normalize(reference);
         return pessoaRepository.findByWorkspaceIdAndAngicoIdIgnoreCase(workspaceId, angicoId)
-                .orElseThrow(() -> new IllegalArgumentException("Angico ID nao encontrado: @" + angicoId));
+                .orElseThrow(() -> new IllegalArgumentException("Angico ID não encontrado: @" + angicoId));
     }
 
     private void registerParticipant(String workspaceId, String conversaId, Pessoa pessoa) {
@@ -318,7 +318,7 @@ public class MensagemService {
         boolean hasLocation = latitude != null && longitude != null;
         boolean hasAttachment = attachments != null && attachments.stream().anyMatch(file -> file != null && !file.isEmpty());
         if (!hasText && !hasLocation && !hasAttachment) {
-            throw new IllegalArgumentException("Mensagem precisa ter texto, localizacao ou anexo.");
+            throw new IllegalArgumentException("Mensagem precisa ter texto, localização ou anexo.");
         }
         if ((latitude == null) != (longitude == null)) {
             throw new IllegalArgumentException("Latitude e longitude devem ser enviadas juntas.");
@@ -335,7 +335,7 @@ public class MensagemService {
         String type = linkedEntityType == null ? "" : linkedEntityType.trim().toUpperCase(Locale.ROOT);
         ontologyService.requireObjectType(type);
         if (!LINKABLE_TYPES.contains(type)) {
-            throw new IllegalArgumentException("Tipo nao pode ser mencionado em mensagem: " + type);
+            throw new IllegalArgumentException("Tipo não pode ser mencionado em mensagem: " + type);
         }
         ontologyService.requireValidRelation(OntologyService.MENSAGEM, "MENCIONA", type);
         return type;
@@ -359,7 +359,7 @@ public class MensagemService {
     private MensagemAnexo saveAttachment(String workspaceId, Mensagem mensagem, MultipartFile file) {
         String contentType = file.getContentType() == null ? "application/octet-stream" : file.getContentType();
         if (!allowedContentTypes.contains(contentType)) {
-            throw new IllegalArgumentException("Tipo de anexo nao permitido: " + contentType);
+            throw new IllegalArgumentException("Tipo de anexo não permitido: " + contentType);
         }
         if (file.getSize() > maxBytes) {
             throw new IllegalArgumentException("Anexo excede o limite de " + maxBytes + " bytes.");
@@ -369,7 +369,7 @@ public class MensagemService {
         Path folder = uploadRoot.resolve(workspaceId).resolve("mensagens").normalize();
         Path destination = folder.resolve(storedName).normalize();
         if (!destination.startsWith(uploadRoot)) {
-            throw new IllegalArgumentException("Nome de arquivo invalido.");
+            throw new IllegalArgumentException("Nome de arquivo inválido.");
         }
         try {
             Files.createDirectories(folder);
@@ -434,7 +434,7 @@ public class MensagemService {
                     localizacaoId,
                     null,
                     mensagem.getLocalDescricao() == null || mensagem.getLocalDescricao().isBlank()
-                            ? "Localizacao compartilhada"
+                            ? "Localização compartilhada"
                             : mensagem.getLocalDescricao(),
                     "COMPARTILHADA",
                     "api"
@@ -442,7 +442,7 @@ public class MensagemService {
             memoryService.registrarRelacaoAtiva(workspaceId, OntologyService.MENSAGEM, mensagemId, OntologyService.LOCALIZACAO,
                     localizacaoId, "COMPARTILHA", "api", "My location");
             memoryService.registrarRelacaoAtiva(workspaceId, OntologyService.LOCALIZACAO, localizacaoId, OntologyService.TERRITORIO,
-                    String.valueOf(conversa.getTerritorioId()), "REFERE_SE_A", "api", "Localizacao em conversa territorial");
+                    String.valueOf(conversa.getTerritorioId()), "REFERE_SE_A", "api", "Localização em conversa territorial");
         }
 
         if (mensagem.getLinkedEntityType() != null && mensagem.getLinkedEntityId() != null) {

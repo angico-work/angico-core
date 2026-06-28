@@ -49,7 +49,7 @@ public class ObservacaoService {
 
     public ObservacaoTerritorial requireObservacao(Long id) {
         return observacaoRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("Observacao nao encontrada: " + id));
+                .orElseThrow(() -> new IllegalArgumentException("Observação não encontrada: " + id));
     }
 
     @Transactional
@@ -203,7 +203,7 @@ public class ObservacaoService {
                 String.valueOf(territorio.getId()),
                 "OCORRE_EM",
                 "api",
-                "Observacao georreferenciada"
+                "Observação georreferenciada"
         );
         if (observacao.getActorId() != null && !observacao.getActorId().isBlank()) {
             memoryService.registrarObjeto(
@@ -223,7 +223,7 @@ public class ObservacaoService {
                     observacao.getActorId(),
                     "REGISTRADA_POR",
                     "api",
-                    "Autor informado na criacao"
+                    "Autor informado na criação"
             );
         }
         if (observacao.getEvidenciaInicial() != null && !observacao.getEvidenciaInicial().isBlank()) {
@@ -245,7 +245,7 @@ public class ObservacaoService {
                     evidenciaId,
                     "COMPROVADA_POR",
                     "api",
-                    "Evidencia textual enviada com a observacao"
+                    "Evidência textual enviada com a observação"
             );
             memoryService.registrarEvento(new MemoryEvent(
                     observacao.getWorkspaceId(),

@@ -102,7 +102,7 @@ public class OntologyService {
 
     public void requireObjectType(String objectType) {
         if (!objectTypes.contains(objectType)) {
-            throw new IllegalArgumentException("Tipo ontologico invalido: " + objectType);
+            throw new IllegalArgumentException("Tipo ontológico inválido: " + objectType);
         }
     }
 
@@ -113,7 +113,7 @@ public class OntologyService {
         RelationRule candidate = new RelationRule(originType, relationType, destinationType);
         if (!relationRules.contains(candidate)) {
             throw new IllegalArgumentException(
-                    "Relacao ontologica invalida: " + candidate.label()
+                    "Relação ontológica inválida: " + candidate.label()
             );
         }
     }

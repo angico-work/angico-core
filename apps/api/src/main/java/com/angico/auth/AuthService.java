@@ -38,7 +38,7 @@ public class AuthService {
         Pessoa pessoa = pessoaRepository.findByEmailIgnoreCase(email)
                 .filter(candidate -> "ATIVA".equalsIgnoreCase(candidate.getStatus()))
                 .filter(candidate -> passwordHasher.matches(request.password(), candidate.getPasswordHash()))
-                .orElseThrow(() -> new UnauthorizedException("Credenciais invalidas."));
+                .orElseThrow(() -> new UnauthorizedException("Credenciais inválidas."));
 
         String token = newToken();
         Instant now = Instant.now();
@@ -58,10 +58,10 @@ public class AuthService {
         validateEmail(email);
         validatePassword(password);
         if (pessoaRepository.findByEmailIgnoreCase(email).isPresent()) {
-            throw new IllegalArgumentException("Email ja cadastrado.");
+            throw new IllegalArgumentException("Email já cadastrado.");
         }
         if (pessoaRepository.findByAngicoIdIgnoreCase(angicoId).isPresent()) {
-            throw new IllegalArgumentException("Angico ID ja esta em uso.");
+            throw new IllegalArgumentException("Angico ID já está em uso.");
         }
 
         Pessoa pessoa = new Pessoa();
@@ -81,7 +81,7 @@ public class AuthService {
         try {
             pessoa = pessoaRepository.saveAndFlush(pessoa);
         } catch (DataIntegrityViolationException ex) {
-            throw new IllegalArgumentException("Email ou Angico ID ja cadastrado.");
+            throw new IllegalArgumentException("Email ou Angico ID já cadastrado.");
         }
         return toResponse(token, pessoa);
     }
@@ -92,7 +92,7 @@ public class AuthService {
         return new AngicoIdAvailabilityResponse(
                 angicoId,
                 available,
-                available ? "Angico ID disponivel." : "Angico ID ja esta em uso."
+                available ? "Angico ID disponível." : "Angico ID já está em uso."
         );
     }
 
@@ -107,7 +107,7 @@ public class AuthService {
     @Transactional
     public void logout(Long pessoaId) {
         Pessoa pessoa = pessoaRepository.findById(pessoaId)
-                .orElseThrow(() -> new UnauthorizedException("Sessao invalida."));
+                .orElseThrow(() -> new UnauthorizedException("Sessão inválida."));
         pessoa.setAuthTokenHash(null);
         pessoa.setAuthTokenIssuedAt(null);
         pessoaRepository.save(pessoa);
@@ -165,7 +165,7 @@ public class AuthService {
 
     private String requireText(String value, String fieldName) {
         if (value == null || value.isBlank()) {
-            throw new IllegalArgumentException(fieldName + " e obrigatorio.");
+            throw new IllegalArgumentException(fieldName + " é obrigatório.");
         }
         return value.trim();
     }
@@ -176,7 +176,7 @@ public class AuthService {
 
     private void validateEmail(String email) {
         if (!BASIC_EMAIL_PATTERN.matcher(email).matches()) {
-            throw new IllegalArgumentException("Informe um email valido.");
+            throw new IllegalArgumentException("Informe um email válido.");
         }
     }
 

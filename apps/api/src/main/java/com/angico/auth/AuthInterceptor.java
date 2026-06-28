@@ -38,7 +38,7 @@ public class AuthInterceptor implements HandlerInterceptor {
         pessoa.ifPresent(value -> attach(request, value));
 
         if (authRequired && pessoa.isEmpty()) {
-            throw new UnauthorizedException("Autenticacao obrigatoria.");
+            throw new UnauthorizedException("Autenticação obrigatória.");
         }
         return true;
     }

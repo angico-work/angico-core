@@ -37,7 +37,7 @@ public class ApiExceptionHandler {
     public ProblemDetail handleConflict(DataIntegrityViolationException ex) {
         return ProblemDetail.forStatusAndDetail(
                 HttpStatus.CONFLICT,
-                "Ja existe um cadastro com estes dados."
+                "Já existe um cadastro com estes dados."
         );
     }
 
@@ -46,7 +46,7 @@ public class ApiExceptionHandler {
         LOGGER.error("Erro inesperado na API.", ex);
         return ProblemDetail.forStatusAndDetail(
                 HttpStatus.INTERNAL_SERVER_ERROR,
-                "Erro interno ao processar a requisicao."
+                "Erro interno ao processar a requisição."
         );
     }
 }
