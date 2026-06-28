@@ -1,7 +1,14 @@
-import { useState, type FormEvent } from 'react';
+import { useState, type CSSProperties, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Brand from '../components/Brand';
 import { login } from '../lib/api';
+
+// Each leaf drifts in from above and settles at its resting top/left over ~2s.
+const FALLING_LEAVES: CSSProperties[] = [
+  { left: '5%', top: '33%', ['--lw' as string]: '212px', ['--lo' as string]: '0.92', ['--ld' as string]: '0.05s', ['--lx' as string]: '13vw', ['--r0' as string]: '-26deg', ['--r1' as string]: '7deg' },
+  { left: '39%', top: '11%', ['--lw' as string]: '86px', ['--lo' as string]: '0.5', ['--ld' as string]: '0.30s', ['--lx' as string]: '-9vw', ['--r0' as string]: '22deg', ['--r1' as string]: '-7deg' },
+  { left: '66%', top: '47%', ['--lw' as string]: '126px', ['--lo' as string]: '0.4', ['--ld' as string]: '0.16s', ['--lx' as string]: '10vw', ['--r0' as string]: '-14deg', ['--r1' as string]: '10deg' }
+];
 
 export default function LoginPage() {
   const navigate = useNavigate();
@@ -25,7 +32,12 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="login-page">
+    <main className="login-page dusk-scene">
+      <div className="leaf-fall-layer" aria-hidden="true">
+        {FALLING_LEAVES.map((style, i) => (
+          <img key={i} className="leaf-fall" src="/angico-leaf.png" alt="" style={style} />
+        ))}
+      </div>
       <section className="login-visual">
         <Brand />
         <h1 className="login-title">Transforme conhecimento local em ação coordenada.</h1>

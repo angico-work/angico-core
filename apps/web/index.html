@@ -5,7 +5,20 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Angico · Memória territorial</title>
     <meta name="description" content="Angico é uma aplicação web de inteligência socioambiental para territórios, evidências, missões e impacto." />
+    <meta name="theme-color" content="#00374F" />
     <link rel="icon" href="/angico-icon.png" />
+    <!-- Brand type per the Angico spec: Garet (display) + Nourd (body). They are
+         commercial, so Outfit + Hanken Grotesk stand in with the same geometric
+         DNA; drop the real woff2 into /fonts and enable the @font-face stubs in
+         styles.css for exact fidelity. Spline Sans Mono is reserved for
+         coordinates and Angico IDs (the territorial vernacular). -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="preload" as="image" href="/angico-leaf.png" />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Hanken+Grotesk:wght@400;500;600;700&family=Spline+Sans+Mono:wght@500;600&display=swap"
+      rel="stylesheet"
+    />
   </head>
   <body>
     <div id="app"></div>
