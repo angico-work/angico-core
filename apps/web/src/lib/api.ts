@@ -173,6 +173,19 @@ export async function searchGeocoding(query: string, signal?: AbortSignal): Prom
   }
 }
 
+// Resolves a suggestion to coordinates. The IBGE municipality fallback returns
+// city names without coordinates (it answers when the geocoder is rate-limited);
+// in that case we re-geocode "city, state, country" to find a centre. Returns
+// null only when no provider can place the city.
+export async function resolveCoords(r: GeoResult, signal?: AbortSignal): Promise<[number, number] | null> {
+  if (r.latitude != null && r.longitude != null) return [r.latitude, r.longitude];
+  const q = [r.city, r.state, r.country].filter(Boolean).join(', ');
+  if (!q) return null;
+  const more = await searchGeocoding(q, signal);
+  const hit = more.find((x) => x.latitude != null && x.longitude != null);
+  return hit && hit.latitude != null && hit.longitude != null ? [hit.latitude, hit.longitude] : null;
+}
+
 export async function reverseGeocode(lat: number, lng: number, signal?: AbortSignal): Promise<GeoResult | null> {
   try {
     const r = await fetch(apiUrl(`/api/geocoding/reverse?lat=${lat}&lng=${lng}`), {

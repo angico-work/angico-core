@@ -10,14 +10,19 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Stream;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 @Component
 public class NominatimGeocodingProvider implements GeocodingProvider {
+
+    private static final Logger LOG = LoggerFactory.getLogger(NominatimGeocodingProvider.class);
 
     private final HttpClient httpClient = HttpClient.newBuilder()
             .connectTimeout(Duration.ofSeconds(4))
@@ -42,10 +47,12 @@ public class NominatimGeocodingProvider implements GeocodingProvider {
         try {
             List<GeocodingResult> photonResults = photonSearch(query, countryParam);
             if (!photonResults.isEmpty()) {
+                LOG.debug("Photon answered '{}' with {} result(s)", query, photonResults.size());
                 return photonResults;
             }
-        } catch (IllegalStateException ignored) {
-            // Fall back to Nominatim below.
+            LOG.warn("Photon returned 0 results for '{}'; falling back to Nominatim", query);
+        } catch (RuntimeException ex) {
+            LOG.warn("Photon search failed for '{}' ({}); falling back to Nominatim", query, ex.toString());
         }
 
         String encodedQuery = encode(query);
@@ -57,6 +64,7 @@ public class NominatimGeocodingProvider implements GeocodingProvider {
         JsonNode root = request(uri);
         List<GeocodingResult> results = new ArrayList<>();
         root.forEach(node -> results.add(toResult(node)));
+        LOG.debug("Nominatim answered '{}' with {} result(s)", query, results.size());
         return results;
     }
 
@@ -166,14 +174,15 @@ public class NominatimGeocodingProvider implements GeocodingProvider {
         String neighborhood = firstText(properties, "district", "locality", "name");
         String state = text(properties.path("state"));
         String country = text(properties.path("country"));
-        String displayName = List.of(
+        // Stream.of tolerates null elements (List.of would throw NPE); a
+        // municipality result, for instance, has no "city" property.
+        String displayName = Stream.of(
                         text(properties.path("name")),
                         neighborhood,
                         city,
                         state,
                         country
                 )
-                .stream()
                 .filter(value -> value != null && !value.isBlank())
                 .distinct()
                 .reduce((left, right) -> left + ", " + right)

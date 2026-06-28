@@ -1,5 +1,5 @@
 import { useState, type CSSProperties, type FormEvent } from 'react';
-import { createObservacao, reverseGeocode, searchGeocoding, getSession } from '../lib/api';
+import { createObservacao, reverseGeocode, resolveCoords, getSession } from '../lib/api';
 import type { GeoResult, ObservacaoInput } from '../types';
 import AddressField from './AddressField';
 import MapView from './MapView';
@@ -48,15 +48,8 @@ export default function NewObservacaoModal({ workspaceId, initialLat, initialLng
     if (r.city) setCidade(r.city);
     if (r.state) setEstado(r.state);
     setBairro(r.neighborhood ?? '');
-    if (r.latitude != null && r.longitude != null) {
-      setCoords([r.latitude, r.longitude]);
-      return;
-    }
-    const more = await searchGeocoding([r.city, r.state, r.country].filter(Boolean).join(', '));
-    const withCoords = more.find((x) => x.latitude != null && x.longitude != null);
-    if (withCoords && withCoords.latitude != null && withCoords.longitude != null) {
-      setCoords([withCoords.latitude, withCoords.longitude]);
-    }
+    const resolved = await resolveCoords(r);
+    if (resolved) setCoords(resolved);
   }
 
   // Drag/click on the preview map → update coords, then reverse-geocode so the

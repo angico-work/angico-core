@@ -929,6 +929,7 @@ body {
 .field input,
 .field select,
 .field textarea,
+.address-field input,
 .filters select {
   width: 100%;
   border: 1px solid var(--line);
@@ -944,6 +945,7 @@ body {
 .field input:focus,
 .field select:focus,
 .field textarea:focus,
+.address-field input:focus,
 .filters select:focus {
   border-color: var(--teal);
   box-shadow: 0 0 0 3px rgba(52, 171, 166, .16);
@@ -2517,6 +2519,7 @@ body {
 
 /* ─── Address autocomplete (geocoding) ─────────────────────────────────────── */
 .address-field { position: relative; }
+.map-search { min-width: 240px; max-width: 380px; flex: 1 1 260px; }
 
 .address-field__spinner {
   position: absolute;

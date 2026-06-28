@@ -3,10 +3,11 @@ import { useOutletContext } from 'react-router-dom';
 import type { AppContext } from '../components/AppShell';
 import MapView from '../components/MapView';
 import NewObservacaoModal from '../components/NewObservacaoModal';
-import { loadMapPoints } from '../lib/api';
-import type { MapPoint } from '../types';
+import AddressField from '../components/AddressField';
+import { loadMapPoints, resolveCoords } from '../lib/api';
+import type { MapPoint, GeoResult } from '../types';
 
-// Default center: Jardim Novo (São Paulo region). Used when there are no points.
+// Fallback center when there are no points and no active search.
 const DEFAULT_CENTER: [number, number] = [-23.559, -46.64];
 
 const TYPES: Array<{ key: MapPoint['type']; label: string; color: string }> = [
@@ -20,6 +21,8 @@ export default function MapPage() {
   const [points, setPoints] = useState<MapPoint[]>([]);
   const [active, setActive] = useState<Set<string>>(new Set(TYPES.map((t) => t.key)));
   const [pending, setPending] = useState<{ lat: number; lng: number } | null>(null);
+  const [query, setQuery] = useState('');
+  const [flyTo, setFlyTo] = useState<[number, number] | null>(null);
 
   function refresh() {
     void loadMapPoints(workspaceId).then(setPoints);
@@ -27,14 +30,22 @@ export default function MapPage() {
   useEffect(refresh, [workspaceId]);
 
   const visible = useMemo(() => points.filter((p) => active.has(p.type)), [points, active]);
-  const center = points.length ? [points[0].latitude, points[0].longitude] as [number, number] : DEFAULT_CENTER;
+  const center = flyTo ?? (points.length ? ([points[0].latitude, points[0].longitude] as [number, number]) : DEFAULT_CENTER);
 
   function toggle(key: string) {
     setActive((prev) => {
       const next = new Set(prev);
-      if (next.has(key)) next.delete(key); else next.add(key);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
       return next;
     });
+  }
+
+  // A searched place flies the map there; clearing the box returns to the data.
+  // City-only suggestions arrive without coordinates, so resolve a centre first.
+  async function onSearchSelect(r: GeoResult) {
+    const coords = await resolveCoords(r);
+    if (coords) setFlyTo(coords);
   }
 
   return (
@@ -43,6 +54,14 @@ export default function MapPage() {
         <div>
           <h1>Mapa do Território</h1>
           <p>{visible.length} de {points.length} pontos · clique no mapa para registrar uma observação no local.</p>
+        </div>
+        <div className="map-search">
+          <AddressField
+            value={query}
+            onChange={(t) => { setQuery(t); if (!t) setFlyTo(null); }}
+            onSelect={onSearchSelect}
+            placeholder="Buscar cidade ou endereço no mapa…"
+          />
         </div>
       </div>
 
@@ -62,8 +81,10 @@ export default function MapPage() {
         <MapView
           points={visible}
           center={center}
+          zoom={flyTo ? 14 : 15}
           height="min(70vh, 640px)"
-          fitToPoints
+          recenter={Boolean(flyTo)}
+          fitToPoints={!flyTo}
           onMapClick={(lat, lng) => setPending({ lat, lng })}
         />
       </div>
@@ -74,7 +95,7 @@ export default function MapPage() {
           initialLat={pending.lat}
           initialLng={pending.lng}
           onClose={() => setPending(null)}
-          onCreated={() => { setPending(null); refresh(); }}
+          onCreated={() => { setPending(null); setFlyTo(null); setQuery(''); refresh(); }}
         />
       )}
     </div>
