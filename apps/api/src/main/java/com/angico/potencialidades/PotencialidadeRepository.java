@@ -6,8 +6,14 @@ import org.springframework.stereotype.Repository;
 
 @Repository
 public interface PotencialidadeRepository extends JpaRepository<PotencialidadeTerritorial, Long> {
+<<<<<<< HEAD
 
     List<PotencialidadeTerritorial> findByWorkspaceIdOrderByCreatedAtDesc(String workspaceId);
 
     long countByWorkspaceId(String workspaceId);
+=======
+    List<PotencialidadeTerritorial> findByWorkspaceIdOrderByUpdatedAtDesc(String workspaceId);
+    List<PotencialidadeTerritorial> findByTerritorioIdOrderByUpdatedAtDesc(Long territorioId);
+    long countByTerritorioId(Long territorioId);
+>>>>>>> origin
 }

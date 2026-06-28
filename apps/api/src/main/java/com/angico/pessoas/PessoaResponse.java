@@ -1,12 +1,16 @@
 package com.angico.pessoas;
 
+<<<<<<< HEAD
 import java.time.Instant;
 
+=======
+>>>>>>> origin
 public record PessoaResponse(
         Long id,
         String workspaceId,
         String nome,
         String papel,
+<<<<<<< HEAD
         Instant createdAt
 ) {
 
@@ -19,4 +23,10 @@ public record PessoaResponse(
                 p.getCreatedAt()
         );
     }
+=======
+        String email,
+        String angicoId,
+        String status
+) {
+>>>>>>> origin
 }

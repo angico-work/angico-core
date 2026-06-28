@@ -1,5 +1,6 @@
 package com.angico.missoes;
 
+<<<<<<< HEAD
 import jakarta.validation.constraints.NotBlank;
 
 /**
@@ -12,5 +13,18 @@ public record MissaoRequest(
         String descricao,
         String problemaId,
         String responsavelId
+=======
+public record MissaoRequest(
+        String workspaceId,
+        Long territorioId,
+        Long problemaId,
+        String titulo,
+        String descricao,
+        String prioridade,
+        Double latitude,
+        Double longitude,
+        String organizacaoId,
+        String actorId
+>>>>>>> origin
 ) {
 }

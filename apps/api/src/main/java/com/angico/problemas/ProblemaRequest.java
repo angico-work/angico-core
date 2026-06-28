@@ -1,5 +1,6 @@
 package com.angico.problemas;
 
+<<<<<<< HEAD
 import jakarta.validation.constraints.NotBlank;
 
 /**
@@ -18,5 +19,19 @@ public record ProblemaRequest(
         String severidade,
         String origemObservacaoId,
         String autorId
+=======
+public record ProblemaRequest(
+        String workspaceId,
+        Long territorioId,
+        Long observacaoId,
+        String titulo,
+        String descricao,
+        String categoria,
+        String prioridade,
+        Integer severidade,
+        Double latitude,
+        Double longitude,
+        String actorId
+>>>>>>> origin
 ) {
 }

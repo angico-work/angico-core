@@ -6,10 +6,18 @@ import org.springframework.stereotype.Repository;
 
 @Repository
 public interface AcaoRepository extends JpaRepository<Acao, Long> {
+<<<<<<< HEAD
 
     List<Acao> findByWorkspaceIdOrderByCreatedAtDesc(String workspaceId);
 
     long countByWorkspaceId(String workspaceId);
 
     long countByWorkspaceIdAndMissaoId(String workspaceId, String missaoId);
+=======
+    List<Acao> findByWorkspaceIdOrderByUpdatedAtDesc(String workspaceId);
+    List<Acao> findByTerritorioIdOrderByUpdatedAtDesc(Long territorioId);
+    List<Acao> findByMissaoIdOrderByUpdatedAtDesc(Long missaoId);
+    long countByTerritorioId(Long territorioId);
+    long countByTerritorioIdAndStatus(Long territorioId, String status);
+>>>>>>> origin
 }

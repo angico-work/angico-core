@@ -21,7 +21,11 @@ public class AuthInterceptor implements HandlerInterceptor {
 
     public AuthInterceptor(
             AuthService authService,
+<<<<<<< HEAD
             @Value("${angico.auth.required:false}") boolean authRequired
+=======
+            @Value("${angico.auth.required:true}") boolean authRequired
+>>>>>>> origin
     ) {
         this.authService = authService;
         this.authRequired = authRequired;
@@ -38,7 +42,11 @@ public class AuthInterceptor implements HandlerInterceptor {
         pessoa.ifPresent(value -> attach(request, value));
 
         if (authRequired && pessoa.isEmpty()) {
+<<<<<<< HEAD
             throw new UnauthorizedException("Autenticação obrigatória.");
+=======
+            throw new UnauthorizedException("Autenticacao obrigatoria.");
+>>>>>>> origin
         }
         return true;
     }

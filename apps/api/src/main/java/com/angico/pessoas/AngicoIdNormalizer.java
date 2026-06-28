@@ -15,7 +15,11 @@ public final class AngicoIdNormalizer {
                 ? ""
                 : rawAngicoId.trim().replaceFirst("^@", "").toLowerCase(Locale.ROOT);
         if (!ANGICO_ID_PATTERN.matcher(value).matches()) {
+<<<<<<< HEAD
             throw new IllegalArgumentException("Use 3 a 30 caracteres: letras, números, ponto ou underline.");
+=======
+            throw new IllegalArgumentException("Use 3 a 30 caracteres: letras, numeros, ponto ou underline.");
+>>>>>>> origin
         }
         return value;
     }

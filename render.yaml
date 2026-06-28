@@ -1,0 +1,29 @@
+services:
+  - type: web
+    name: angico-api
+    runtime: docker
+    rootDir: apps/api
+    plan: starter
+    envVars:
+      - key: ANGICO_DB_URL
+        sync: false
+      - key: ANGICO_DB_USER
+        sync: false
+      - key: ANGICO_DB_PASSWORD
+        sync: false
+      - key: ANGICO_ALLOWED_ORIGINS
+        sync: false
+      - key: ANGICO_AUTH_REQUIRED
+        value: "true"
+      - key: ANGICO_SEED_LEADERS_ENABLED
+        value: "true"
+      - key: ANGICO_SEED_LEADER_PASSWORD
+        sync: false
+      - key: ANGICO_UPLOAD_DIR
+        value: /opt/render/project/src/uploads
+      - key: ANGICO_UPLOAD_MAX_BYTES
+        value: "2097152"
+      - key: ANGICO_GEOCODER_PROVIDER
+        value: nominatim
+      - key: ANGICO_GEOCODER_USER_AGENT
+        sync: false
