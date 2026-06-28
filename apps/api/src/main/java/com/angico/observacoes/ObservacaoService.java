@@ -48,6 +48,10 @@ public class ObservacaoService {
                 clock.now()
         );
 
+        observacao.setBairro(request.bairro());
+        observacao.setCidade(request.cidade());
+        observacao.setEstado(request.estado());
+
         ObservacaoTerritorial saved = observacaoRepository.save(observacao);
         observacaoMemoryPublisher.publicarRegistrada(saved);
         return ObservacaoResponse.from(saved);

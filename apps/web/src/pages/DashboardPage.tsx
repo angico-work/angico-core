@@ -162,7 +162,7 @@ export default function DashboardPage() {
           <div className="panel-title" style={{ marginBottom: 12 }}>
             <h3>Mapa do Território</h3><Link to="/app/mapa">Abrir mapa completo →</Link>
           </div>
-          <MapView points={points} center={center} zoom={14} height={360} />
+          <MapView points={points} center={center} zoom={14} height={360} fitToPoints />
         </div>
 
         <div className="bottom-grid">

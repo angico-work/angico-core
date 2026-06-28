@@ -63,6 +63,7 @@ export default function MapPage() {
           points={visible}
           center={center}
           height="min(70vh, 640px)"
+          fitToPoints
           onMapClick={(lat, lng) => setPending({ lat, lng })}
         />
       </div>

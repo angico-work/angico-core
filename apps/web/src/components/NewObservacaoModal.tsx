@@ -1,8 +1,13 @@
-import { useState, type FormEvent } from 'react';
-import { createObservacao } from '../lib/api';
-import type { ObservacaoInput } from '../types';
+import { useState, type CSSProperties, type FormEvent } from 'react';
+import { createObservacao, reverseGeocode, searchGeocoding, getSession } from '../lib/api';
+import type { GeoResult, ObservacaoInput } from '../types';
+import AddressField from './AddressField';
+import MapView from './MapView';
 
-const CATEGORIAS = ['Resíduos', 'Água e Saneamento', 'Mobilidade', 'Áreas Verdes', 'Calor e Arborização', 'Outros'];
+const CATEGORIAS = [
+  'Resíduos', 'Água e Saneamento', 'Mobilidade', 'Áreas Verdes',
+  'Calor e Arborização', 'Desmatamento', 'Queimadas', 'Biodiversidade', 'Outros'
+];
 const URGENCIAS = ['BAIXA', 'MEDIA', 'ALTA'];
 
 interface Props {
@@ -13,13 +18,13 @@ interface Props {
   onCreated: () => void;
 }
 
-const overlay: React.CSSProperties = {
-  position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.45)',
-  display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50, padding: 16
+const overlay: CSSProperties = {
+  position: 'fixed', inset: 0, background: 'rgba(2, 26, 36, 0.55)', backdropFilter: 'blur(3px)',
+  display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2000, padding: 16
 };
-const card: React.CSSProperties = {
-  background: '#fff', borderRadius: 16, padding: 24, width: 'min(480px, 100%)',
-  maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 24px 60px rgba(0,0,0,0.25)'
+const card: CSSProperties = {
+  background: '#fff', borderRadius: 20, padding: 'clamp(20px, 3vw, 28px)', width: 'min(540px, 100%)',
+  maxHeight: '92vh', overflowY: 'auto', boxShadow: '0 30px 70px rgba(2, 26, 36, 0.32)'
 };
 
 export default function NewObservacaoModal({ workspaceId, initialLat, initialLng, onClose, onCreated }: Props) {
@@ -27,21 +32,62 @@ export default function NewObservacaoModal({ workspaceId, initialLat, initialLng
   const [titulo, setTitulo] = useState('');
   const [descricao, setDescricao] = useState('');
   const [localizacao, setLocalizacao] = useState('');
+  const [cidade, setCidade] = useState('');
+  const [estado, setEstado] = useState('');
+  const [bairro, setBairro] = useState('');
+  const [coords, setCoords] = useState<[number, number] | null>(
+    initialLat != null && initialLng != null ? [initialLat, initialLng] : null
+  );
   const [urgencia, setUrgencia] = useState('MEDIA');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // A geocoding suggestion was chosen: take its coords + cidade/UF. If it came
+  // from the coordinate-less IBGE fallback, resolve a city centre via Nominatim.
+  async function applyResult(r: GeoResult) {
+    if (r.city) setCidade(r.city);
+    if (r.state) setEstado(r.state);
+    setBairro(r.neighborhood ?? '');
+    if (r.latitude != null && r.longitude != null) {
+      setCoords([r.latitude, r.longitude]);
+      return;
+    }
+    const more = await searchGeocoding([r.city, r.state, r.country].filter(Boolean).join(', '));
+    const withCoords = more.find((x) => x.latitude != null && x.longitude != null);
+    if (withCoords && withCoords.latitude != null && withCoords.longitude != null) {
+      setCoords([withCoords.latitude, withCoords.longitude]);
+    }
+  }
+
+  // Drag/click on the preview map → update coords, then reverse-geocode so the
+  // address + cidade/UF stay in sync with the actual pin.
+  async function handlePick(lat: number, lng: number) {
+    setCoords([lat, lng]);
+    const r = await reverseGeocode(lat, lng);
+    if (r) {
+      if (r.displayName) setLocalizacao(r.displayName);
+      if (r.city) setCidade(r.city);
+      if (r.state) setEstado(r.state);
+      setBairro(r.neighborhood ?? '');
+    }
+  }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setSubmitting(true);
     setError(null);
+    const session = getSession();
     const input: ObservacaoInput = {
       workspaceId, categoria, titulo,
       descricao: descricao || undefined,
       localizacao: localizacao || undefined,
-      urgencia, autorId: 'julia',
-      latitude: initialLat,
-      longitude: initialLng
+      bairro: bairro || undefined,
+      cidade: cidade || undefined,
+      estado: estado || undefined,
+      urgencia,
+      autorId: session?.angicoId ?? session?.nome ?? undefined,
+      latitude: coords?.[0],
+      longitude: coords?.[1]
     };
     try {
       await createObservacao(input);
@@ -55,14 +101,11 @@ export default function NewObservacaoModal({ workspaceId, initialLat, initialLng
   return (
     <div style={overlay} onClick={onClose}>
       <div style={card} onClick={(e) => e.stopPropagation()}>
-        <h2 style={{ marginTop: 0 }}>Nova observação</h2>
-        <p style={{ color: '#64748b', marginTop: -8 }}>Registre o que você observou no território.</p>
-        {initialLat != null && initialLng != null && (
-          <div className="demo-hint" style={{ marginBottom: 12 }}>
-            📍 Local marcado no mapa: {initialLat.toFixed(5)}, {initialLng.toFixed(5)}
-          </div>
-        )}
-        <form className="login-card" style={{ boxShadow: 'none', padding: 0 }} onSubmit={handleSubmit}>
+        <h2 style={{ marginTop: 0, marginBottom: 4 }}>Nova observação</h2>
+        <p style={{ color: '#5b7280', marginTop: 0 }}>
+          Registre o que você observou e marque o local no território.
+        </p>
+        <form className="obs-form" onSubmit={handleSubmit}>
           <div className="field">
             <label htmlFor="obs-categoria">Categoria</label>
             <select id="obs-categoria" value={categoria} onChange={(e) => setCategoria(e.target.value)}>
@@ -78,20 +121,49 @@ export default function NewObservacaoModal({ workspaceId, initialLat, initialLng
             <input id="obs-descricao" value={descricao} onChange={(e) => setDescricao(e.target.value)} placeholder="Detalhes da situação" />
           </div>
           <div className="field">
-            <label htmlFor="obs-local">Localização</label>
-            <input id="obs-local" value={localizacao} onChange={(e) => setLocalizacao(e.target.value)} placeholder="Ex: Rua das Flores, 245" />
+            <label htmlFor="obs-local">Endereço ou cidade</label>
+            <AddressField
+              id="obs-local"
+              value={localizacao}
+              onChange={setLocalizacao}
+              onSelect={applyResult}
+              placeholder="Ex: Avenida Boa Viagem, Recife"
+            />
           </div>
+
+          {coords && (
+            <div className="obs-map">
+              <div className="obs-map__frame">
+                <MapView
+                  center={coords}
+                  zoom={16}
+                  height={200}
+                  recenter
+                  picker={{ position: coords, onPick: handlePick }}
+                />
+              </div>
+              <p className="obs-map__hint">
+                <span className="obs-map__dot" aria-hidden="true" />
+                Arraste o marcador ou toque no mapa para ajustar.
+                {' '}<span className="obs-map__coords">{coords[0].toFixed(5)}, {coords[1].toFixed(5)}</span>
+                {(cidade || estado) && <> · {[cidade, estado].filter(Boolean).join(', ')}</>}
+              </p>
+            </div>
+          )}
+
           <div className="field">
             <label htmlFor="obs-urgencia">Urgência</label>
             <select id="obs-urgencia" value={urgencia} onChange={(e) => setUrgencia(e.target.value)}>
               {URGENCIAS.map((u) => <option key={u} value={u}>{u}</option>)}
             </select>
           </div>
-          {error && <div style={{ color: '#dc2626', fontSize: 14 }}>{error}</div>}
-          <div style={{ display: 'flex', gap: 12, marginTop: 8 }}>
+
+          {error && <div className="form-error" role="alert">{error}</div>}
+
+          <div className="obs-form__actions">
             <button type="button" className="ghost-button" onClick={onClose} disabled={submitting}>Cancelar</button>
             <button type="submit" className="primary-button" disabled={submitting}>
-              {submitting ? 'Registrando...' : 'Registrar observação'}
+              {submitting ? 'Registrando…' : 'Registrar observação'}
             </button>
           </div>
         </form>

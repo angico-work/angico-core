@@ -60,6 +60,9 @@ export interface ObservacaoInput {
   titulo: string;
   descricao?: string;
   localizacao?: string;
+  bairro?: string;
+  cidade?: string;
+  estado?: string;
   urgencia?: string;
   autorId?: string;
   latitude?: number;
@@ -82,6 +85,24 @@ export interface MapPoint {
   status: string;
   latitude: number;
   longitude: number;
+}
+
+// A geocoding match from GET /api/geocoding/search (Nominatim + IBGE fallback).
+export interface GeoResult {
+  displayName: string;
+  city: string | null;
+  neighborhood: string | null;
+  state: string | null;
+  country: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  boundingBox: number[];
+}
+
+export interface GeoSearchResponse {
+  query: string;
+  results: GeoResult[];
+  error?: string | null;
 }
 
 // One row of the território memory timeline (GET /api/glimpse/memoria)

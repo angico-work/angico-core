@@ -1,7 +1,15 @@
-import type { DashboardData, ObservacaoInput, Observacao, MapPoint, MemoriaEvent } from '../types';
+import type { DashboardData, ObservacaoInput, Observacao, MapPoint, MemoriaEvent, GeoResult, GeoSearchResponse } from '../types';
 import { fallbackDashboard } from '../data/fallbackDashboard';
 
 export const DEFAULT_WORKSPACE = 'coletivo-jardim-novo';
+
+// Base URL for the API. Empty by default so the Vite dev proxy and same-origin
+// deploys keep working; set VITE_API_BASE_URL for a cross-origin deploy.
+export const API_BASE = (import.meta.env.VITE_API_BASE_URL ?? '').replace(/\/+$/, '');
+
+export function apiUrl(path: string): string {
+  return `${API_BASE}${path}`;
+}
 
 // --- Auth session -----------------------------------------------------------
 // The auth slice ported from the dev branch issues an opaque bearer token on
@@ -143,6 +151,38 @@ export async function loadMapPoints(workspaceId = DEFAULT_WORKSPACE): Promise<Ma
     return (await r.json()) as MapPoint[];
   } catch {
     return [];
+  }
+}
+
+// --- Geocoding (forward + reverse) ------------------------------------------
+// Backed by /api/geocoding (Nominatim with an IBGE municipality fallback).
+// Debounce on the caller side and pass an AbortSignal to cancel stale lookups.
+export async function searchGeocoding(query: string, signal?: AbortSignal): Promise<GeoResult[]> {
+  const q = query.trim();
+  if (q.length < 3) return [];
+  try {
+    const r = await fetch(apiUrl(`/api/geocoding/search?q=${encodeURIComponent(q)}`), {
+      headers: authHeaders(),
+      signal
+    });
+    if (!r.ok) return [];
+    const body = (await r.json()) as GeoSearchResponse;
+    return body.results ?? [];
+  } catch {
+    return [];
+  }
+}
+
+export async function reverseGeocode(lat: number, lng: number, signal?: AbortSignal): Promise<GeoResult | null> {
+  try {
+    const r = await fetch(apiUrl(`/api/geocoding/reverse?lat=${lat}&lng=${lng}`), {
+      headers: authHeaders(),
+      signal
+    });
+    if (!r.ok) return null;
+    return (await r.json()) as GeoResult;
+  } catch {
+    return null;
   }
 }
 
