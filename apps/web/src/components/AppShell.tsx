@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
-import { Outlet, useNavigate } from 'react-router-dom';
+import { Navigate, Outlet, useNavigate } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import Topbar from './Topbar';
-import { DEFAULT_WORKSPACE, loadDashboard } from '../lib/api';
+import { DEFAULT_WORKSPACE, getSession, isAuthenticated, loadDashboard, logout } from '../lib/api';
 
 export interface AppContext {
   workspaceId: string;
@@ -12,7 +12,8 @@ export default function AppShell() {
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [territoryName, setTerritoryName] = useState('Território');
-  const workspaceId = DEFAULT_WORKSPACE;
+  const session = getSession();
+  const workspaceId = session?.workspaceId ?? DEFAULT_WORKSPACE;
 
   useEffect(() => {
     let active = true;
@@ -20,9 +21,14 @@ export default function AppShell() {
     return () => { active = false; };
   }, [workspaceId]);
 
-  function handleLogout() {
-    localStorage.removeItem('angico_session');
-    navigate('/');
+  // Auth guard: the core app is only reachable with a valid session.
+  if (!isAuthenticated()) {
+    return <Navigate to="/login" replace />;
+  }
+
+  async function handleLogout() {
+    await logout();
+    navigate('/login');
   }
 
   const context: AppContext = { workspaceId };

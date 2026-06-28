@@ -29,7 +29,27 @@ public class Pessoa {
     @Column(nullable = false)
     private Instant createdAt;
 
-    protected Pessoa() {
+    // --- Auth / identity, grafted from the dev "v.1 funcional" auth slice ---
+    // All nullable so the existing 4-arg creation path (PessoaService) keeps
+    // working; uniqueness is enforced in AuthService, not via DB constraints,
+    // to avoid ddl-auto=update friction on an existing data directory.
+    private String email;
+
+    private String angicoId;
+
+    private String status;
+
+    private String passwordHash;
+
+    private String authTokenHash;
+
+    private Instant authTokenIssuedAt;
+
+    private Instant lastLoginAt;
+
+    // Public no-arg constructor: required by JPA and used by the auth flow,
+    // which builds a Pessoa via setters during register / ensureLeader.
+    public Pessoa() {
     }
 
     public Pessoa(
@@ -52,15 +72,87 @@ public class Pessoa {
         return workspaceId;
     }
 
+    public void setWorkspaceId(String workspaceId) {
+        this.workspaceId = workspaceId;
+    }
+
     public String getNome() {
         return nome;
+    }
+
+    public void setNome(String nome) {
+        this.nome = nome;
     }
 
     public String getPapel() {
         return papel;
     }
 
+    public void setPapel(String papel) {
+        this.papel = papel;
+    }
+
     public Instant getCreatedAt() {
         return createdAt;
+    }
+
+    public void setCreatedAt(Instant createdAt) {
+        this.createdAt = createdAt;
+    }
+
+    public String getEmail() {
+        return email;
+    }
+
+    public void setEmail(String email) {
+        this.email = email;
+    }
+
+    public String getAngicoId() {
+        return angicoId;
+    }
+
+    public void setAngicoId(String angicoId) {
+        this.angicoId = angicoId;
+    }
+
+    public String getStatus() {
+        return status;
+    }
+
+    public void setStatus(String status) {
+        this.status = status;
+    }
+
+    public String getPasswordHash() {
+        return passwordHash;
+    }
+
+    public void setPasswordHash(String passwordHash) {
+        this.passwordHash = passwordHash;
+    }
+
+    public String getAuthTokenHash() {
+        return authTokenHash;
+    }
+
+    public void setAuthTokenHash(String authTokenHash) {
+        this.authTokenHash = authTokenHash;
+    }
+
+    public Instant getAuthTokenIssuedAt() {
+        return authTokenIssuedAt;
+    }
+
+    public void setAuthTokenIssuedAt(Instant authTokenIssuedAt) {
+        this.authTokenIssuedAt = authTokenIssuedAt;
+    }
+
+    public Instant getLastLoginAt() {
+        return lastLoginAt;
+    }
+
+    public void setLastLoginAt(Instant lastLoginAt) {
+        this.lastLoginAt = lastLoginAt;
     }
 }

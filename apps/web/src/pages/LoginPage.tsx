@@ -1,14 +1,27 @@
-import type { FormEvent } from 'react';
+import { useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Brand from '../components/Brand';
+import { login } from '../lib/api';
 
 export default function LoginPage() {
   const navigate = useNavigate();
+  const [email, setEmail] = useState('julia@angico.demo');
+  const [password, setPassword] = useState('angico-demo');
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    localStorage.setItem('angico_session', 'demo');
-    navigate('/app');
+    setError(null);
+    setLoading(true);
+    try {
+      await login(email.trim(), password);
+      navigate('/app');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Não foi possível entrar.');
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (
@@ -22,18 +35,35 @@ export default function LoginPage() {
         <form className="login-card" id="login-form" onSubmit={handleSubmit}>
           <Brand small tagline={false} />
           <h2>Acessar Angico</h2>
-          <p>Primeira versão demonstrativa do workspace territorial.</p>
+          <p>Entre com seu e-mail e senha de liderança.</p>
+          {error && <div className="form-error" role="alert">{error}</div>}
           <div className="field">
             <label htmlFor="email">E-mail</label>
-            <input id="email" type="email" defaultValue="julia@angico.demo" autoComplete="email" />
+            <input
+              id="email"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              autoComplete="email"
+              required
+            />
           </div>
           <div className="field">
             <label htmlFor="password">Senha</label>
-            <input id="password" type="password" defaultValue="angico-demo" autoComplete="current-password" />
+            <input
+              id="password"
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              autoComplete="current-password"
+              required
+            />
           </div>
-          <button className="primary-button" type="submit">Entrar no território</button>
+          <button className="primary-button" type="submit" disabled={loading}>
+            {loading ? 'Entrando…' : 'Entrar no território'}
+          </button>
           <div className="demo-hint">
-            Demo local: qualquer envio abre a aplicação principal. O login real ficará ligado ao módulo de workspaces e permissões.
+            Conta de demonstração já preenchida: <b>julia@angico.demo</b> / <b>angico-demo</b>.
           </div>
         </form>
       </section>

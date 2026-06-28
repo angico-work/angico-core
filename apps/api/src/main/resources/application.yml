@@ -15,3 +15,17 @@ spring:
 
 server:
   port: 8082
+
+# Angico integration settings (auth slice ported from the dev "v.1 funcional").
+angico:
+  auth:
+    # Soft auth by default: the interceptor attaches the logged-in actor when a
+    # bearer token is present but does not reject anonymous requests, so the
+    # React client's demo-resilient flows keep working. Set to true to enforce
+    # authentication on every /api/** and /health endpoint.
+    required: false
+  # Comma-separated origins for cross-origin deploys (web served from a different
+  # host than the API). Empty in dev because the Vite proxy keeps things same-origin.
+  allowed-origins: ""
+  # Seeds the demo leader (julia@angico.demo / angico-demo) on startup.
+  seed-demo-leader: true
