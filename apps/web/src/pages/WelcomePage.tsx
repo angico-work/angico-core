@@ -88,6 +88,18 @@ export default function WelcomePage() {
           <Capability title="Ação coletiva" description="Jovens e moradores deixam de ser apenas fontes de dados e passam a operar como agentes de inteligência territorial." />
         </div>
       </section>
+
+      <section className="dusk-band dusk-scene">
+        <img className="leaf-mark" src="/angico-leaf.png" alt="" aria-hidden="true" />
+        <div>
+          <h2>A memória do território começa com um registro.</h2>
+          <p>Entre no workspace da sua comunidade e transforme o que se observa em ação coordenada — e em memória que permanece.</p>
+        </div>
+        <div className="dusk-band-cta">
+          <button type="button" className="primary-button" onClick={() => navigate('/login')}>Entrar no território</button>
+          <button type="button" className="ghost-button" onClick={() => navigate('/app')}>Ver demonstração</button>
+        </div>
+      </section>
     </main>
   );
 }

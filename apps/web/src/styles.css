@@ -339,7 +339,12 @@ body {
 }
 
 .hero h1 span {
-  color: var(--angico-teal);
+  /* the one expressive word, filled with the Halrizon dusk */
+  background: var(--dusk);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
 }
 
 .hero-copy {
@@ -513,6 +518,70 @@ body {
   margin: 0;
   color: var(--angico-muted);
   line-height: 1.55;
+}
+
+/* Closing horizon: the landing's single dusk moment, echoing the login. */
+.dusk-band {
+  width: min(1180px, calc(100% - 48px));
+  margin: 64px auto 72px;
+  border-radius: var(--radius-xl);
+  padding: clamp(34px, 5vw, 64px);
+  display: grid;
+  grid-template-columns: 1.3fr auto;
+  gap: 28px;
+  align-items: center;
+  color: #fff;
+  box-shadow: var(--shadow-dusk);
+}
+
+.dusk-band .leaf-mark {
+  right: clamp(-40px, -2vw, 0px);
+  bottom: -30px;
+  width: clamp(220px, 26vw, 360px);
+  opacity: .16;
+  filter: none;
+}
+
+.dusk-band h2 {
+  position: relative;
+  z-index: 1;
+  margin: 0;
+  color: #fff;
+  font-size: clamp(28px, 3.6vw, 46px);
+  line-height: 1.02;
+  max-width: 16ch;
+  text-wrap: balance;
+}
+
+.dusk-band p {
+  position: relative;
+  z-index: 1;
+  margin: 14px 0 0;
+  color: rgba(255, 255, 255, .85);
+  font-size: 17px;
+  line-height: 1.55;
+  max-width: 52ch;
+}
+
+.dusk-band .dusk-band-cta {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  align-items: stretch;
+}
+
+.dusk-band .primary-button {
+  background: #fff;
+  color: var(--angico-blue-900);
+  box-shadow: 0 16px 30px rgba(0, 20, 30, .28);
+}
+
+.dusk-band .ghost-button {
+  color: #fff;
+  border-color: rgba(255, 255, 255, .4);
+  background: rgba(255, 255, 255, .06);
 }
 
 /* The login is the threshold into the território: full Halrizon dusk, the
@@ -742,6 +811,7 @@ body {
 }
 
 .nav-item {
+  position: relative;
   height: 48px;
   border-radius: 14px;
   display: flex;
@@ -753,8 +823,20 @@ body {
 }
 
 .nav-item.active {
-  background: var(--angico-green-soft);
-  color: var(--angico-green);
+  background: rgba(52, 171, 166, .13);
+  color: var(--angico-blue-900);
+}
+
+/* a small dusk bar marks the active route — the brand's atmosphere, pontual */
+.nav-item.active::before {
+  content: "";
+  position: absolute;
+  left: 5px;
+  top: 11px;
+  bottom: 11px;
+  width: 3.5px;
+  border-radius: 3px;
+  background: var(--dusk);
 }
 
 .nav-icon,
@@ -834,7 +916,9 @@ body {
 
 .topbar {
   grid-column: 2 / 4;
-  border-bottom: 1px solid var(--angico-line);
+  border-style: solid;
+  border-width: 0 0 2px;
+  border-image: var(--dusk) 1;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -1385,6 +1469,14 @@ body {
     border-left: 0;
   }
 
+  .login-visual {
+    padding-bottom: 8px;
+  }
+
+  .dusk-band {
+    grid-template-columns: 1fr;
+  }
+
   .dashboard-page {
     display: block;
   }
@@ -1522,8 +1614,8 @@ body {
 }
 
 .nav-item.active {
-  background: var(--angico-green-soft);
-  color: var(--angico-green);
+  background: rgba(52, 171, 166, .13);
+  color: var(--angico-blue-900);
   font-weight: 900;
 }
 
