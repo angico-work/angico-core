@@ -10,18 +10,11 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-<<<<<<< HEAD
     "leaflet": "^1.9.4",
     "react": "latest",
     "react-dom": "latest",
     "react-leaflet": "^5.0.0",
     "react-router-dom": "latest"
-=======
-    "@vitejs/plugin-react": "latest",
-    "leaflet": "^1.9.4",
-    "vite": "latest",
-    "typescript": "latest"
->>>>>>> origin
   },
   "devDependencies": {
     "@types/leaflet": "^1.9.21",

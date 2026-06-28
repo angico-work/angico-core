@@ -11,15 +11,12 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.stereotype.Component;
 
-<<<<<<< HEAD
 /**
  * Baseline security headers on API responses. The CSP only governs what the
  * API host itself may load; the separately-served web client is unaffected.
  * connect-src already allows the geocoding providers used by the geocoding
  * module ported from the dev branch.
  */
-=======
->>>>>>> origin
 @Component
 public class SecurityHeadersFilter implements Filter {
 

@@ -5,7 +5,6 @@ import java.time.Instant;
 public record AcaoResponse(
         Long id,
         String workspaceId,
-<<<<<<< HEAD
         String titulo,
         String descricao,
         String status,
@@ -26,17 +25,4 @@ public record AcaoResponse(
                 a.getCreatedAt()
         );
     }
-=======
-        Long territorioId,
-        Long missaoId,
-        String titulo,
-        String descricao,
-        String status,
-        String responsavelId,
-        String resultadoDescricao,
-        Double latitude,
-        Double longitude,
-        Instant updatedAt
-) {
->>>>>>> origin
 }

@@ -1,7 +1,6 @@
 package com.angico.territorios;
 
 import java.util.List;
-import java.util.Map;
 
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -36,20 +35,5 @@ public class TerritorioController {
     @GetMapping("/{id}")
     public TerritorioResponse get(@PathVariable Long id) {
         return territorioService.get(id);
-    }
-
-    @GetMapping("/{id}/dashboard")
-    public Map<String, Object> dashboard(@PathVariable Long id) {
-        return territorioService.dashboard(id);
-    }
-
-    @GetMapping("/{id}/timeline")
-    public List<Map<String, Object>> timeline(@PathVariable Long id) {
-        return territorioService.timeline(id);
-    }
-
-    @GetMapping("/{id}/graph")
-    public Map<String, Object> graph(@PathVariable Long id) {
-        return territorioService.graph(id);
     }
 }
