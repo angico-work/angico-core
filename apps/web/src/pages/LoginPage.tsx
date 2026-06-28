@@ -5,9 +5,12 @@ import { login } from '../lib/api';
 
 // Each leaf drifts in from above and settles at its resting top/left over ~2s.
 const FALLING_LEAVES: CSSProperties[] = [
-  { left: '5%', top: '33%', ['--lw' as string]: '212px', ['--lo' as string]: '0.92', ['--ld' as string]: '0.05s', ['--lx' as string]: '13vw', ['--r0' as string]: '-26deg', ['--r1' as string]: '7deg' },
-  { left: '39%', top: '11%', ['--lw' as string]: '86px', ['--lo' as string]: '0.5', ['--ld' as string]: '0.30s', ['--lx' as string]: '-9vw', ['--r0' as string]: '22deg', ['--r1' as string]: '-7deg' },
-  { left: '66%', top: '47%', ['--lw' as string]: '126px', ['--lo' as string]: '0.4', ['--ld' as string]: '0.16s', ['--lx' as string]: '10vw', ['--r0' as string]: '-14deg', ['--r1' as string]: '10deg' }
+  { left: '3%', top: '7%', ['--lw' as string]: '204px', ['--lo' as string]: '0.85', ['--ld' as string]: '0.04s', ['--lx' as string]: '12vw', ['--r0' as string]: '-28deg', ['--r1' as string]: '6deg' },
+  { left: '30%', top: '3%', ['--lw' as string]: '108px', ['--lo' as string]: '0.5', ['--ld' as string]: '0.22s', ['--lx' as string]: '-7vw', ['--r0' as string]: '18deg', ['--r1' as string]: '-8deg' },
+  { left: '17%', top: '62%', ['--lw' as string]: '70px', ['--lo' as string]: '0.36', ['--ld' as string]: '0.36s', ['--lx' as string]: '7vw', ['--r0' as string]: '-10deg', ['--r1' as string]: '12deg' },
+  { left: '63%', top: '18%', ['--lw' as string]: '132px', ['--lo' as string]: '0.42', ['--ld' as string]: '0.12s', ['--lx' as string]: '10vw', ['--r0' as string]: '-16deg', ['--r1' as string]: '9deg' },
+  { left: '82%', top: '56%', ['--lw' as string]: '82px', ['--lo' as string]: '0.3', ['--ld' as string]: '0.28s', ['--lx' as string]: '6vw', ['--r0' as string]: '14deg', ['--r1' as string]: '-10deg' },
+  { left: '47%', top: '38%', ['--lw' as string]: '56px', ['--lo' as string]: '0.26', ['--ld' as string]: '0.44s', ['--lx' as string]: '-4vw', ['--r0' as string]: '-8deg', ['--r1' as string]: '13deg' }
 ];
 
 export default function LoginPage() {
@@ -40,7 +43,7 @@ export default function LoginPage() {
       </div>
       <section className="login-visual">
         <Brand />
-        <h1 className="login-title">Transforme conhecimento local em ação coordenada.</h1>
+        <h1 className="login-title">Transforme conhecimento <span className="marker">local em ação coordenada</span>.</h1>
         <p>Entre no workspace da sua comunidade para registrar observações, validar problemas, organizar missões e acompanhar resultados no tempo.</p>
       </section>
       <section className="login-form-panel">

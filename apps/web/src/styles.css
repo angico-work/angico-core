@@ -21,6 +21,8 @@
   --dusk-3: #5c7dc6;   /* periwinkle night */
   --dusk: linear-gradient(108deg, #d13f0c 0%, #b14b38 26%, #8a5f76 52%, #6a75ae 78%, #5c7dc6 100%);
   --dusk-veil: linear-gradient(108deg, rgba(209, 63, 12, .16), rgba(150, 94, 105, .13) 55%, rgba(92, 125, 198, .16));
+  /* Angico brand gradient (Halrizon board 75): deep petrol -> turquoise */
+  --angico-grad: linear-gradient(115deg, #023a52 0%, #03516f 32%, #1b8a8b 78%, #34aba6 100%);
 
   /* Warm-tinted neutrals — mist + ink, never cold gray */
   --angico-bg: #f4f6f3;
@@ -584,16 +586,17 @@ body {
   background: rgba(255, 255, 255, .06);
 }
 
-/* The login is the threshold into the território: full Halrizon dusk, the
-   white Angico leaf falling through it (~2s), and a liquid-glass auth panel. */
+/* The login is the threshold into the território: the Angico brand gradient,
+   the white leaf falling through it (~2s), and a liquid-glass auth panel. */
 .login-page {
   position: relative;
   min-height: 100vh;
   display: grid;
   grid-template-columns: 1.08fr 480px;
+  background: var(--angico-grad);
 }
 
-/* deepen the lower-left earth, lift the upper-right sky */
+/* deepen the lower-left, lift the upper-right turquoise */
 .login-page::before {
   content: "";
   position: absolute;
@@ -601,8 +604,8 @@ body {
   z-index: 0;
   pointer-events: none;
   background:
-    radial-gradient(78% 68% at 10% 96%, rgba(58, 14, 3, .52), transparent 60%),
-    radial-gradient(66% 58% at 94% 4%, rgba(156, 176, 228, .30), transparent 60%);
+    radial-gradient(80% 70% at 6% 98%, rgba(0, 26, 36, .55), transparent 60%),
+    radial-gradient(62% 56% at 98% 2%, rgba(126, 224, 212, .30), transparent 60%);
 }
 
 .login-visual {
@@ -625,10 +628,26 @@ body {
 .login-title {
   margin: auto 0 20px;
   font-size: clamp(40px, 5.6vw, 68px);
-  line-height: .98;
+  /* >=1.1 so a wrapped marker line never paints over the cedilla descending
+     from the line above (e.g. the ç in "ação"); .98 clipped it. */
+  line-height: 1.1;
   color: #fff;
   max-width: 13ch;
   text-wrap: balance;
+}
+
+/* marca-texto: the Halrizon dusk swiped across the key phrase like a marker.
+   Keep padding-top at 0 — any top padding extends each line's band upward and
+   covers the previous line's descenders (the missing-cedilla bug). */
+.login-title .marker {
+  background: linear-gradient(101deg, var(--dusk-1) 0%, #e26321 55%, var(--dusk-1) 100%);
+  color: #fff;
+  padding: 0 .16em .06em;
+  margin: 0 -.05em;
+  border-radius: 5px 11px 6px 9px;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+  box-shadow: 0 10px 22px -8px rgba(209, 63, 12, .65);
 }
 
 .login-visual p {
@@ -647,12 +666,17 @@ body {
   justify-content: center;
 }
 
+/* neutral base — also used by the observation modal form */
 .login-card {
   width: 100%;
   max-width: 420px;
+}
+
+/* glass treatment is scoped to the login page only */
+.login-page .login-card {
   padding: clamp(22px, 2.4vw, 34px);
   border-radius: var(--radius-xl);
-  background: linear-gradient(180deg, rgba(9, 21, 29, .46), rgba(9, 21, 29, .28));
+  background: linear-gradient(180deg, rgba(6, 27, 33, .5), rgba(6, 27, 33, .3));
   border: 1px solid var(--glass-stroke);
   -webkit-backdrop-filter: var(--glass-blur);
   backdrop-filter: var(--glass-blur);
@@ -660,14 +684,14 @@ body {
   color: #fff;
 }
 
-.login-card h2 {
+.login-page .login-card h2 {
   font-size: 30px;
   margin: 18px 0 6px;
   letter-spacing: -.02em;
   color: #fff;
 }
 
-.login-card > p {
+.login-page .login-card > p {
   color: rgba(255, 255, 255, .74);
 }
 
@@ -699,28 +723,28 @@ body {
   box-shadow: 0 0 0 4px rgba(52, 171, 166, .14);
 }
 
-.login-card .field label {
+.login-page .login-card .field label {
   color: rgba(255, 255, 255, .86);
 }
 
-.login-card .field input {
+.login-page .login-card .field input {
   height: 50px;
   background: rgba(255, 255, 255, .12);
   border-color: rgba(255, 255, 255, .26);
   color: #fff;
 }
 
-.login-card .field input::placeholder {
+.login-page .login-card .field input::placeholder {
   color: rgba(255, 255, 255, .5);
 }
 
-.login-card .field input:focus {
+.login-page .login-card .field input:focus {
   border-color: var(--angico-teal);
   box-shadow: 0 0 0 4px rgba(52, 171, 166, .26);
   background: rgba(255, 255, 255, .18);
 }
 
-.login-card .primary-button {
+.login-page .login-card .primary-button {
   width: 100%;
   margin-top: 8px;
   background: #fff;
@@ -728,11 +752,11 @@ body {
   box-shadow: 0 16px 30px rgba(0, 20, 30, .3);
 }
 
-.login-card .primary-button:hover {
+.login-page .login-card .primary-button:hover {
   background: #eef6f5;
 }
 
-.login-card .primary-button:disabled {
+.login-page .login-card .primary-button:disabled {
   opacity: .7;
   cursor: progress;
 }
@@ -748,21 +772,33 @@ body {
   font-weight: 600;
 }
 
+/* neutral base — also used by the observation modal */
 .demo-hint {
   margin-top: 16px;
-  background: rgba(255, 255, 255, .1);
-  border: 1px solid rgba(255, 255, 255, .2);
+  background: rgba(52, 171, 166, .1);
+  border: 1px solid rgba(52, 171, 166, .22);
   border-radius: 14px;
   padding: 12px 14px;
   font-size: 12.5px;
   line-height: 1.5;
-  color: rgba(255, 255, 255, .82);
+  color: #2c4a4a;
 }
 
 .demo-hint b {
-  color: #fff;
+  color: var(--angico-blue);
   font-family: var(--font-mono);
   font-weight: 600;
+}
+
+/* glass variant on the login */
+.login-page .demo-hint {
+  background: rgba(255, 255, 255, .1);
+  border-color: rgba(255, 255, 255, .2);
+  color: rgba(255, 255, 255, .82);
+}
+
+.login-page .demo-hint b {
+  color: #fff;
 }
 
 .dashboard-page {
@@ -1647,7 +1683,25 @@ body {
 .activity-rail { min-width: 0; }
 
 /* ===== Real map (Leaflet) ===== */
-.leaflet-container { font-family: var(--font-ui); }
+/* Contain Leaflet's internal stacking so the map can't paint over modals,
+   the topbar, or sibling cards. isolation creates a stacking context at the
+   page's z:0; capping the panes/controls is a belt-and-suspenders. */
+.leaflet-container {
+  font-family: var(--font-ui);
+  position: relative;
+  z-index: 0;
+  isolation: isolate;
+}
+
+.leaflet-container .leaflet-pane { z-index: 1; }
+.leaflet-container .leaflet-tile-pane { z-index: 1; }
+.leaflet-container .leaflet-overlay-pane { z-index: 2; }
+.leaflet-container .leaflet-marker-pane,
+.leaflet-container .leaflet-shadow-pane { z-index: 3; }
+.leaflet-container .leaflet-tooltip-pane,
+.leaflet-container .leaflet-popup-pane { z-index: 4; }
+.leaflet-container .leaflet-top,
+.leaflet-container .leaflet-bottom { z-index: 5; }
 .angico-pin span {
   display: block;
   width: 24px;
