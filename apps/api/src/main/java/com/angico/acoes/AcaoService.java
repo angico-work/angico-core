@@ -67,7 +67,7 @@ public class AcaoService {
     @Transactional
     public AcaoResponse concluir(Long id, AcaoRequest request) {
         Acao acao = acaoRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("Acao nao encontrada: " + id));
+                .orElseThrow(() -> new IllegalArgumentException("Ação não encontrada: " + id));
         Instant now = Instant.now();
         acao.setStatus("CONCLUIDA");
         acao.setResultadoDescricao(TerritorioService.defaultText(request.resultadoDescricao(), acao.getResultadoDescricao()));
@@ -101,7 +101,7 @@ public class AcaoService {
                 String.valueOf(resultado.getId()),
                 "PRODUZ",
                 "api",
-                "Resultado gerado pela conclusao da acao"
+                "Resultado gerado pela conclusão da ação"
         );
         memoryService.registrarObjeto(
                 acao.getWorkspaceId(),
@@ -147,7 +147,7 @@ public class AcaoService {
                 String.valueOf(acao.getId()),
                 "COMPOSTA_POR",
                 "api",
-                "Acao criada dentro da missao"
+                "Ação criada dentro da missão"
         );
         if (acao.getResponsavelId() != null && !acao.getResponsavelId().isBlank()) {
             memoryService.registrarObjeto(
@@ -167,7 +167,7 @@ public class AcaoService {
                     String.valueOf(acao.getId()),
                     "RESPONSAVEL_POR",
                     "api",
-                    "Responsavel informado na criacao da acao"
+                    "Responsável informado na criação da ação"
             );
         }
         memoryService.registrarEvento(new MemoryEvent(

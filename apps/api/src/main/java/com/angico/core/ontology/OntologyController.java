@@ -60,7 +60,7 @@ public class OntologyController {
     ) {
         ensureWorkspaceAccess(workspaceId);
         if (!canViewOntologyDetails()) {
-            throw new ForbiddenException("Detalhes ontologicos protegidos.");
+            throw new ForbiddenException("Detalhes ontológicos protegidos.");
         }
         return memoryQueryService.graphForEntity(workspaceId, entityType, entityId);
     }

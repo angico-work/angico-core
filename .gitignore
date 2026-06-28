@@ -4,6 +4,7 @@ target/
 dist/
 .env
 .env.local
+.neurotrace/
 *.log
 .vscode/
 .idea/

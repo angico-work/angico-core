@@ -201,7 +201,7 @@ public class LoggingMemoryGateway implements MemoryGateway {
         try {
             return objectMapper.writeValueAsString(value);
         } catch (JsonProcessingException ex) {
-            throw new IllegalArgumentException("Payload de memoria invalido.", ex);
+            throw new IllegalArgumentException("Payload de memória inválido.", ex);
         }
     }
 }

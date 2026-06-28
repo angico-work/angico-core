@@ -97,7 +97,7 @@ public class PotencialidadeService {
                 String.valueOf(territorio.getId()),
                 "EXISTE_EM",
                 "api",
-                "Potencialidade localizada no territorio"
+                "Potencialidade localizada no território"
         );
         memoryService.registrarEvento(new MemoryEvent(
                 potencialidade.getWorkspaceId(),

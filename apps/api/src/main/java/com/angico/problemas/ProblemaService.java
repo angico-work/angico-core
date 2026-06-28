@@ -41,7 +41,7 @@ public class ProblemaService {
 
     public ProblemaSocioambiental requireProblema(Long id) {
         return problemaRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("Problema nao encontrado: " + id));
+                .orElseThrow(() -> new IllegalArgumentException("Problema não encontrado: " + id));
     }
 
     @Transactional
@@ -109,7 +109,7 @@ public class ProblemaService {
                 String.valueOf(territorio.getId()),
                 "AFETA",
                 "api",
-                "Problema localizado no territorio"
+                "Problema localizado no território"
         );
         if (observacaoId != null) {
             memoryService.registrarRelacaoAtiva(
@@ -120,7 +120,7 @@ public class ProblemaService {
                     problemaId,
                     "IDENTIFICA",
                     "api",
-                    "Observacao originou o problema"
+                    "Observação originou o problema"
             );
         }
         memoryService.registrarEvento(new MemoryEvent(
@@ -169,7 +169,7 @@ public class ProblemaService {
                     request.actorId(),
                     "PRIORIZADO_POR",
                     "api",
-                    "Priorizacao registrada"
+                    "Priorização registrada"
             );
         }
         memoryService.registrarEvento(new MemoryEvent(

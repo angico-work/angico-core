@@ -45,7 +45,7 @@ public class MissaoService {
 
     public Missao requireMissao(Long id) {
         return missaoRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("Missao nao encontrada: " + id));
+                .orElseThrow(() -> new IllegalArgumentException("Missão não encontrada: " + id));
     }
 
     @Transactional
@@ -121,7 +121,7 @@ public class MissaoService {
                 String.valueOf(missao.getTerritorioId()),
                 "ATUA_EM",
                 "api",
-                "Missao territorial"
+                "Missão territorial"
         );
         if (missao.getProblemaId() != null) {
             memoryService.registrarRelacaoAtiva(
@@ -132,7 +132,7 @@ public class MissaoService {
                     String.valueOf(missao.getProblemaId()),
                     "ENFRENTA",
                     "api",
-                    "Missao vinculada ao problema"
+                    "Missão vinculada ao problema"
             );
         }
         if (missao.getOrganizacaoId() != null && !missao.getOrganizacaoId().isBlank()) {
@@ -153,7 +153,7 @@ public class MissaoService {
                     missao.getOrganizacaoId(),
                     "MOBILIZA",
                     "api",
-                    "Organizacao mobilizada pela missao"
+                    "Organização mobilizada pela missão"
             );
         }
         registrarEvento(missao, "MISSAO_CRIADA", actorId, occurredAt, Map.of(

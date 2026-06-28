@@ -21,7 +21,7 @@ public class PessoaService {
 
     public List<PessoaResponse> list(String workspaceId) {
         String actorWorkspace = currentActorProvider.currentWorkspaceId()
-                .orElseThrow(() -> new UnauthorizedException("Sessao invalida."));
+                .orElseThrow(() -> new UnauthorizedException("Sessão inválida."));
         String selectedWorkspace = workspaceId == null || workspaceId.isBlank()
                 ? actorWorkspace
                 : workspaceId.trim();
@@ -50,14 +50,14 @@ public class PessoaService {
     @Transactional
     public PessoaResponse updateMyAngicoId(AngicoIdRequest request) {
         Long actorId = currentActorProvider.currentPessoaId()
-                .orElseThrow(() -> new UnauthorizedException("Sessao invalida."));
+                .orElseThrow(() -> new UnauthorizedException("Sessão inválida."));
         Pessoa pessoa = pessoaRepository.findById(actorId)
-                .orElseThrow(() -> new UnauthorizedException("Sessao invalida."));
+                .orElseThrow(() -> new UnauthorizedException("Sessão inválida."));
         String angicoId = AngicoIdNormalizer.normalize(request.angicoId());
         pessoaRepository.findByAngicoIdIgnoreCase(angicoId)
                 .filter(existing -> !existing.getId().equals(pessoa.getId()))
                 .ifPresent(existing -> {
-                    throw new IllegalArgumentException("Angico ID ja esta em uso.");
+                    throw new IllegalArgumentException("Angico ID já está em uso.");
                 });
         pessoa.setAngicoId(angicoId);
         return toResponse(pessoaRepository.save(pessoa));
@@ -65,7 +65,7 @@ public class PessoaService {
 
     private String authorizedWorkspace(String workspaceId) {
         String actorWorkspace = currentActorProvider.currentWorkspaceId()
-                .orElseThrow(() -> new UnauthorizedException("Sessao invalida."));
+                .orElseThrow(() -> new UnauthorizedException("Sessão inválida."));
         String selectedWorkspace = workspaceId == null || workspaceId.isBlank()
                 ? actorWorkspace
                 : workspaceId.trim();

@@ -66,11 +66,11 @@ public class InitialDataSeeder implements CommandLineRunner {
 
         var territorio = territorioService.create(new TerritorioCreateRequest(
                 TerritorioService.DEFAULT_WORKSPACE_ID,
-                "Pinheiros, Sao Paulo",
+                "Pinheiros, São Paulo",
                 "BAIRRO",
-                "Sao Paulo",
+                "São Paulo",
                 "Pinheiros",
-                "Sao Paulo",
+                "São Paulo",
                 "Brasil",
                 -23.5614,
                 -46.7019,
@@ -80,15 +80,15 @@ public class InitialDataSeeder implements CommandLineRunner {
         var observacao = observacaoService.create(new ObservacaoCreateRequest(
                 territorio.workspaceId(),
                 territorio.id(),
-                "Acumulo de residuos perto de ponto de onibus",
+                "Acúmulo de resíduos perto de ponto de ônibus",
                 "Moradores relatam descarte recorrente em uma esquina de alto fluxo.",
-                "Residuos",
+                "Resíduos",
                 "PROBLEMA",
                 "SUBMETIDA",
                 4,
-                "Relato textual com endereco aproximado e recorrencia semanal.",
+                "Relato textual com endereço aproximado e recorrência semanal.",
                 "Rua Cardeal Arcoverde",
-                "Sao Paulo",
+                "São Paulo",
                 "Pinheiros",
                 -23.5602,
                 -46.6962,
@@ -99,8 +99,8 @@ public class InitialDataSeeder implements CommandLineRunner {
                 territorio.workspaceId(),
                 territorio.id(),
                 observacao.problemaId(),
-                "Organizar resposta comunitaria para descarte irregular",
-                "Mobilizar moradores, parceiros locais e rota de coleta para reduzir recorrencia.",
+                "Organizar resposta comunitária para descarte irregular",
+                "Mobilizar moradores, parceiros locais e rota de coleta para reduzir recorrência.",
                 "ALTA",
                 -23.5602,
                 -46.6962,
@@ -139,7 +139,7 @@ public class InitialDataSeeder implements CommandLineRunner {
                 acao.titulo(),
                 acao.descricao(),
                 acao.responsavelId(),
-                "Retirada inicial concluida e rota ajustada.",
+                "Retirada inicial concluída e rota ajustada.",
                 acao.latitude(),
                 acao.longitude(),
                 "operador-semente"
@@ -153,9 +153,9 @@ public class InitialDataSeeder implements CommandLineRunner {
                 territorio.workspaceId(),
                 territorio.id(),
                 resultado.getId(),
-                "Residuos removidos",
+                "Resíduos removidos",
                 "kg",
-                "Mede volume removido em acoes territoriais.",
+                "Mede volume removido em ações territoriais.",
                 "operador-semente"
         ));
         impactoService.createMedicao(new MedicaoRequest(
@@ -175,7 +175,7 @@ public class InitialDataSeeder implements CommandLineRunner {
         }
         authService.ensureLeader(
                 TerritorioService.DEFAULT_WORKSPACE_ID,
-                "Lider Angico",
+                "Líder Angico",
                 "lider@angico.local",
                 "lider",
                 "COORDENACAO",
@@ -183,7 +183,7 @@ public class InitialDataSeeder implements CommandLineRunner {
         );
         authService.ensureLeader(
                 TerritorioService.DEFAULT_WORKSPACE_ID,
-                "Lider de Campo",
+                "Líder de Campo",
                 "campo@angico.local",
                 "campo",
                 "CAMPO",
