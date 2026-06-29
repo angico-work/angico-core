@@ -29,53 +29,55 @@ export default function WelcomePage() {
   const navigate = useNavigate();
 
   return (
-    <main className="app-shell welcome-page">
-      <header className="page-header">
-        <Brand small />
-        <nav style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-          <button className="ghost-button" onClick={() => navigate('/login')}>Entrar</button>
-          <button className="primary-button" onClick={() => navigate('/app')}>Ver demo</button>
-        </nav>
-      </header>
+    <main className="welcome-page">
+      <div className="hero-shell dusk-scene">
+        <header className="page-header">
+          <Brand small />
+          <nav className="welcome-nav">
+            <button className="ghost-button" onClick={() => navigate('/login')}>Entrar</button>
+            <button className="primary-button" onClick={() => navigate('/app')}>Ver demo</button>
+          </nav>
+        </header>
 
-      <section className="hero">
-        <div>
-          <span className="eyebrow">{icon('sprout')} Inteligência socioambiental para territórios</span>
-          <h1>Onde o território <span>aprende</span> a agir e lembrar.</h1>
-          <p className="hero-copy">
-            O Angico conecta observações, evidências, problemas, pessoas, missões, ações e indicadores em uma memória viva do território. Ele transforma relatos dispersos em continuidade operacional para comunidades, jovens e organizações.
-          </p>
-          <div className="hero-actions">
-            <button className="primary-button" onClick={() => navigate('/login')}>Começar agora</button>
-            <button className="secondary-button" onClick={() => navigate('/app')}>Abrir primeira visão</button>
-          </div>
-          <div className="hero-proof">
-            <div className="proof-pill">{icon('observation')} Observações viram evidências</div>
-            <div className="proof-pill">{icon('mission')} Problemas viram missões</div>
-            <div className="proof-pill">{icon('memory')} Impacto vira memória</div>
-          </div>
-        </div>
-
-        <div className="hero-panel">
-          <div className="memory-card large">
-            <span className="eyebrow">Core ontológico</span>
-            <h3>Do registro ao impacto</h3>
-            <p>O mapa é apenas uma projeção. O núcleo do Angico guarda objetos, relações e eventos rastreáveis.</p>
-            <div className="memory-flow">
-              <FlowNode title="Observação" description="Jovem registra o que acontece no território." iconName="observation" />
-              <FlowNode title="Evidência" description="Foto, relato ou medição comprova o registro." iconName="target" />
-              <FlowNode title="Problema" description="A situação é validada e priorizada." iconName="warning" />
-              <FlowNode title="Missão" description="Pessoas, parceiros e recursos são mobilizados." iconName="mission" />
-              <FlowNode title="Impacto" description="Resultados são medidos e ficam na memória." iconName="indicator" />
+        <section className="hero">
+          <div className="hero-copy-col">
+            <span className="eyebrow">{icon('sprout')} Inteligência socioambiental para territórios</span>
+            <h1>Onde o território <span>aprende</span> a agir e lembrar.</h1>
+            <p className="hero-copy">
+              O Angico conecta observações, evidências, problemas, pessoas, missões, ações e indicadores em uma memória viva do território. Ele transforma relatos dispersos em continuidade operacional para comunidades, jovens e organizações.
+            </p>
+            <div className="hero-actions">
+              <button className="primary-button" onClick={() => navigate('/login')}>Começar agora</button>
+              <button className="secondary-button" onClick={() => navigate('/app')}>Abrir primeira visão</button>
+            </div>
+            <div className="hero-proof">
+              <div className="proof-pill">{icon('observation')} Observações viram evidências</div>
+              <div className="proof-pill">{icon('mission')} Problemas viram missões</div>
+              <div className="proof-pill">{icon('memory')} Impacto vira memória</div>
             </div>
           </div>
-          <div className="trace-card">
-            <span>Rastro operacional</span>
-            <strong>Problema → Missão → Ação → Resultado</strong>
-            <p>Cada número pode voltar à evidência original.</p>
+
+          <div className="hero-panel">
+            <div className="memory-card large">
+              <span className="eyebrow">Core ontológico</span>
+              <h3>Do registro ao impacto</h3>
+              <p>O mapa é apenas uma projeção. O núcleo do Angico guarda objetos, relações e eventos rastreáveis.</p>
+              <div className="memory-flow">
+                <FlowNode title="Observação" description="Jovem registra o que acontece no território." iconName="observation" />
+                <FlowNode title="Evidência" description="Foto, relato ou medição comprova o registro." iconName="target" />
+                <FlowNode title="Problema" description="A situação é validada e priorizada." iconName="warning" />
+                <FlowNode title="Missão" description="Pessoas, parceiros e recursos são mobilizados." iconName="mission" />
+                <FlowNode title="Impacto" description="Resultados são medidos e ficam na memória." iconName="indicator" />
+              </div>
+            </div>
+            <div className="trace-card">
+              <span>Rastro operacional</span>
+              <strong>Problema → Missão → Ação → Resultado</strong>
+              <p>Cada número pode voltar à evidência original.</p>
+            </div>
           </div>
-        </div>
-      </section>
+        </section>
+      </div>
 
       <section className="welcome-section">
         <div className="section-head">

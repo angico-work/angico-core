@@ -14,6 +14,10 @@
   --angico-teal-300: #7fc9c4;
   --angico-green: #087a28;
   --angico-green-soft: #eaf7ef;
+  /* verde-água — the canopy meeting water; soft aqua-green used for highlights */
+  --aqua-1: #5fc8b0;
+  --aqua-2: #a9e7d8;
+  --verde-agua: linear-gradient(101deg, #79d3bd 0%, #ade7d8 52%, #7ed2bf 100%);
 
   /* Halrizon dusk — the low sun over the caatinga. Atmosphere, used pontualmente. */
   --dusk-1: #d13f0c;   /* terracotta earth */
@@ -52,6 +56,24 @@
   --font-display: 'Garet', 'Outfit', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   --font-ui: 'Nourd', 'Hanken Grotesk', 'Outfit', ui-sans-serif, system-ui, -apple-system, sans-serif;
   --font-mono: 'Spline Sans Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  /* Short aliases — the React base referenced these names; map them to the
+     canonical Angico tokens so one palette drives the whole app. */
+  --bg: var(--angico-bg);
+  --surface: var(--angico-surface);
+  --surface-alt: var(--angico-surface-warm);
+  --text: var(--angico-text);
+  --muted: var(--angico-muted);
+  --line: var(--angico-line);
+  --blue: var(--angico-blue);
+  --teal: var(--angico-teal);
+  --green: var(--angico-green);
+  --orange: var(--angico-orange);
+  --purple: var(--angico-purple);
+  --red: #c4382a;
+  --radius: var(--radius-lg);
+  --shadow: var(--shadow-card);
+  --font: var(--font-ui);
 }
 
 * {
@@ -376,6 +398,181 @@ body {
   font-size: 22px;
 }
 
+/* ===== Landing / Welcome ===================================================
+   The login is the threshold; the landing is the approach to it. Same Angico
+   teal scene up top, then warm-neutral sections that explain the product. */
+.welcome-page {
+  min-height: 100vh;
+  background: var(--bg);
+  color: var(--text);
+}
+
+/* Teal hero shell — full-bleed, echoing the login gradient + depth. */
+.hero-shell {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  background: var(--angico-grad);
+  color: #fff;
+  padding-bottom: clamp(36px, 5vw, 72px);
+}
+.hero-shell::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(72% 62% at 3% 100%, rgba(0, 26, 36, .50), transparent 60%),
+    radial-gradient(54% 48% at 100% 0%, rgba(126, 224, 212, .26), transparent 60%);
+}
+
+.welcome-page .page-header {
+  position: relative;
+  z-index: 2;
+  width: min(1180px, calc(100% - 48px));
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 22px 0 6px;
+}
+.welcome-page .page-header .brand-lockup,
+.welcome-page .page-header .brand-word { color: #fff; }
+.welcome-page .page-header .logo-tagline { color: rgba(255, 255, 255, .7); }
+.welcome-nav { display: flex; align-items: center; gap: 10px; }
+.welcome-nav .ghost-button {
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, .4);
+  background: rgba(255, 255, 255, .06);
+}
+.welcome-nav .ghost-button:hover { background: rgba(255, 255, 255, .14); }
+
+.hero {
+  position: relative;
+  z-index: 2;
+  width: min(1180px, calc(100% - 48px));
+  margin: 0 auto;
+  padding: clamp(22px, 3.5vw, 46px) 0 clamp(16px, 2.5vw, 30px);
+  display: grid;
+  grid-template-columns: 1.04fr .96fr;
+  gap: clamp(26px, 4vw, 54px);
+  align-items: center;
+}
+.hero-copy-col { display: grid; gap: 20px; align-content: center; }
+.hero .eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--angico-teal-300);
+}
+.hero .eyebrow svg { width: 15px; height: 15px; }
+.hero h1 {
+  margin: 0;
+  color: #fff;
+  font-size: clamp(38px, 5vw, 66px);
+  line-height: 1.02;
+  letter-spacing: -0.02em;
+  max-width: 16ch;
+  text-wrap: balance;
+}
+/* the one expressive word, in verde-água to rhyme with the login marker */
+.hero h1 span {
+  background: var(--verde-agua);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+}
+.hero p.hero-copy {
+  display: block;
+  margin: 0;
+  max-width: 56ch;
+  color: rgba(231, 246, 243, .88);
+  font-size: clamp(16px, 1.4vw, 19px);
+  line-height: 1.6;
+}
+.hero-actions { display: flex; flex-wrap: wrap; gap: 12px; }
+.secondary-button {
+  border: 1px solid rgba(255, 255, 255, .4);
+  background: rgba(255, 255, 255, .08);
+  color: #fff;
+  border-radius: 12px;
+  padding: 12px 20px;
+  font-weight: 700;
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+}
+.secondary-button:hover { background: rgba(255, 255, 255, .16); }
+.hero-proof { display: flex; flex-wrap: wrap; gap: 8px; }
+.proof-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #eafaf7;
+  background: rgba(255, 255, 255, .08);
+  border: 1px solid rgba(255, 255, 255, .2);
+  padding: 7px 12px;
+  border-radius: 999px;
+}
+.proof-pill svg { width: 15px; height: 15px; }
+
+/* Hero panel — white ontology card + teal trace card. */
+.hero-panel { display: grid; gap: 14px; }
+.memory-card {
+  background: rgba(255, 255, 255, .97);
+  border: 1px solid rgba(255, 255, 255, .6);
+  border-radius: 22px;
+  padding: clamp(20px, 2.4vw, 28px);
+  box-shadow: 0 30px 60px -30px rgba(0, 28, 40, .65);
+  color: var(--text);
+}
+.memory-card .eyebrow { color: var(--angico-teal-dark); }
+.memory-card h3 { margin: 8px 0 6px; font-size: 22px; color: var(--angico-blue); }
+.memory-card > p { margin: 0 0 16px; color: var(--muted); line-height: 1.5; }
+.memory-flow { display: grid; gap: 2px; }
+.flow-node {
+  position: relative;
+  display: grid;
+  grid-template-columns: 36px 1fr;
+  gap: 12px;
+  align-items: start;
+  padding: 9px 0;
+}
+.flow-node:not(:last-child)::before {
+  content: "";
+  position: absolute;
+  left: 17px;
+  top: 36px;
+  bottom: -7px;
+  width: 2px;
+  background: linear-gradient(var(--angico-teal-300), rgba(127, 201, 196, 0));
+}
+.flow-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 11px;
+  display: grid;
+  place-items: center;
+  background: var(--angico-green-soft);
+  color: var(--angico-teal-dark);
+  position: relative;
+  z-index: 1;
+}
+.flow-icon svg { width: 18px; height: 18px; }
+.flow-node strong { display: block; color: var(--text); font-size: 15px; }
+.flow-node span { display: block; color: var(--muted); font-size: 13.5px; line-height: 1.45; }
+.trace-card {
+  border-radius: 18px;
+  padding: 18px 20px;
+  color: #fff;
+  background: linear-gradient(120deg, rgba(2, 58, 82, .94), rgba(27, 138, 139, .92));
+  border: 1px solid rgba(255, 255, 255, .16);
+}
+
 .welcome-section {
   width: min(1180px, calc(100% - 48px));
   margin: 0 auto;
@@ -425,8 +622,11 @@ body {
   line-height: 1.55;
 }
 
-/* Closing horizon: the landing's single dusk moment, echoing the login. */
+/* Closing horizon: the landing's teal call to action, echoing the login. */
 .dusk-band {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
   width: min(1180px, calc(100% - 48px));
   margin: 64px auto 72px;
   border-radius: var(--radius-xl);
@@ -436,7 +636,8 @@ body {
   gap: 28px;
   align-items: center;
   color: #fff;
-  box-shadow: var(--shadow-dusk);
+  background: var(--angico-grad);
+  box-shadow: 0 34px 80px -34px rgba(0, 55, 79, .6);
 }
 
 .dusk-band .leaf-mark {
@@ -539,18 +740,19 @@ body {
   text-wrap: balance;
 }
 
-/* marca-texto: the Halrizon dusk swiped across the key phrase like a marker.
-   Keep padding-top at 0 — any top padding extends each line's band upward and
-   covers the previous line's descenders (the missing-cedilla bug). */
+/* marca-texto: verde-água swiped across the key phrase like a highlighter.
+   Light aqua-green band with deep-petrol text reads clean and legible against
+   the teal scene. Keep padding-top at 0 — any top padding extends each line's
+   band upward and covers the previous line's descenders (missing-cedilla bug). */
 .login-title .marker {
-  background: linear-gradient(101deg, var(--dusk-1) 0%, #e26321 55%, var(--dusk-1) 100%);
-  color: #fff;
+  background: var(--verde-agua);
+  color: var(--angico-blue-900);
   padding: 0 .16em .06em;
   margin: 0 -.05em;
   border-radius: 5px 11px 6px 9px;
   -webkit-box-decoration-break: clone;
   box-decoration-break: clone;
-  box-shadow: 0 10px 22px -8px rgba(209, 63, 12, .65);
+  box-shadow: 0 10px 22px -8px rgba(52, 171, 166, .55);
 }
 
 .login-visual p {
