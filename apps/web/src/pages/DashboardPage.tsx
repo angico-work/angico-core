@@ -6,14 +6,16 @@ import NewObservacaoModal from '../components/NewObservacaoModal';
 import MapView from '../components/MapView';
 import { icon } from '../lib/icons';
 import { loadDashboard, loadMapPoints } from '../lib/api';
-import { fallbackDashboard } from '../data/fallbackDashboard';
+import { emptyDashboard } from '../data/fallbackDashboard';
 import type {
   Activity, CategorySlice, DashboardData, ImpactItem, MapPoint, Mission, Stat
 } from '../types';
 
 type Interact = (toast: ToastContent) => void;
 
-const DEFAULT_CENTER: [number, number] = [-23.559, -46.64];
+// Neutral national view used only when a território has no located points yet,
+// so the empty map never implies a specific city.
+const DEFAULT_CENTER: [number, number] = [-14.235, -51.925];
 const CATEGORY_COLORS = ['#2c80a6', '#f97316', '#efc224', '#5bb84f', '#9670c6'];
 
 function StatCard({ item, onInteract }: { item: Stat; onInteract: Interact }) {
@@ -119,7 +121,7 @@ function ActivityPanel({ activities }: { activities: Activity[] }) {
 
 export default function DashboardPage() {
   const { workspaceId } = useOutletContext<AppContext>();
-  const [data, setData] = useState<DashboardData>(fallbackDashboard);
+  const [data, setData] = useState<DashboardData>(emptyDashboard);
   const [points, setPoints] = useState<MapPoint[]>([]);
   const [toast, setToast] = useState<ToastContent | null>(null);
   const [showNew, setShowNew] = useState(false);
@@ -162,7 +164,7 @@ export default function DashboardPage() {
           <div className="panel-title" style={{ marginBottom: 12 }}>
             <h3>Mapa do Território</h3><Link to="/app/mapa">Abrir mapa completo →</Link>
           </div>
-          <MapView points={points} center={center} zoom={14} height={360} fitToPoints />
+          <MapView points={points} center={center} zoom={points.length ? 14 : 4} height={360} fitToPoints />
         </div>
 
         <div className="bottom-grid">

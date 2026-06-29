@@ -7,8 +7,9 @@ import AddressField from '../components/AddressField';
 import { loadMapPoints, resolveCoords } from '../lib/api';
 import type { MapPoint, GeoResult } from '../types';
 
-// Fallback center when there are no points and no active search.
-const DEFAULT_CENTER: [number, number] = [-23.559, -46.64];
+// Neutral national view, used only when there are no points and no active
+// search — the empty map never implies a specific city.
+const DEFAULT_CENTER: [number, number] = [-14.235, -51.925];
 
 const TYPES: Array<{ key: MapPoint['type']; label: string; color: string }> = [
   { key: 'problema', label: 'Problemas', color: '#f97316' },
@@ -81,7 +82,7 @@ export default function MapPage() {
         <MapView
           points={visible}
           center={center}
-          zoom={flyTo ? 14 : 15}
+          zoom={flyTo ? 14 : points.length ? 15 : 4}
           height="min(70vh, 640px)"
           recenter={Boolean(flyTo)}
           fitToPoints={!flyTo}

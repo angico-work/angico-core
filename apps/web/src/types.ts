@@ -10,7 +10,7 @@ export interface Territory {
 export interface Stat {
   label: string;
   value: number | string;
-  trend: string;
+  trend?: string;
   icon: IconName;
 }
 

@@ -1,13 +1,38 @@
 import type { DashboardData } from '../types';
 
-// Demo data rendered when the API is unreachable or the glimpse endpoint
-// is not yet implemented. Keep in sync with the real payload shape.
-export const fallbackDashboard: DashboardData = {
+// The honest empty state. This is what a brand-new território shows before any
+// data exists, and what production renders if the dashboard API is unreachable.
+// Production never fabricates numbers — see loadDashboard in lib/api.ts.
+export const emptyDashboard: DashboardData = {
+  workspaceId: '',
+  territory: {
+    id: '',
+    name: 'Território',
+    subtitle: 'Visão geral socioambiental do território'
+  },
+  stats: [
+    { label: 'Observações', value: 0, icon: 'leaf' },
+    { label: 'Problemas Ativos', value: 0, icon: 'warning' },
+    { label: 'Missões em Andamento', value: 0, icon: 'target' },
+    { label: 'Jovens Engajados', value: 0, icon: 'people' },
+    { label: 'Potencialidades', value: 0, icon: 'sprout' }
+  ],
+  activities: [],
+  missions: [],
+  impact: [],
+  categoryDistribution: [],
+  memoryClaim: 'Cada dado do painel possui caminho para objeto, relação e evento no core do Angico.'
+};
+
+// DEV-ONLY demo data. A populated sample so the dashboard is explorable while
+// developing offline. It is NEVER served in production builds — loadDashboard
+// only returns it when import.meta.env.DEV is true. Do not treat as real data.
+export const demoDashboard: DashboardData = {
   workspaceId: 'coletivo-jardim-novo',
   territory: {
     id: 'bairro-jardim-novo',
     name: 'Bairro Jardim Novo',
-    subtitle: 'Visão geral socioambiental do território'
+    subtitle: 'Visão geral socioambiental do território (demo)'
   },
   stats: [
     { label: 'Observações', value: 128, trend: '+12 esta semana', icon: 'leaf' },

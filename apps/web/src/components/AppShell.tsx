@@ -8,6 +8,15 @@ export interface AppContext {
   workspaceId: string;
 }
 
+// Turns a workspace slug ("coletivo-jardim-novo") into a readable label.
+function workspaceLabel(workspaceId: string): string {
+  return workspaceId
+    .split(/[-_]/)
+    .filter(Boolean)
+    .map((w) => w[0].toUpperCase() + w.slice(1))
+    .join(' ') || 'Workspace';
+}
+
 export default function AppShell() {
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -37,12 +46,15 @@ export default function AppShell() {
     <div className="app-layout">
       <Sidebar
         territoryName={territoryName}
+        userName={session?.nome ?? 'Visitante'}
+        userRole={session?.papel ?? 'Membro do território'}
+        userId={session?.angicoId}
         open={sidebarOpen}
         onNavigate={() => setSidebarOpen(false)}
         onLogout={handleLogout}
       />
       {sidebarOpen && <div className="sidebar-backdrop" onClick={() => setSidebarOpen(false)} />}
-      <Topbar onToggleSidebar={() => setSidebarOpen((v) => !v)} />
+      <Topbar workspaceLabel={workspaceLabel(workspaceId)} onToggleSidebar={() => setSidebarOpen((v) => !v)} />
       <main className="app-main">
         <Outlet context={context} />
       </main>

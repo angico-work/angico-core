@@ -1205,6 +1205,22 @@ body {
   color: #fff;
 }
 
+.user-row > div { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.user-row strong { color: #fff; line-height: 1.2; }
+.user-row span { font-size: 12px; color: rgba(255, 255, 255, .6); }
+
+.user-card .user-id {
+  display: inline-block;
+  margin-top: 12px;
+  font-size: 11px;
+  letter-spacing: .02em;
+  color: rgba(255, 255, 255, .62);
+  background: rgba(255, 255, 255, .06);
+  border: 1px solid rgba(255, 255, 255, .12);
+  border-radius: 6px;
+  padding: 3px 8px;
+}
+
 .connection {
   margin-top: auto;
   border: 1px solid rgba(255, 255, 255, .13);

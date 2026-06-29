@@ -18,12 +18,21 @@ export const NAV_ITEMS: Array<{ to: string; label: string; icon: string; end?: b
 
 interface Props {
   territoryName: string;
+  userName: string;
+  userRole: string;
+  userId?: string | null;
   open: boolean;
   onNavigate: () => void;
   onLogout: () => void;
 }
 
-export default function Sidebar({ territoryName, open, onNavigate, onLogout }: Props) {
+function initials(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return '?';
+  return (parts[0][0] + (parts.length > 1 ? parts[parts.length - 1][0] : '')).toUpperCase();
+}
+
+export default function Sidebar({ territoryName, userName, userRole, userId, open, onNavigate, onLogout }: Props) {
   return (
     <aside className={`sidebar ${open ? 'open' : ''}`}>
       <Brand small />
@@ -46,12 +55,10 @@ export default function Sidebar({ territoryName, open, onNavigate, onLogout }: P
       </nav>
       <div className="user-card">
         <div className="user-row">
-          <div className="avatar">JS</div>
-          <div><strong>Júlia Santos</strong><span>Jovem Mapeadora</span></div>
+          <div className="avatar">{initials(userName)}</div>
+          <div><strong>{userName}</strong><span>{userRole}</span></div>
         </div>
-        <span className="level">Nível 3 · Guardiã do Território</span>
-        <div className="progress-track"><div className="progress-fill" style={{ width: '64%' }} /></div>
-        <div style={{ textAlign: 'right', color: '#4b5563', fontSize: 12, marginTop: 8 }}>320 / 500 XP</div>
+        {userId && <span className="user-id mono">{userId}</span>}
       </div>
       <button className="logout" onClick={onLogout}>{icon('exit')} Sair</button>
     </aside>

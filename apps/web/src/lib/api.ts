@@ -1,5 +1,5 @@
 import type { DashboardData, ObservacaoInput, Observacao, MapPoint, MemoriaEvent, GeoResult, GeoSearchResponse } from '../types';
-import { fallbackDashboard } from '../data/fallbackDashboard';
+import { emptyDashboard, demoDashboard } from '../data/fallbackDashboard';
 
 export const DEFAULT_WORKSPACE = 'coletivo-jardim-novo';
 
@@ -112,12 +112,12 @@ export async function logout(): Promise<void> {
 
 // --- Territory data ---------------------------------------------------------
 
-// Loads the territory dashboard. Falls back to demo data when the API is
-// unreachable or the glimpse endpoint is not yet implemented, so the UI is
-// always renderable during development.
+// Loads the territory dashboard. On failure we never fabricate numbers in
+// production — we return the honest empty state. In local development we fall
+// back to the demo sample so the UI stays explorable without a backend.
 export async function loadDashboard(workspaceId = DEFAULT_WORKSPACE): Promise<DashboardData> {
   try {
-    const response = await fetch(`/api/glimpse/dashboard?workspaceId=${encodeURIComponent(workspaceId)}`, {
+    const response = await fetch(apiUrl(`/api/glimpse/dashboard?workspaceId=${encodeURIComponent(workspaceId)}`), {
       headers: authHeaders()
     });
     if (!response.ok) {
@@ -125,7 +125,7 @@ export async function loadDashboard(workspaceId = DEFAULT_WORKSPACE): Promise<Da
     }
     return (await response.json()) as DashboardData;
   } catch {
-    return fallbackDashboard;
+    return import.meta.env.DEV ? demoDashboard : emptyDashboard;
   }
 }
 
