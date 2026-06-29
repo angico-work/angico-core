@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import type { AppContext } from '../components/AppShell';
 import MapView from '../components/MapView';
-import NewObservacaoModal from '../components/NewObservacaoModal';
+import NewEntityModal from '../components/NewEntityModal';
 import AddressField from '../components/AddressField';
 import { loadMapPoints, resolveCoords } from '../lib/api';
 import type { MapPoint, GeoResult } from '../types';
@@ -54,7 +54,7 @@ export default function MapPage() {
       <div className="page-head">
         <div>
           <h1>Mapa do Território</h1>
-          <p>{visible.length} de {points.length} pontos · clique no mapa para registrar uma observação no local.</p>
+          <p>{visible.length} de {points.length} pontos · clique no mapa para registrar uma observação, problema ou potencialidade no local.</p>
         </div>
         <div className="map-search">
           <AddressField
@@ -91,7 +91,7 @@ export default function MapPage() {
       </div>
 
       {pending && (
-        <NewObservacaoModal
+        <NewEntityModal
           workspaceId={workspaceId}
           initialLat={pending.lat}
           initialLng={pending.lng}

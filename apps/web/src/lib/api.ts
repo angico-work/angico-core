@@ -1,4 +1,7 @@
-import type { DashboardData, ObservacaoInput, Observacao, MapPoint, MemoriaEvent, GeoResult, GeoSearchResponse } from '../types';
+import type {
+  DashboardData, ObservacaoInput, Observacao, MapPoint, MemoriaEvent, GeoResult,
+  GeoSearchResponse, PessoaHit, Conversa, Mensagem, Territorio, Workspace
+} from '../types';
 import { emptyDashboard, demoDashboard } from '../data/fallbackDashboard';
 
 export const DEFAULT_WORKSPACE = 'coletivo-jardim-novo';
@@ -58,6 +61,14 @@ function saveSession(session: AuthSession): AuthSession {
 function clearSession(): void {
   localStorage.removeItem(SESSION_KEY);
   localStorage.removeItem('angico_session'); // legacy key from the demo login
+}
+
+// Switches the active workspace and persists it on the session, so a refresh
+// keeps the member in the workspace they last chose. Every page reads
+// workspaceId from the shell context, so changing it triggers a full refetch.
+export function setSessionWorkspace(slug: string): void {
+  const session = getSession();
+  if (session) saveSession({ ...session, workspaceId: slug });
 }
 
 // Adds the bearer token when present; merges any extra headers (e.g. JSON).
@@ -159,6 +170,46 @@ export async function loadMapPoints(workspaceId = DEFAULT_WORKSPACE): Promise<Ma
   }
 }
 
+// --- Workspaces -------------------------------------------------------------
+// Named partitions. The slug scopes every module's data; the nome is the label
+// shown in the switcher. Falls back to the shipped default when the API is
+// unreachable, so the shell still renders in dev/offline.
+const DEFAULT_WORKSPACE_LABEL = 'Coletivo Jardim Novo';
+
+export async function listWorkspaces(): Promise<Workspace[]> {
+  try {
+    const r = await fetch(apiUrl('/api/workspaces'), { headers: authHeaders() });
+    if (!r.ok) throw new Error();
+    const list = (await r.json()) as Workspace[];
+    return list.length ? list : [{ slug: DEFAULT_WORKSPACE, nome: DEFAULT_WORKSPACE_LABEL }];
+  } catch {
+    return [{ slug: DEFAULT_WORKSPACE, nome: DEFAULT_WORKSPACE_LABEL }];
+  }
+}
+
+export async function createWorkspace(nome: string, criadoPor?: string): Promise<Workspace> {
+  const r = await fetch(apiUrl('/api/workspaces'), {
+    method: 'POST',
+    headers: authHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ nome: nome.trim(), criadoPor })
+  });
+  if (!r.ok) throw new Error(await readError(r, 'Não foi possível criar o workspace.'));
+  return (await r.json()) as Workspace;
+}
+
+// Removes a workspace from the registry. Its scoped data stays intact, so
+// re-creating the same name restores the view. The home workspace is protected
+// server-side (HTTP 400).
+export async function deleteWorkspace(slug: string): Promise<void> {
+  const r = await fetch(apiUrl(`/api/workspaces/${encodeURIComponent(slug)}`), {
+    method: 'DELETE',
+    headers: authHeaders()
+  });
+  if (!r.ok && r.status !== 404) {
+    throw new Error(await readError(r, 'Não foi possível remover o workspace.'));
+  }
+}
+
 // --- Geocoding (forward + reverse) ------------------------------------------
 // Backed by /api/geocoding (Nominatim with an IBGE municipality fallback).
 // Debounce on the caller side and pass an AbortSignal to cancel stale lookups.
@@ -172,7 +223,14 @@ export async function searchGeocoding(query: string, signal?: AbortSignal): Prom
     });
     if (!r.ok) return [];
     const body = (await r.json()) as GeoSearchResponse;
-    return body.results ?? [];
+    // Collapse duplicate hits — the geocoder often returns several segments of the
+    // same street/place with an identical displayName, which just reads as noise.
+    const seen = new Set<string>();
+    return (body.results ?? []).filter((g) => {
+      if (seen.has(g.displayName)) return false;
+      seen.add(g.displayName);
+      return true;
+    });
   } catch {
     return [];
   }
@@ -201,6 +259,23 @@ export async function reverseGeocode(lat: number, lng: number, signal?: AbortSig
     return (await r.json()) as GeoResult;
   } catch {
     return null;
+  }
+}
+
+// Angico-ID-aware people search (workspace-scoped) backing the "Nova pessoa"
+// autocomplete. Matches the typed text against the Angico ID or the name.
+export async function searchPessoas(workspaceId: string, q: string, signal?: AbortSignal): Promise<PessoaHit[]> {
+  const query = q.trim();
+  if (query.length < 2) return [];
+  try {
+    const r = await fetch(
+      apiUrl(`/api/pessoas/search?workspaceId=${encodeURIComponent(workspaceId)}&q=${encodeURIComponent(query)}`),
+      { headers: authHeaders(), signal }
+    );
+    if (!r.ok) return [];
+    return (await r.json()) as PessoaHit[];
+  } catch {
+    return [];
   }
 }
 
@@ -243,4 +318,120 @@ export async function createEntity<T = Record<string, unknown>>(
     throw new Error(`Falha ao salvar (HTTP ${r.status})`);
   }
   return (await r.json()) as T;
+}
+
+// --- Mensagens & grupos -----------------------------------------------------
+export async function listConversas(workspaceId = DEFAULT_WORKSPACE): Promise<Conversa[]> {
+  try {
+    const r = await fetch(apiUrl(`/api/mensagens/conversas?workspaceId=${encodeURIComponent(workspaceId)}`), { headers: authHeaders() });
+    if (!r.ok) return [];
+    return (await r.json()) as Conversa[];
+  } catch {
+    return [];
+  }
+}
+
+export async function listMensagens(conversaId: number): Promise<Mensagem[]> {
+  try {
+    const r = await fetch(apiUrl(`/api/mensagens/conversas/${conversaId}/mensagens`), { headers: authHeaders() });
+    if (!r.ok) return [];
+    return (await r.json()) as Mensagem[];
+  } catch {
+    return [];
+  }
+}
+
+// Multipart send (text + optional image/file attachments). Do NOT set
+// Content-Type — the browser adds the multipart boundary.
+export async function sendMensagem(conversaId: number, corpo: string, attachments: File[] = []): Promise<Mensagem> {
+  const form = new FormData();
+  if (corpo.trim()) form.append('corpo', corpo.trim());
+  attachments.forEach((file) => form.append('attachments', file));
+  const r = await fetch(apiUrl(`/api/mensagens/conversas/${conversaId}/mensagens`), {
+    method: 'POST', headers: authHeaders(), body: form
+  });
+  if (!r.ok) throw new Error(await readError(r, 'Não foi possível enviar a mensagem.'));
+  return (await r.json()) as Mensagem;
+}
+
+export interface CreateConversaInput {
+  workspaceId: string;
+  territorioId: number;
+  titulo: string;
+  participanteRefs: string[];
+}
+
+export async function createConversa(input: CreateConversaInput): Promise<Conversa> {
+  const r = await fetch(apiUrl('/api/mensagens/conversas'), {
+    method: 'POST', headers: authHeaders({ 'Content-Type': 'application/json' }), body: JSON.stringify(input)
+  });
+  if (!r.ok) throw new Error(await readError(r, 'Não foi possível criar a conversa.'));
+  return (await r.json()) as Conversa;
+}
+
+export async function listTerritorios(workspaceId = DEFAULT_WORKSPACE): Promise<Territorio[]> {
+  try {
+    const r = await fetch(apiUrl(`/api/territorios?workspaceId=${encodeURIComponent(workspaceId)}`), { headers: authHeaders() });
+    if (!r.ok) return [];
+    return (await r.json()) as Territorio[];
+  } catch {
+    return [];
+  }
+}
+
+export function attachmentUrl(anexoId: number): string {
+  return apiUrl(`/api/mensagens/anexos/${anexoId}`);
+}
+
+// Conversations must be anchored to a território. Resolve the workspace's first
+// território, creating a default one if none exists yet, so messaging works out
+// of the box for any workspace.
+export async function ensureTerritorio(workspaceId = DEFAULT_WORKSPACE): Promise<number | null> {
+  const existing = await listTerritorios(workspaceId);
+  if (existing.length > 0) return existing[0].id;
+  try {
+    const r = await fetch(apiUrl('/api/territorios'), {
+      method: 'POST',
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ workspaceId, nome: 'Território', tipo: 'BAIRRO', pais: 'Brasil' })
+    });
+    if (!r.ok) return null;
+    return ((await r.json()) as Territorio).id;
+  } catch {
+    return null;
+  }
+}
+
+// --- Perfil (current pessoa) ------------------------------------------------
+// /api/auth/me doesn't carry telefone/foto, so resolve the full record from the
+// workspace people list by the session's pessoaId.
+export async function getProfile(workspaceId = DEFAULT_WORKSPACE): Promise<PessoaHit | null> {
+  const session = getSession();
+  if (!session) return null;
+  try {
+    const r = await fetch(apiUrl(`/api/pessoas?workspaceId=${encodeURIComponent(workspaceId)}`), { headers: authHeaders() });
+    if (!r.ok) return null;
+    const list = (await r.json()) as PessoaHit[];
+    return list.find((p) => p.id === session.pessoaId) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+export interface ProfileUpdate {
+  nome?: string;
+  telefone?: string;
+  foto?: string;
+}
+
+export async function updateProfile(input: ProfileUpdate): Promise<PessoaHit> {
+  const r = await fetch(apiUrl('/api/pessoas/me'), {
+    method: 'PUT', headers: authHeaders({ 'Content-Type': 'application/json' }), body: JSON.stringify(input)
+  });
+  if (!r.ok) throw new Error(await readError(r, 'Não foi possível salvar o perfil.'));
+  const updated = (await r.json()) as PessoaHit;
+  // Keep the local session label in sync so the shell reflects the new name.
+  const session = getSession();
+  if (session) saveSession({ ...session, nome: updated.nome });
+  return updated;
 }

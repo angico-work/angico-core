@@ -9,5 +9,5 @@ apps/api/data/
 .vscode/
 .idea/
 
-# NeuroTrace local MCP data
+# Local tooling / scratch data
 .neurotrace/

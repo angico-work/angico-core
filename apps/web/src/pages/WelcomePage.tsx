@@ -132,6 +132,21 @@ export default function WelcomePage() {
         </div>
       </section>
 
+      <section className="community-band">
+        <div className="community-copy">
+          <span className="section-kicker">{icon('people')} Quem faz o Angico</span>
+          <h2>As pessoas do território são a inteligência.</h2>
+          <p>
+            Jovens, mentores e moradores deixam de ser apenas fontes de dados e passam a operar como
+            agentes de inteligência territorial — observando o que acontece, validando problemas e
+            agindo em conjunto.
+          </p>
+        </div>
+        <figure className="community-photo">
+          <img src="/landing-jovens.jpg" alt="Jovens colaborando em torno de um quadro, mapeando ideias em conjunto." loading="lazy" />
+        </figure>
+      </section>
+
       <section className="welcome-section">
         <div className="section-head">
           <h2>Mais do que mapear problemas.</h2>

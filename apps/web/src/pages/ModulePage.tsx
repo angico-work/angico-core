@@ -2,9 +2,19 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import type { AppContext } from '../components/AppShell';
 import { createEntity, listEntities } from '../lib/api';
+import AngicoIdField from '../components/AngicoIdField';
+import NewEntityModal, { type EntityType } from '../components/NewEntityModal';
 import { MODULE_CONFIGS, type ModuleConfig } from './moduleConfigs';
 
 type Item = Record<string, unknown>;
+
+// Geo-anchored modules use the rich modal (address search + map + creator);
+// the others keep the generic config form.
+const GEO_TYPES: Record<string, EntityType> = {
+  observacoes: 'observacao',
+  problemas: 'problema',
+  potencialidades: 'potencialidade'
+};
 
 function CreateModal({ config, workspaceId, onClose, onCreated }: {
   config: ModuleConfig; workspaceId: string; onClose: () => void; onCreated: () => void;
@@ -40,7 +50,16 @@ function CreateModal({ config, workspaceId, onClose, onCreated }: {
           {config.fields.map((f) => (
             <div className="field" key={f.name}>
               <label htmlFor={`f-${f.name}`}>{f.label}{f.required ? ' *' : ''}</label>
-              {f.type === 'textarea' ? (
+              {f.type === 'angico-search' ? (
+                <AngicoIdField
+                  id={`f-${f.name}`}
+                  workspaceId={workspaceId}
+                  value={values[f.name]}
+                  placeholder={f.placeholder}
+                  onChange={(t) => setValues((v) => ({ ...v, [f.name]: t }))}
+                  onPick={(p) => setValues((v) => ({ ...v, angicoId: p.angicoId ?? '', nome: p.nome, papel: p.papel ?? v.papel }))}
+                />
+              ) : f.type === 'textarea' ? (
                 <textarea id={`f-${f.name}`} rows={3} value={values[f.name]} placeholder={f.placeholder}
                   onChange={(e) => setValues((v) => ({ ...v, [f.name]: e.target.value }))} />
               ) : f.type === 'select' ? (
@@ -115,14 +134,22 @@ export default function ModulePage({ configKey }: { configKey: string }) {
         </div>
       )}
 
-      {showCreate && (
+      {showCreate && (GEO_TYPES[configKey] ? (
+        <NewEntityModal
+          workspaceId={workspaceId}
+          initialType={GEO_TYPES[configKey]}
+          lockType
+          onClose={() => setShowCreate(false)}
+          onCreated={() => { setShowCreate(false); refresh(); }}
+        />
+      ) : (
         <CreateModal
           config={config}
           workspaceId={workspaceId}
           onClose={() => setShowCreate(false)}
           onCreated={() => { setShowCreate(false); refresh(); }}
         />
-      )}
+      ))}
     </div>
   );
 }

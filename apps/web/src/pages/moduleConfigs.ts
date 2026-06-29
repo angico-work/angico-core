@@ -1,7 +1,7 @@
 export interface FieldDef {
   name: string;
   label: string;
-  type: 'text' | 'textarea' | 'select';
+  type: 'text' | 'textarea' | 'select' | 'angico-search';
   options?: string[];
   required?: boolean;
   placeholder?: string;
@@ -104,7 +104,7 @@ export const MODULE_CONFIGS: Record<string, ModuleConfig> = {
     path: '/api/potencialidades',
     accent: '#2aa84a',
     fields: [
-      { name: 'categoria', label: 'Categoria', type: 'select', options: ['Segurança Alimentar', 'Áreas Verdes', 'Educação Ambiental', 'Cultura', 'Outros'], required: true },
+      { name: 'categoria', label: 'Categoria', type: 'select', options: ['Segurança Alimentar', 'Agricultura Urbana', 'Áreas Verdes', 'Educação Ambiental', 'Cultura e Arte', 'Saberes Tradicionais', 'Energia Renovável', 'Reciclagem e Compostagem', 'Turismo de Base Comunitária', 'Saúde Comunitária', 'Esporte e Lazer', 'Coletivos e Associações', 'Espaços Públicos', 'Outros'], required: true },
       { name: 'titulo', label: 'Título', type: 'text', required: true },
       { name: 'descricao', label: 'Descrição', type: 'textarea' },
       { name: 'localizacao', label: 'Localização', type: 'text' }
@@ -121,11 +121,12 @@ export const MODULE_CONFIGS: Record<string, ModuleConfig> = {
     path: '/api/pessoas',
     accent: '#004B6C',
     fields: [
+      { name: 'angicoId', label: 'Angico ID', type: 'angico-search', placeholder: 'Buscar por nome ou @id…' },
       { name: 'nome', label: 'Nome', type: 'text', required: true },
       { name: 'papel', label: 'Papel', type: 'text', placeholder: 'Ex: Jovem Mapeador, Mentor' }
     ],
     primary: (i) => s(i, 'nome'),
     badge: (i) => s(i, 'papel') || undefined,
-    meta: () => []
+    meta: (i) => [s(i, 'angicoId') ? `@${s(i, 'angicoId')}` : 'sem Angico ID']
   }
 };

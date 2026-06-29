@@ -2,13 +2,19 @@ import { useEffect, useState } from 'react';
 import { Navigate, Outlet, useNavigate } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import Topbar from './Topbar';
-import { DEFAULT_WORKSPACE, getSession, isAuthenticated, loadDashboard, logout } from '../lib/api';
+import ProfileModal from './ProfileModal';
+import {
+  DEFAULT_WORKSPACE, createWorkspace, deleteWorkspace, getProfile, getSession,
+  isAuthenticated, listWorkspaces, logout, setSessionWorkspace
+} from '../lib/api';
+import type { PessoaHit, Workspace } from '../types';
 
 export interface AppContext {
   workspaceId: string;
 }
 
-// Turns a workspace slug ("coletivo-jardim-novo") into a readable label.
+// Turns a workspace slug ("coletivo-jardim-novo") into a readable label — only a
+// fallback for before the named workspace list has loaded.
 function workspaceLabel(workspaceId: string): string {
   return workspaceId
     .split(/[-_]/)
@@ -20,15 +26,37 @@ function workspaceLabel(workspaceId: string): string {
 export default function AppShell() {
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [territoryName, setTerritoryName] = useState('Território');
+  const [profile, setProfile] = useState<PessoaHit | null>(null);
+  const [showProfile, setShowProfile] = useState(false);
+  const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const session = getSession();
-  const workspaceId = session?.workspaceId ?? DEFAULT_WORKSPACE;
+  const [activeSlug, setActiveSlug] = useState(session?.workspaceId ?? DEFAULT_WORKSPACE);
 
+  // Load the named workspace list once. If the session points at a workspace
+  // that no longer exists, fall back to the first available one.
   useEffect(() => {
     let active = true;
-    loadDashboard(workspaceId).then((d) => { if (active) setTerritoryName(d.territory.name); });
+    listWorkspaces().then((list) => {
+      if (!active) return;
+      setWorkspaces(list);
+      // If the session points at a workspace that no longer exists, prefer the
+      // home workspace, then fall back to the first available one.
+      if (list.length && !list.some((w) => w.slug === activeSlug)) {
+        const fallback = list.find((w) => w.slug === DEFAULT_WORKSPACE)?.slug ?? list[0].slug;
+        setActiveSlug(fallback);
+        setSessionWorkspace(fallback);
+      }
+    });
     return () => { active = false; };
-  }, [workspaceId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Resolve the current member's full record within the active workspace.
+  useEffect(() => {
+    let active = true;
+    getProfile(activeSlug).then((p) => { if (active) setProfile(p); });
+    return () => { active = false; };
+  }, [activeSlug]);
 
   // Auth guard: the core app is only reachable with a valid session.
   if (!isAuthenticated()) {
@@ -40,24 +68,82 @@ export default function AppShell() {
     navigate('/login');
   }
 
-  const context: AppContext = { workspaceId };
+  function switchWorkspace(slug: string) {
+    if (slug === activeSlug) return;
+    setProfile(null); // drop the previous workspace's profile until it reloads
+    setActiveSlug(slug);
+    setSessionWorkspace(slug);
+  }
+
+  async function handleCreateWorkspace(nome: string) {
+    const current = getSession();
+    const criadoPor = current?.angicoId
+      ? `${current.nome} (@${current.angicoId})`
+      : current?.nome ?? undefined;
+    const created = await createWorkspace(nome, criadoPor);
+    setWorkspaces((prev) => [...prev, created]);
+    switchWorkspace(created.slug);
+  }
+
+  async function handleDeleteWorkspace(slug: string) {
+    await deleteWorkspace(slug);
+    setWorkspaces((prev) => prev.filter((w) => w.slug !== slug));
+    // If somehow removing the active one, fall back to the first remaining.
+    if (slug === activeSlug) {
+      const fallback = workspaces.find((w) => w.slug !== slug)?.slug ?? DEFAULT_WORKSPACE;
+      switchWorkspace(fallback);
+    }
+  }
+
+  const context: AppContext = { workspaceId: activeSlug };
+  const activeName = workspaces.find((w) => w.slug === activeSlug)?.nome ?? workspaceLabel(activeSlug);
+
+  // Fall back to the session so the profile editor opens even before the full
+  // pessoa record (with telefone/foto) has loaded.
+  const effectiveProfile: PessoaHit | null = profile ?? (session ? {
+    id: session.pessoaId,
+    workspaceId: activeSlug,
+    nome: session.nome,
+    papel: session.papel,
+    angicoId: session.angicoId,
+    telefone: null,
+    foto: null,
+    createdAt: ''
+  } : null);
 
   return (
     <div className="app-layout">
       <Sidebar
-        territoryName={territoryName}
-        userName={session?.nome ?? 'Visitante'}
+        workspaces={workspaces}
+        activeSlug={activeSlug}
+        onSwitchWorkspace={switchWorkspace}
+        onCreateWorkspace={handleCreateWorkspace}
+        onDeleteWorkspace={handleDeleteWorkspace}
+        userName={effectiveProfile?.nome ?? session?.nome ?? 'Visitante'}
         userRole={session?.papel ?? 'Membro do território'}
         userId={session?.angicoId}
+        userFoto={effectiveProfile?.foto ?? null}
         open={sidebarOpen}
         onNavigate={() => setSidebarOpen(false)}
+        onEditProfile={() => setShowProfile(true)}
         onLogout={handleLogout}
       />
       {sidebarOpen && <div className="sidebar-backdrop" onClick={() => setSidebarOpen(false)} />}
-      <Topbar workspaceLabel={workspaceLabel(workspaceId)} onToggleSidebar={() => setSidebarOpen((v) => !v)} />
+      <Topbar
+        workspaceLabel={activeName}
+        onToggleSidebar={() => setSidebarOpen((v) => !v)}
+        onWorkspaceClick={() => setShowProfile(true)}
+      />
       <main className="app-main">
         <Outlet context={context} />
       </main>
+      {showProfile && effectiveProfile && (
+        <ProfileModal
+          profile={effectiveProfile}
+          onClose={() => setShowProfile(false)}
+          onSaved={(p) => { setProfile(p); setShowProfile(false); }}
+        />
+      )}
     </div>
   );
 }

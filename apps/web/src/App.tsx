@@ -6,6 +6,7 @@ import DashboardPage from './pages/DashboardPage';
 import MapPage from './pages/MapPage';
 import ModulePage from './pages/ModulePage';
 import MemoriaPage from './pages/MemoriaPage';
+import MensagensPage from './pages/MensagensPage';
 import { IndicadoresPage, RelatoriosPage } from './pages/SummaryPages';
 
 export default function App() {
@@ -22,6 +23,7 @@ export default function App() {
         <Route path="acoes" element={<ModulePage configKey="acoes" />} />
         <Route path="potencialidades" element={<ModulePage configKey="potencialidades" />} />
         <Route path="pessoas" element={<ModulePage configKey="pessoas" />} />
+        <Route path="mensagens" element={<MensagensPage />} />
         <Route path="indicadores" element={<IndicadoresPage />} />
         <Route path="memoria" element={<MemoriaPage />} />
         <Route path="relatorios" element={<RelatoriosPage />} />

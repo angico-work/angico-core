@@ -105,6 +105,77 @@ export interface GeoSearchResponse {
   error?: string | null;
 }
 
+// A person match from GET /api/pessoas/search — used to link a real Angico
+// identity to a território member via the "Nova pessoa" autocomplete.
+export interface PessoaHit {
+  id: number;
+  workspaceId: string;
+  nome: string;
+  papel: string | null;
+  angicoId: string | null;
+  telefone: string | null;
+  foto: string | null;
+  createdAt: string;
+}
+
+// --- Mensagens & grupos (GET/POST /api/mensagens) ---------------------------
+export interface MensagemAnexo {
+  id: number;
+  originalFilename: string;
+  contentType: string;
+  sizeBytes: number;
+  attachmentType: string;
+  createdAt: string;
+}
+
+export interface Mensagem {
+  id: number;
+  workspaceId: string;
+  conversaId: number;
+  senderPessoaId: number | null;
+  senderNome: string | null;
+  corpo: string;
+  latitude: number | null;
+  longitude: number | null;
+  localDescricao: string | null;
+  linkedEntityType: string | null;
+  linkedEntityId: string | null;
+  status: string;
+  createdAt: string;
+  anexos: MensagemAnexo[];
+  relacoes: string[];
+}
+
+export interface Conversa {
+  id: number;
+  workspaceId: string;
+  territorioId: number | null;
+  titulo: string;
+  createdByPessoaId: number | null;
+  status: string;
+  createdAt: string;
+  updatedAt: string;
+  mensagens: Mensagem[];
+}
+
+export interface Territorio {
+  id: number;
+  workspaceId: string;
+  nome: string;
+  cidade: string | null;
+  estado: string | null;
+  status: string | null;
+}
+
+// A named workspace (GET/POST /api/workspaces). The `slug` is the partition key
+// every module scopes by; the `nome` is what members see in the switcher.
+export interface Workspace {
+  slug: string;
+  nome: string;
+  createdBy?: string | null;
+  createdAt?: string;
+}
+
 // One row of the território memory timeline (GET /api/glimpse/memoria)
 export interface MemoriaEvent {
   sequence: number;
@@ -119,4 +190,4 @@ export type IconName =
   | 'leaf' | 'warning' | 'target' | 'people' | 'sprout' | 'map'
   | 'observation' | 'mission' | 'action' | 'indicator' | 'memory'
   | 'report' | 'trash' | 'tree' | 'check' | 'search' | 'bell'
-  | 'cloud' | 'help' | 'exit';
+  | 'cloud' | 'help' | 'exit' | 'message';

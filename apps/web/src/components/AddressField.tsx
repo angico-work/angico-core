@@ -112,9 +112,9 @@ export default function AddressField({ value, onChange, onSelect, placeholder, i
                 choose(r);
               }}
             >
-              <span className="address-field__name">{r.city ?? r.displayName}</span>
+              <span className="address-field__name">{r.displayName.split(',')[0].trim() || r.city || r.displayName}</span>
               <span className="address-field__meta">
-                {[r.neighborhood, r.state, r.country].filter(Boolean).join(' · ') || r.displayName}
+                {[...new Set([r.neighborhood, r.city, r.state].filter(Boolean))].join(' · ') || r.country || r.displayName}
               </span>
             </li>
           ))}
@@ -122,7 +122,12 @@ export default function AddressField({ value, onChange, onSelect, placeholder, i
       )}
       {showEmpty && (
         <ul className="address-field__menu">
-          <li className="address-field__empty">Nenhum local encontrado para “{value.trim()}”.</li>
+          <li className="address-field__empty">
+            Nenhum endereço encontrado para “{value.trim()}”.
+            <span className="address-field__hint">
+              Confira a grafia ou inclua a cidade — ex.: “{value.trim()}, Recife”.
+            </span>
+          </li>
         </ul>
       )}
     </div>

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Link, useOutletContext } from 'react-router-dom';
 import type { AppContext } from '../components/AppShell';
 import Toast, { type ToastContent } from '../components/Toast';
-import NewObservacaoModal from '../components/NewObservacaoModal';
+import NewEntityModal from '../components/NewEntityModal';
 import MapView from '../components/MapView';
 import { icon } from '../lib/icons';
 import { loadDashboard, loadMapPoints } from '../lib/api';
@@ -37,11 +37,22 @@ function StatCard({ item, onInteract }: { item: Stat; onInteract: Interact }) {
 
 function CategoryPanel({ items }: { items: CategorySlice[] }) {
   const total = items.reduce((sum, item) => sum + Number(item.value || 0), 0);
+  // Drive the ring from the real distribution: each slice spans its share of 360°.
+  let sweep = 0;
+  const stops = items
+    .map((item, index) => {
+      const start = total > 0 ? (sweep / total) * 360 : 0;
+      sweep += Number(item.value || 0);
+      const end = total > 0 ? (sweep / total) * 360 : 0;
+      return `${CATEGORY_COLORS[index % CATEGORY_COLORS.length]} ${start}deg ${end}deg`;
+    })
+    .join(', ');
+  const donutStyle = total > 0 ? { background: `conic-gradient(${stops})` } : undefined;
   return (
     <article className="panel-card">
       <div className="panel-title"><h3>Problemas por Categoria</h3><Link to="/app/observacoes">Ver todos</Link></div>
       <div className="donut-wrap">
-        <div className="donut"><div className="donut-center"><b>{total}</b><span>Total</span></div></div>
+        <div className="donut" style={donutStyle}><div className="donut-center"><b>{total}</b><span>Total</span></div></div>
         <div className="category-list">
           {items.length === 0 && <span className="entity-meta">Sem dados ainda</span>}
           {items.map((item, index) => (
@@ -57,15 +68,14 @@ function CategoryPanel({ items }: { items: CategorySlice[] }) {
 }
 
 function MissionPanel({ missions }: { missions: Mission[] }) {
-  const glyphs = ['♧', '♙', '♢'];
   return (
     <article className="panel-card">
       <div className="panel-title"><h3>Missões em Andamento</h3><Link to="/app/missoes">Ver todas</Link></div>
       <div className="mission-list">
         {missions.length === 0 && <span className="entity-meta">Nenhuma missão ainda</span>}
-        {missions.map((mission, index) => (
+        {missions.map((mission) => (
           <div className="mission-row" key={mission.title}>
-            <div className="impact-icon">{glyphs[index % glyphs.length]}</div>
+            <div className="impact-icon">{icon('mission')}</div>
             <div>
               <b>{mission.title}</b>
               <div className="mini-progress"><i style={{ width: `${mission.progress}%` }} /></div>
@@ -178,7 +188,7 @@ export default function DashboardPage() {
 
       {toast && <Toast toast={toast} onDismiss={() => setToast(null)} />}
       {showNew && (
-        <NewObservacaoModal workspaceId={workspaceId} onClose={() => setShowNew(false)} onCreated={handleCreated} />
+        <NewEntityModal workspaceId={workspaceId} initialType="observacao" lockType onClose={() => setShowNew(false)} onCreated={handleCreated} />
       )}
     </div>
   );

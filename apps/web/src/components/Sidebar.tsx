@@ -1,6 +1,8 @@
 import { NavLink } from 'react-router-dom';
 import Brand from './Brand';
+import WorkspaceSwitcher from './WorkspaceSwitcher';
 import { icon } from '../lib/icons';
+import type { Workspace } from '../types';
 
 export const NAV_ITEMS: Array<{ to: string; label: string; icon: string; end?: boolean }> = [
   { to: '/app', label: 'Resumo do Território', icon: 'leaf', end: true },
@@ -12,17 +14,24 @@ export const NAV_ITEMS: Array<{ to: string; label: string; icon: string; end?: b
   { to: '/app/indicadores', label: 'Indicadores', icon: 'indicator' },
   { to: '/app/potencialidades', label: 'Potencialidades', icon: 'sprout' },
   { to: '/app/pessoas', label: 'Pessoas e Grupos', icon: 'people' },
+  { to: '/app/mensagens', label: 'Mensagens e Grupos', icon: 'message' },
   { to: '/app/memoria', label: 'Memória do Território', icon: 'memory' },
   { to: '/app/relatorios', label: 'Relatórios', icon: 'report' }
 ];
 
 interface Props {
-  territoryName: string;
+  workspaces: Workspace[];
+  activeSlug: string;
+  onSwitchWorkspace: (slug: string) => void;
+  onCreateWorkspace: (nome: string) => Promise<void>;
+  onDeleteWorkspace: (slug: string) => Promise<void>;
   userName: string;
   userRole: string;
   userId?: string | null;
+  userFoto?: string | null;
   open: boolean;
   onNavigate: () => void;
+  onEditProfile: () => void;
   onLogout: () => void;
 }
 
@@ -32,14 +41,17 @@ function initials(name: string): string {
   return (parts[0][0] + (parts.length > 1 ? parts[parts.length - 1][0] : '')).toUpperCase();
 }
 
-export default function Sidebar({ territoryName, userName, userRole, userId, open, onNavigate, onLogout }: Props) {
+export default function Sidebar({ workspaces, activeSlug, onSwitchWorkspace, onCreateWorkspace, onDeleteWorkspace, userName, userRole, userId, userFoto, open, onNavigate, onEditProfile, onLogout }: Props) {
   return (
     <aside className={`sidebar ${open ? 'open' : ''}`}>
       <Brand small />
-      <div className="territory-select">
-        <div><span>Território</span><strong>{territoryName}</strong></div>
-        <b>⌄</b>
-      </div>
+      <WorkspaceSwitcher
+        workspaces={workspaces}
+        activeSlug={activeSlug}
+        onSwitch={onSwitchWorkspace}
+        onCreate={onCreateWorkspace}
+        onDelete={onDeleteWorkspace}
+      />
       <nav className="nav-list">
         {NAV_ITEMS.map((item) => (
           <NavLink
@@ -53,13 +65,13 @@ export default function Sidebar({ territoryName, userName, userRole, userId, ope
           </NavLink>
         ))}
       </nav>
-      <div className="user-card">
+      <button type="button" className="user-card" onClick={onEditProfile} title="Editar perfil">
         <div className="user-row">
-          <div className="avatar">{initials(userName)}</div>
+          <div className="avatar">{userFoto ? <img src={userFoto} alt="" /> : initials(userName)}</div>
           <div><strong>{userName}</strong><span>{userRole}</span></div>
         </div>
         {userId && <span className="user-id mono">{userId}</span>}
-      </div>
+      </button>
       <button className="logout" onClick={onLogout}>{icon('exit')} Sair</button>
     </aside>
   );

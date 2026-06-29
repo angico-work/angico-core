@@ -6,7 +6,7 @@
     <title>Angico · Memória territorial</title>
     <meta name="description" content="Angico é uma aplicação web de inteligência socioambiental para territórios, evidências, missões e impacto." />
     <meta name="theme-color" content="#00374F" />
-    <link rel="icon" href="/angico-icon.png" />
+    <link rel="icon" href="/angico-icone-main.png" />
     <!-- Brand type per the Angico spec: Garet (display) + Nourd (body). They are
          commercial, so Outfit + Hanken Grotesk stand in with the same geometric
          DNA; drop the real woff2 into /fonts and enable the @font-face stubs in
@@ -19,9 +19,16 @@
       href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Hanken+Grotesk:wght@400;500;600;700&family=Spline+Sans+Mono:wght@500;600&display=swap"
       rel="stylesheet"
     />
+    <!-- PWA: installable + offline-capable (service worker registered in main.tsx). -->
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="/angico-icone-main.png" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Angico" />
   </head>
   <body>
     <div id="app"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
+
