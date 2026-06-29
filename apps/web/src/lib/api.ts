@@ -11,6 +11,11 @@ export function apiUrl(path: string): string {
   return `${API_BASE}${path}`;
 }
 
+// Demo data is shown only in local dev, or in a deploy that explicitly opts in
+// with VITE_USE_DEMO_DATA=true (e.g. a public demo instance). Production
+// defaults to off, so real deployments never render fabricated numbers.
+export const USE_DEMO_DATA = import.meta.env.DEV || import.meta.env.VITE_USE_DEMO_DATA === 'true';
+
 // --- Auth session -----------------------------------------------------------
 // The auth slice ported from the dev branch issues an opaque bearer token on
 // login/register. We keep the full session in localStorage so a refresh stays
@@ -71,7 +76,7 @@ async function readError(response: Response, fallback: string): Promise<string> 
 }
 
 export async function login(email: string, password: string): Promise<AuthSession> {
-  const response = await fetch('/api/auth/login', {
+  const response = await fetch(apiUrl('/api/auth/login'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email, password })
@@ -90,7 +95,7 @@ export interface RegisterInput {
 }
 
 export async function register(input: RegisterInput): Promise<AuthSession> {
-  const response = await fetch('/api/auth/register', {
+  const response = await fetch(apiUrl('/api/auth/register'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(input)
@@ -103,7 +108,7 @@ export async function register(input: RegisterInput): Promise<AuthSession> {
 
 export async function logout(): Promise<void> {
   try {
-    await fetch('/api/auth/logout', { method: 'POST', headers: authHeaders() });
+    await fetch(apiUrl('/api/auth/logout'), { method: 'POST', headers: authHeaders() });
   } catch {
     // Logout is best-effort; the local session is cleared regardless.
   }
@@ -125,13 +130,13 @@ export async function loadDashboard(workspaceId = DEFAULT_WORKSPACE): Promise<Da
     }
     return (await response.json()) as DashboardData;
   } catch {
-    return import.meta.env.DEV ? demoDashboard : emptyDashboard;
+    return USE_DEMO_DATA ? demoDashboard : emptyDashboard;
   }
 }
 
 // Registers a new observação. Throws on failure so the UI can surface it.
 export async function createObservacao(input: ObservacaoInput): Promise<Observacao> {
-  const response = await fetch('/api/observacoes', {
+  const response = await fetch(apiUrl('/api/observacoes'), {
     method: 'POST',
     headers: authHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify(input)
@@ -144,7 +149,7 @@ export async function createObservacao(input: ObservacaoInput): Promise<Observac
 
 export async function loadMapPoints(workspaceId = DEFAULT_WORKSPACE): Promise<MapPoint[]> {
   try {
-    const r = await fetch(`/api/glimpse/map?workspaceId=${encodeURIComponent(workspaceId)}`, {
+    const r = await fetch(apiUrl(`/api/glimpse/map?workspaceId=${encodeURIComponent(workspaceId)}`), {
       headers: authHeaders()
     });
     if (!r.ok) throw new Error();
@@ -201,7 +206,7 @@ export async function reverseGeocode(lat: number, lng: number, signal?: AbortSig
 
 export async function loadMemoria(workspaceId = DEFAULT_WORKSPACE): Promise<MemoriaEvent[]> {
   try {
-    const r = await fetch(`/api/glimpse/memoria?workspaceId=${encodeURIComponent(workspaceId)}`, {
+    const r = await fetch(apiUrl(`/api/glimpse/memoria?workspaceId=${encodeURIComponent(workspaceId)}`), {
       headers: authHeaders()
     });
     if (!r.ok) throw new Error();
@@ -216,7 +221,7 @@ export async function listEntities<T = Record<string, unknown>>(
   path: string, workspaceId = DEFAULT_WORKSPACE
 ): Promise<T[]> {
   try {
-    const r = await fetch(`${path}?workspaceId=${encodeURIComponent(workspaceId)}`, {
+    const r = await fetch(apiUrl(`${path}?workspaceId=${encodeURIComponent(workspaceId)}`), {
       headers: authHeaders()
     });
     if (!r.ok) throw new Error();
@@ -229,7 +234,7 @@ export async function listEntities<T = Record<string, unknown>>(
 export async function createEntity<T = Record<string, unknown>>(
   path: string, body: Record<string, unknown>
 ): Promise<T> {
-  const r = await fetch(path, {
+  const r = await fetch(apiUrl(path), {
     method: 'POST',
     headers: authHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify(body)

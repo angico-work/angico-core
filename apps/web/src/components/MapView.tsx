@@ -4,6 +4,10 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import type { MapPoint } from '../types';
 
+// Tile source is configurable for deploy (swap providers / add a keyed URL via
+// VITE_MAP_TILE_URL); defaults to OpenStreetMap.
+const TILE_URL = import.meta.env.VITE_MAP_TILE_URL ?? 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
+
 const TYPE_COLOR: Record<string, string> = {
   observacao: '#2c8fbd',
   problema: '#f97316',
@@ -104,7 +108,7 @@ export default function MapView({
     <MapContainer center={center} zoom={zoom} scrollWheelZoom style={{ height, width: '100%', borderRadius: 18 }}>
       <TileLayer
         attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+        url={TILE_URL}
       />
       {recenter && <Recenter center={center} zoom={zoom} />}
       {fitToPoints && <FitBounds points={points} />}
