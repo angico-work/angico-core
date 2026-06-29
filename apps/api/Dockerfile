@@ -10,3 +10,4 @@ COPY --from=build /workspace/target/angico-api-0.0.1-SNAPSHOT.jar /app/angico-ap
 ENV SERVER_PORT=8082
 EXPOSE 8082
 ENTRYPOINT ["java", "-jar", "/app/angico-api.jar"]
+

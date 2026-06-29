@@ -7,6 +7,9 @@ public record PessoaResponse(
         String workspaceId,
         String nome,
         String papel,
+        String angicoId,
+        String telefone,
+        String foto,
         Instant createdAt
 ) {
 
@@ -16,6 +19,9 @@ public record PessoaResponse(
                 p.getWorkspaceId(),
                 p.getNome(),
                 p.getPapel(),
+                p.getAngicoId(),
+                p.getTelefone(),
+                p.getFoto(),
                 p.getCreatedAt()
         );
     }

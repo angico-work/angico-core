@@ -5,6 +5,7 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.Lob;
 import java.time.Instant;
 
 /**
@@ -36,6 +37,12 @@ public class Pessoa {
     private String email;
 
     private String angicoId;
+
+    // Contact + avatar, editable from the in-app profile editor.
+    private String telefone;
+
+    @Lob
+    private String foto;
 
     private String status;
 
@@ -114,6 +121,22 @@ public class Pessoa {
 
     public void setAngicoId(String angicoId) {
         this.angicoId = angicoId;
+    }
+
+    public String getTelefone() {
+        return telefone;
+    }
+
+    public void setTelefone(String telefone) {
+        this.telefone = telefone;
+    }
+
+    public String getFoto() {
+        return foto;
+    }
+
+    public void setFoto(String foto) {
+        this.foto = foto;
     }
 
     public String getStatus() {

@@ -5,6 +5,7 @@ import java.util.List;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -30,5 +31,19 @@ public class PessoaController {
     @GetMapping
     public List<PessoaResponse> listar(@RequestParam String workspaceId) {
         return pessoaService.listar(workspaceId);
+    }
+
+    @GetMapping("/search")
+    public List<PessoaResponse> search(
+            @RequestParam String workspaceId,
+            @RequestParam(name = "q", required = false) String q
+    ) {
+        return pessoaService.search(workspaceId, q);
+    }
+
+    // Updates the currently authenticated pessoa (the in-app profile editor).
+    @PutMapping("/me")
+    public PessoaResponse updateMe(@RequestBody PessoaUpdateRequest request) {
+        return pessoaService.updateCurrent(request);
     }
 }
