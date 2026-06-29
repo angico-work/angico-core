@@ -573,6 +573,53 @@ body {
   border: 1px solid rgba(255, 255, 255, .16);
 }
 
+/* Living map — ambient SVG: pins settle, relations draw, points pulse. Light
+   (opacity/transform only) and frozen to its resting state under reduced motion. */
+.living-map {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 600 / 360;
+  border-radius: 20px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow-card);
+  background: #eef5f1;
+}
+.living-map svg { display: block; width: 100%; height: 100%; }
+.lm-pin {
+  opacity: 0;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: lm-pin-in .7s cubic-bezier(.2, .8, .2, 1) forwards;
+}
+.lm-link {
+  stroke-dasharray: 620;
+  stroke-dashoffset: 620;
+  opacity: .5;
+  animation: lm-draw 1.1s ease forwards;
+}
+.lm-pulse {
+  transform-box: fill-box;
+  transform-origin: center;
+  opacity: 0;
+  animation: lm-pulse 3.2s ease-out infinite;
+}
+@keyframes lm-pin-in {
+  0% { opacity: 0; transform: scale(.3); }
+  60% { opacity: 1; transform: scale(1.14); }
+  100% { opacity: 1; transform: scale(1); }
+}
+@keyframes lm-draw { to { stroke-dashoffset: 0; } }
+@keyframes lm-pulse {
+  0% { opacity: .5; transform: scale(.5); }
+  70%, 100% { opacity: 0; transform: scale(2.6); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .lm-pin { opacity: 1; animation: none; }
+  .lm-link { stroke-dashoffset: 0; animation: none; }
+  .lm-pulse { display: none; }
+}
+
 .welcome-section {
   width: min(1180px, calc(100% - 48px));
   margin: 0 auto;
@@ -620,6 +667,84 @@ body {
   margin: 0;
   color: var(--angico-muted);
   line-height: 1.55;
+}
+
+/* Problem section — the environmental challenge, framed honestly (no stats). */
+.section-kicker {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.section-kicker svg { width: 15px; height: 15px; }
+.section-head .section-kicker { margin-bottom: 12px; }
+
+.challenge-grid {
+  margin-top: 30px;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+}
+.challenge-card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  padding: 22px;
+}
+.challenge-icon {
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  background: var(--angico-green-soft);
+  color: var(--angico-teal-dark);
+  margin-bottom: 14px;
+}
+.challenge-icon svg { width: 20px; height: 20px; }
+.challenge-card b { display: block; color: var(--angico-blue); font-size: 17px; margin-bottom: 6px; }
+.challenge-card p { margin: 0; color: var(--muted); line-height: 1.55; }
+
+/* Response section — value narrative paired with the living map. */
+.response-section { padding-top: 8px; }
+.response-grid {
+  display: grid;
+  grid-template-columns: 1fr 1.05fr;
+  gap: clamp(28px, 4vw, 56px);
+  align-items: center;
+}
+.response-copy h2 {
+  font-size: clamp(28px, 3.4vw, 46px);
+  color: var(--angico-blue);
+  margin: 12px 0 14px;
+}
+.response-copy > p {
+  color: var(--muted);
+  font-size: 18px;
+  line-height: 1.6;
+  margin: 0 0 18px;
+  max-width: 56ch;
+}
+.response-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.response-list li {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  color: var(--text);
+  line-height: 1.5;
+}
+.response-list svg { flex: none; width: 18px; height: 18px; color: var(--angico-teal-dark); margin-top: 2px; }
+
+@media (max-width: 920px) {
+  .hero { grid-template-columns: 1fr; }
+}
+@media (max-width: 860px) {
+  .challenge-grid { grid-template-columns: 1fr 1fr; }
+  .capability-grid { grid-template-columns: 1fr 1fr; }
+  .response-grid { grid-template-columns: 1fr; }
+}
+@media (max-width: 560px) {
+  .challenge-grid,
+  .capability-grid { grid-template-columns: 1fr; }
 }
 
 /* Closing horizon: the landing's teal call to action, echoing the login. */

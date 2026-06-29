@@ -1,5 +1,6 @@
 import { useNavigate } from 'react-router-dom';
 import Brand from '../components/Brand';
+import LivingMap from '../components/LivingMap';
 import { icon } from '../lib/icons';
 import type { IconName } from '../types';
 
@@ -12,6 +13,16 @@ function FlowNode({ title, description, iconName }: { title: string; description
         <span>{description}</span>
       </div>
     </div>
+  );
+}
+
+function Challenge({ title, description, iconName }: { title: string; description: string; iconName: IconName }) {
+  return (
+    <article className="challenge-card">
+      <div className="challenge-icon">{icon(iconName)}</div>
+      <b>{title}</b>
+      <p>{description}</p>
+    </article>
   );
 }
 
@@ -78,6 +89,48 @@ export default function WelcomePage() {
           </div>
         </section>
       </div>
+
+      <section className="welcome-section problem-section">
+        <div className="section-head">
+          <span className="section-kicker">{icon('warning')} O desafio</span>
+          <h2>O que se perde quando o território não tem memória.</h2>
+          <p>
+            Desmatamento, queimadas, descarte irregular, perda de biodiversidade: muitas ocorrências
+            socioambientais acontecem longe de qualquer registro estruturado. Quando viram dado, estão
+            dispersas — em cadernos, grupos de mensagem e planilhas que ninguém reencontra. Sem memória,
+            cada resposta recomeça do zero.
+          </p>
+        </div>
+        <div className="challenge-grid">
+          <Challenge iconName="tree" title="Desmatamento e degradação" description="Áreas que mudam sem que ninguém acompanhe a perda ao longo do tempo." />
+          <Challenge iconName="warning" title="Queimadas recorrentes" description="Focos que se repetem nos mesmos lugares, ano após ano, sem histórico consolidado." />
+          <Challenge iconName="trash" title="Resíduos e descarte irregular" description="Pontos de descarte que reaparecem porque a ocorrência nunca virou ação." />
+          <Challenge iconName="leaf" title="Perda de biodiversidade" description="Espécies e ecossistemas pressionados sem um registro vivo do que existe — e do que sumiu." />
+          <Challenge iconName="map" title="Ocorrências sem mapa" description="Relatos sem lugar, data ou evidência são impossíveis de priorizar e acompanhar." />
+          <Challenge iconName="people" title="Comunidade fora da decisão" description="Quem vive o território observa tudo, mas raramente participa de onde as escolhas acontecem." />
+        </div>
+      </section>
+
+      <section className="welcome-section response-section">
+        <div className="response-grid">
+          <div className="response-copy">
+            <span className="section-kicker">{icon('sprout')} A resposta do Angico</span>
+            <h2>Cada registro encontra seu lugar — e fica.</h2>
+            <p>
+              O Angico recebe o que a comunidade observa, ancora cada ocorrência em um endereço e em
+              coordenadas reais, e conecta observações, problemas e potencialidades em uma só memória do
+              território. O mapa deixa de ser uma foto e passa a ser um sistema vivo: cada ponto carrega
+              sua evidência, sua autoria e sua história.
+            </p>
+            <ul className="response-list">
+              <li>{icon('observation')} Observações viram pontos no mapa, com endereço e coordenada.</li>
+              <li>{icon('target')} Cada ponto guarda evidência, categoria e quem registrou.</li>
+              <li>{icon('memory')} O histórico permanece: o território lembra o que já viveu.</li>
+            </ul>
+          </div>
+          <LivingMap />
+        </div>
+      </section>
 
       <section className="welcome-section">
         <div className="section-head">
