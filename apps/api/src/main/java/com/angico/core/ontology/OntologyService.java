@@ -26,6 +26,7 @@ public class OntologyService {
     public static final String MENSAGEM = "MENSAGEM";
     public static final String ANEXO = "ANEXO";
     public static final String LOCALIZACAO = "LOCALIZACAO";
+    public static final String WORKSPACE = "WORKSPACE";
 
     private final Set<String> objectTypes = new LinkedHashSet<>(List.of(
             TERRITORIO,
@@ -43,7 +44,8 @@ public class OntologyService {
             CONVERSA,
             MENSAGEM,
             ANEXO,
-            LOCALIZACAO
+            LOCALIZACAO,
+            WORKSPACE
     ));
 
     private final Set<RelationRule> relationRules = new LinkedHashSet<>(List.of(
@@ -77,7 +79,8 @@ public class OntologyService {
             new RelationRule(MENSAGEM, "MENCIONA", MISSAO),
             new RelationRule(MENSAGEM, "MENCIONA", ACAO),
             new RelationRule(MENSAGEM, "MENCIONA", RESULTADO),
-            new RelationRule(MENSAGEM, "MENCIONA", INDICADOR)
+            new RelationRule(MENSAGEM, "MENCIONA", INDICADOR),
+            new RelationRule(WORKSPACE, "POSSUI_MEMBRO", PESSOA)
     ));
 
     public List<String> objectTypes() {
