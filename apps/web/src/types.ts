@@ -168,12 +168,31 @@ export interface Territorio {
 }
 
 // A named workspace (GET/POST /api/workspaces). The `slug` is the partition key
-// every module scopes by; the `nome` is what members see in the switcher.
+// every module scopes by; the `nome` is what members see in the switcher. The
+// remaining fields are optional metadata about the place and lifecycle.
 export interface Workspace {
   slug: string;
   nome: string;
+  descricao?: string | null;
+  cidade?: string | null;
+  estado?: string | null;
+  centerLatitude?: number | null;
+  centerLongitude?: number | null;
+  status?: string;
   createdBy?: string | null;
   createdAt?: string;
+  updatedAt?: string;
+}
+
+// A person's membership in a workspace, with a role that drives access control.
+export interface WorkspaceMember {
+  id: number;
+  workspaceId: string;
+  actorId: string;
+  displayName: string;
+  role: string;
+  status: string;
+  joinedAt: string;
 }
 
 // One row of the território memory timeline (GET /api/glimpse/memoria)

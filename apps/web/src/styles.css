@@ -3212,6 +3212,29 @@ body {
 .ws-confirm-yes:disabled, .ws-confirm-no:disabled { opacity: .6; cursor: not-allowed; }
 .workspace-menu-error { padding: 2px 10px 6px; }
 
+/* --- Workspace members modal --- */
+.workspace-members-btn { color: rgba(255, 255, 255, .85); }
+.workspace-members-btn .ic { width: 15px; height: 15px; }
+
+.member-list { display: flex; flex-direction: column; gap: 6px; margin: 12px 0 16px; max-height: 280px; overflow-y: auto; }
+.member-row { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 10px; background: #f3f6f7; }
+.member-id { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.member-id strong { font-size: 14px; color: var(--angico-blue-900); }
+.member-id .mono { font-size: 12px; color: var(--angico-muted); }
+.role-badge { flex: none; font-size: 11px; font-weight: 700; letter-spacing: .03em; padding: 3px 9px; border-radius: 999px; background: var(--angico-teal); color: #04323a; }
+.role-badge.role-owner { background: var(--angico-blue); color: #fff; }
+.role-badge.role-admin { background: #1b8a8b; color: #fff; }
+.role-badge.role-viewer { background: #e3e9eb; color: #3a4a4f; }
+.member-remove { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; border: 0; background: transparent; color: #b04940; border-radius: 8px; cursor: pointer; opacity: .6; }
+.member-remove:hover { background: rgba(229, 86, 74, .14); color: #c0392b; opacity: 1; }
+.member-remove .ic { width: 15px; height: 15px; }
+.member-add { display: flex; flex-direction: column; gap: 10px; border-top: 1px solid #e6ebed; padding-top: 14px; }
+.member-add-row { display: flex; gap: 10px; align-items: center; }
+.member-add-row select { flex: none; padding: 10px; border-radius: 9px; border: 1px solid #d4dcde; background: #fff; font-size: 13px; color: var(--angico-blue-900); }
+.member-add-row .primary-button { flex: 1; }
+.member-error { color: #dc2626; font-size: 13px; }
+.member-actions { display: flex; justify-content: flex-end; margin-top: 12px; }
+
 .workspace-new {
   display: flex;
   align-items: center;

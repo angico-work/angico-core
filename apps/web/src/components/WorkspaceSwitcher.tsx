@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { icon } from '../lib/icons';
+import WorkspaceMembersModal from './WorkspaceMembersModal';
 import { DEFAULT_WORKSPACE } from '../lib/api';
 import type { Workspace } from '../types';
 
@@ -22,6 +23,7 @@ export default function WorkspaceSwitcher({ workspaces, activeSlug, onSwitch, on
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirmingSlug, setConfirmingSlug] = useState<string | null>(null);
+  const [showMembers, setShowMembers] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
 
   const active = workspaces.find((w) => w.slug === activeSlug);
@@ -179,11 +181,19 @@ export default function WorkspaceSwitcher({ workspaces, activeSlug, onSwitch, on
               </div>
             </form>
           ) : (
-            <button type="button" className="workspace-new" onClick={() => { setCreating(true); setError(null); }}>
-              <span className="ws-plus" aria-hidden="true">＋</span> Novo workspace
-            </button>
+            <>
+              <button type="button" className="workspace-new workspace-members-btn" onClick={() => { setShowMembers(true); close(); }}>
+                {icon('people')} Membros
+              </button>
+              <button type="button" className="workspace-new" onClick={() => { setCreating(true); setError(null); }}>
+                <span className="ws-plus" aria-hidden="true">＋</span> Novo workspace
+              </button>
+            </>
           )}
         </div>
+      )}
+      {showMembers && (
+        <WorkspaceMembersModal slug={activeSlug} workspaceName={activeName} onClose={() => setShowMembers(false)} />
       )}
     </div>
   );

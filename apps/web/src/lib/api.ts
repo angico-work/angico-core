@@ -1,6 +1,6 @@
 import type {
   DashboardData, ObservacaoInput, Observacao, MapPoint, MemoriaEvent, GeoResult,
-  GeoSearchResponse, PessoaHit, Conversa, Mensagem, Territorio, Workspace
+  GeoSearchResponse, PessoaHit, Conversa, Mensagem, Territorio, Workspace, WorkspaceMember
 } from '../types';
 import { emptyDashboard, demoDashboard } from '../data/fallbackDashboard';
 
@@ -207,6 +207,43 @@ export async function deleteWorkspace(slug: string): Promise<void> {
   });
   if (!r.ok && r.status !== 404) {
     throw new Error(await readError(r, 'Não foi possível remover o workspace.'));
+  }
+}
+
+// --- Workspace members ------------------------------------------------------
+export async function listMembers(slug: string): Promise<WorkspaceMember[]> {
+  try {
+    const r = await fetch(apiUrl(`/api/workspaces/${encodeURIComponent(slug)}/members`), { headers: authHeaders() });
+    if (!r.ok) return [];
+    return (await r.json()) as WorkspaceMember[];
+  } catch {
+    return [];
+  }
+}
+
+export interface AddMemberInput {
+  actorId: string;
+  displayName?: string;
+  role?: string;
+}
+
+export async function addMember(slug: string, input: AddMemberInput): Promise<WorkspaceMember> {
+  const r = await fetch(apiUrl(`/api/workspaces/${encodeURIComponent(slug)}/members`), {
+    method: 'POST',
+    headers: authHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify(input)
+  });
+  if (!r.ok) throw new Error(await readError(r, 'Não foi possível adicionar o membro.'));
+  return (await r.json()) as WorkspaceMember;
+}
+
+export async function removeMember(slug: string, memberId: number): Promise<void> {
+  const r = await fetch(apiUrl(`/api/workspaces/${encodeURIComponent(slug)}/members/${memberId}`), {
+    method: 'DELETE',
+    headers: authHeaders()
+  });
+  if (!r.ok && r.status !== 404) {
+    throw new Error(await readError(r, 'Não foi possível remover o membro.'));
   }
 }
 
