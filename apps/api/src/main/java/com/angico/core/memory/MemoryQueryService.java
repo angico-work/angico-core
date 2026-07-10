@@ -54,7 +54,7 @@ public class MemoryQueryService {
         String canonicalType = memoryQuery.entityType() == null
                 ? null
                 : ontology.canonicalObjectType(memoryQuery.entityType());
-        return eventRepository.findAll((root, query, builder) -> {
+        List<StoredMemoryEvent> events = eventRepository.findAll((root, query, builder) -> {
             List<Predicate> predicates = new ArrayList<>();
             predicates.add(builder.equal(root.get("workspaceId"), memoryQuery.workspaceId()));
             if (canonicalType != null) {
@@ -89,7 +89,8 @@ public class MemoryQueryService {
                 predicates.add(status);
             }
             return builder.and(predicates.toArray(Predicate[]::new));
-        }, Sort.by(Sort.Direction.ASC, "sequence")).stream().map(this::eventMap).toList();
+        }, Sort.by(Sort.Direction.ASC, "sequence"));
+        return eventMaps(events, null);
     }
 
     public List<Map<String, Object>> timelineForTerritory(String workspaceId, String territorioEntityId) {
@@ -102,11 +103,12 @@ public class MemoryQueryService {
                     keys.add(nodeKey(relation.getDestinationType(), relation.getDestinationId()));
                 });
 
-        return eventRepository.findByWorkspaceIdOrderBySequenceAsc(workspaceId)
-                .stream()
+        List<StoredMemoryEvent> workspaceEvents =
+                eventRepository.findByWorkspaceIdOrderBySequenceAsc(workspaceId);
+        List<StoredMemoryEvent> territoryEvents = workspaceEvents.stream()
                 .filter(event -> keys.contains(nodeKey(event.getEntityType(), event.getEntityId())))
-                .map(this::eventMap)
                 .toList();
+        return eventMaps(territoryEvents, workspaceEvents);
     }
 
     public Map<String, Object> graphForEntity(String workspaceId, String entityType, String entityId) {
@@ -251,7 +253,46 @@ public class MemoryQueryService {
         }
     }
 
-    private Map<String, Object> eventMap(StoredMemoryEvent event) {
+    private List<Map<String, Object>> eventMaps(
+            List<StoredMemoryEvent> selectedEvents,
+            List<StoredMemoryEvent> workspaceEvents
+    ) {
+        Map<Long, Long> legacyVersions = legacyEntityVersions(selectedEvents, workspaceEvents);
+        return selectedEvents.stream()
+                .map(event -> eventMap(event, legacyVersions.get(event.getSequence())))
+                .toList();
+    }
+
+    private Map<Long, Long> legacyEntityVersions(
+            List<StoredMemoryEvent> selectedEvents,
+            List<StoredMemoryEvent> workspaceEvents
+    ) {
+        Set<Long> legacySequences = new LinkedHashSet<>();
+        selectedEvents.stream()
+                .filter(event -> event.getEntityVersion() == null)
+                .map(StoredMemoryEvent::getSequence)
+                .forEach(legacySequences::add);
+        if (legacySequences.isEmpty()) {
+            return Map.of();
+        }
+
+        List<StoredMemoryEvent> allEvents = workspaceEvents == null
+                ? eventRepository.findByWorkspaceIdOrderBySequenceAsc(
+                        selectedEvents.getFirst().getWorkspaceId())
+                : workspaceEvents;
+        Map<String, Long> counters = new HashMap<>();
+        Map<Long, Long> versions = new HashMap<>();
+        allEvents.forEach(event -> {
+            long version = counters.merge(
+                    nodeKey(event.getEntityType(), event.getEntityId()), 1L, Long::sum);
+            if (legacySequences.contains(event.getSequence())) {
+                versions.put(event.getSequence(), version);
+            }
+        });
+        return versions;
+    }
+
+    private Map<String, Object> eventMap(StoredMemoryEvent event, Long legacyEntityVersion) {
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("id", event.getEventId());
         result.put("sequence", event.getSequence());
@@ -274,20 +315,13 @@ public class MemoryQueryService {
         result.put("recordedAt", event.getRecordedAt());
         result.put("idempotencyKey", event.getIdempotencyKey());
         result.put("syncStatus", event.getSyncStatus());
-        result.put("entityVersion", entityVersion(event));
+        result.put("entityVersion", event.getEntityVersion() == null
+                ? legacyEntityVersion : event.getEntityVersion());
         result.put("commitSequence", event.getSequence());
         copyPayloadField(payload, result, "previousState");
         copyPayloadField(payload, result, "newState");
         copyPayloadField(payload, result, "evidences");
         return result;
-    }
-
-    private long entityVersion(StoredMemoryEvent event) {
-        if (event.getEntityVersion() != null) {
-            return event.getEntityVersion();
-        }
-        return eventRepository.countByWorkspaceIdAndEntityTypeIgnoreCaseAndEntityIdAndSequenceLessThanEqual(
-                event.getWorkspaceId(), event.getEntityType(), event.getEntityId(), event.getSequence());
     }
 
     private void copyPayloadField(

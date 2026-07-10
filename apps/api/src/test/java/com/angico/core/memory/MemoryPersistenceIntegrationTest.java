@@ -203,14 +203,20 @@ class MemoryPersistenceIntegrationTest {
                 UUID.randomUUID().toString(), "workspace-a", "observacao", "legacy-obs",
                 "observacao.registrada", "legacy", "actor-legacy", null, null, null,
                 1, now, null, null, null, "{}"));
+        events.save(new StoredMemoryEvent(
+                UUID.randomUUID().toString(), "workspace-a", "observacao", "legacy-obs",
+                "observacao.atualizada", "legacy", "actor-legacy", null, null, null,
+                1, now.plusSeconds(1), null, null, null, "{}"));
 
         List<Map<String, Object>> timeline = queries.timelineForEntity(
                 "workspace-a", "OBSERVACAO", "legacy-obs");
         Map<String, Object> graph = queries.graphForEntity(
                 "workspace-a", "OBSERVACAO", "legacy-obs");
 
-        assertEquals(1, timeline.size());
+        assertEquals(2, timeline.size());
         assertEquals("OBSERVACAO", timeline.getFirst().get("entityType"));
+        assertEquals(1L, timeline.getFirst().get("entityVersion"));
+        assertEquals(2L, timeline.getLast().get("entityVersion"));
         assertEquals(2, ((List<?>) graph.get("nodes")).size());
     }
 
