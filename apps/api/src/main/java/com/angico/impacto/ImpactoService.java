@@ -1,6 +1,7 @@
 package com.angico.impacto;
 
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Map;
 
@@ -8,6 +9,7 @@ import com.angico.core.memory.MemoryEvent;
 import com.angico.core.memory.MemoryRelationMetadata;
 import com.angico.core.memory.OperationalMemoryService;
 import com.angico.core.ontology.OntologyService;
+import com.angico.common.ClockProvider;
 import com.angico.common.ForbiddenException;
 import com.angico.territorios.Territorio;
 import com.angico.territorios.TerritorioService;
@@ -26,6 +28,7 @@ public class ImpactoService {
     private final OperationalMemoryService memoryService;
     private final WorkspaceAuthorizationService authorizationService;
     private final WorkspaceReferenceValidator referenceValidator;
+    private final ClockProvider clock;
 
     public ImpactoService(
             IndicadorRepository indicadorRepository,
@@ -33,7 +36,8 @@ public class ImpactoService {
             TerritorioService territorioService,
             OperationalMemoryService memoryService,
             WorkspaceAuthorizationService authorizationService,
-            WorkspaceReferenceValidator referenceValidator
+            WorkspaceReferenceValidator referenceValidator,
+            ClockProvider clock
     ) {
         this.indicadorRepository = indicadorRepository;
         this.medicaoRepository = medicaoRepository;
@@ -41,6 +45,7 @@ public class ImpactoService {
         this.memoryService = memoryService;
         this.authorizationService = authorizationService;
         this.referenceValidator = referenceValidator;
+        this.clock = clock;
     }
 
     public List<Indicador> indicadores(String workspaceId) {
@@ -124,20 +129,21 @@ public class ImpactoService {
     @Transactional
     public Medicao createMedicao(MedicaoRequest request) {
         String workspaceId = authorizationService.requireAuthorizedWorkspace(request.workspaceId());
+        double value = requireFiniteValue(request.valor());
         Indicador indicador = indicadorRepository.findById(request.indicadorId())
                 .orElseThrow(() -> new IllegalArgumentException("Indicador nao encontrado: " + request.indicadorId()));
         if (!workspaceId.equals(indicador.getWorkspaceId())) {
             throw new ForbiddenException("Indicador fora do workspace autorizado.");
         }
-        Instant now = Instant.now();
+        Instant now = clock.now();
         Medicao medicao = new Medicao();
         medicao.setWorkspaceId(indicador.getWorkspaceId());
         medicao.setIndicadorId(indicador.getId());
-        medicao.setValor(request.valor());
+        medicao.setValor(value);
         medicao.setUnidade(TerritorioService.defaultText(request.unidade(), indicador.getUnidade()));
         medicao.setFonte(request.fonte());
         medicao.setActorId(authorizationService.currentActorId());
-        medicao.setMeasuredAt(request.measuredAt() == null ? now : request.measuredAt());
+        medicao.setMeasuredAt(validateMeasuredAt(request.measuredAt(), now));
         medicao.setCreatedAt(now);
         medicao = medicaoRepository.save(medicao);
 
@@ -180,5 +186,21 @@ public class ImpactoService {
         ));
 
         return medicao;
+    }
+
+    private double requireFiniteValue(Double value) {
+        if (value == null || !Double.isFinite(value)) {
+            throw new IllegalArgumentException("valor deve ser um número finito.");
+        }
+        return value;
+    }
+
+    private Instant validateMeasuredAt(Instant requested, Instant now) {
+        Instant value = requested == null ? now : requested;
+        if (value.isBefore(Instant.parse("2000-01-01T00:00:00Z"))
+                || value.isAfter(now.plus(5, ChronoUnit.MINUTES))) {
+            throw new IllegalArgumentException("measuredAt está fora do intervalo permitido.");
+        }
+        return value;
     }
 }

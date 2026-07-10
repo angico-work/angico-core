@@ -3,6 +3,7 @@ package com.angico.impacto;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.reset;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -13,6 +14,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.angico.acoes.Acao;
 import com.angico.acoes.AcaoRepository;
 import com.angico.auth.PasswordHasher;
+import com.angico.common.ClockProvider;
 import com.angico.core.memory.JpaMemoryGateway;
 import com.angico.core.memory.MemoryEventRepository;
 import com.angico.core.memory.MemoryObjectRepository;
@@ -27,6 +29,8 @@ import com.angico.workspaces.WorkspaceMemberRepository;
 import com.angico.workspaces.WorkspaceRepository;
 import jakarta.servlet.http.Cookie;
 import java.time.Instant;
+import java.util.Arrays;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -52,6 +56,7 @@ import org.springframework.test.web.servlet.MvcResult;
 class ImpactResultDomainIntegrationTest {
 
     private static final AtomicInteger IDS = new AtomicInteger();
+    private static final Instant FIXED_NOW = Instant.parse("2026-07-10T20:00:00Z");
 
     @Autowired private MockMvc mvc;
     @Autowired private PasswordHasher passwordHasher;
@@ -62,12 +67,16 @@ class ImpactResultDomainIntegrationTest {
     @Autowired private TerritorioRepository territorioRepository;
     @Autowired private ResultadoRepository resultadoRepository;
     @Autowired private IndicadorRepository indicadorRepository;
+    @Autowired private MedicaoRepository medicaoRepository;
     @Autowired private MemoryEventRepository eventRepository;
     @Autowired private MemoryObjectRepository objectRepository;
     @Autowired private MemoryRelationRepository relationRepository;
 
     @MockitoSpyBean
     private JpaMemoryGateway memoryGateway;
+
+    @MockitoSpyBean
+    private ClockProvider clock;
 
     private String workspaceA;
     private String workspaceB;
@@ -78,7 +87,8 @@ class ImpactResultDomainIntegrationTest {
 
     @BeforeEach
     void setUp() throws Exception {
-        reset(memoryGateway);
+        reset(memoryGateway, clock);
+        doReturn(FIXED_NOW).when(clock).now();
         int id = IDS.incrementAndGet();
         workspaceA = "result-a-" + id;
         workspaceB = "result-b-" + id;
@@ -184,6 +194,117 @@ class ImpactResultDomainIntegrationTest {
                 String.valueOf(result.getId()), "MEDE"));
     }
 
+    @Test
+    void createsAnAuthoredMeasurementWithClockBasedDefaultsAndCanonicalRelation() throws Exception {
+        Indicador indicator = indicator(workspaceA, "Mata ciliar recuperada", "m");
+
+        MvcResult created = mvc.perform(post("/api/medicoes")
+                        .cookie(session.cookie())
+                        .header("X-CSRF-Token", session.csrfToken())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"workspaceId":"%s","indicadorId":%d,"valor":18.75,
+                                 "unidade":"m","fonte":"Vistoria comunitária",
+                                 "actorId":"forged.actor"}
+                                """.formatted(workspaceA, indicator.getId())))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.actorId").value(actor.getAngicoId()))
+                .andExpect(jsonPath("$.measuredAt").value(FIXED_NOW.toString()))
+                .andExpect(jsonPath("$.createdAt").value(FIXED_NOW.toString()))
+                .andReturn();
+        long measurementId = responseId(created);
+
+        assertTrue(medicaoRepository.findById(measurementId).isPresent());
+        assertTrue(relationRepository
+                .existsByWorkspaceIdAndOriginTypeAndOriginIdAndDestinationTypeAndDestinationIdAndRelationTypeAndActiveTrue(
+                        workspaceA, "MEDICAO", String.valueOf(measurementId),
+                        "INDICADOR", String.valueOf(indicator.getId()), "REFERE_SE_A"));
+        assertTrue(eventRepository.findByWorkspaceIdOrderBySequenceAsc(workspaceA).stream()
+                .anyMatch(event -> "MEDICAO_REGISTRADA".equals(event.getEventType())
+                        && String.valueOf(measurementId).equals(event.getEntityId())
+                        && actor.getAngicoId().equals(event.getActorId())
+                        && FIXED_NOW.equals(event.getOccurredAt())
+                        && FIXED_NOW.equals(event.getRecordedAt())));
+    }
+
+    @Test
+    void rejectsStructurallyInvalidMeasurementPayloads() throws Exception {
+        Indicador indicator = indicator(workspaceA, "Qualidade da água", "pH");
+        List<String> invalidPayloads = List.of(
+                """
+                        {"workspaceId":"%s","valor":7.1}
+                        """.formatted(workspaceA),
+                """
+                        {"workspaceId":"%s","indicadorId":%d}
+                        """.formatted(workspaceA, indicator.getId()),
+                """
+                        {"workspaceId":"%s","indicadorId":0,"valor":7.1}
+                        """.formatted(workspaceA),
+                """
+                        {"workspaceId":"%s","indicadorId":%d,"valor":7.1,"unidade":"%s"}
+                        """.formatted(workspaceA, indicator.getId(), "u".repeat(41)),
+                """
+                        {"workspaceId":"%s","indicadorId":%d,"valor":7.1,"fonte":"%s"}
+                        """.formatted(workspaceA, indicator.getId(), "f".repeat(256))
+        );
+
+        for (String payload : invalidPayloads) {
+            mvc.perform(post("/api/medicoes")
+                            .cookie(session.cookie())
+                            .header("X-CSRF-Token", session.csrfToken())
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(payload))
+                    .andExpect(status().isBadRequest());
+        }
+
+        assertEquals(0, medicaoRepository.countByWorkspaceId(workspaceA));
+    }
+
+    @Test
+    void rejectsNonFiniteMeasurementValues() throws Exception {
+        Indicador indicator = indicator(workspaceA, "Área restaurada", "ha");
+
+        for (String value : List.of("NaN", "Infinity", "-Infinity")) {
+            mvc.perform(post("/api/medicoes")
+                            .cookie(session.cookie())
+                            .header("X-CSRF-Token", session.csrfToken())
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("""
+                                    {"workspaceId":"%s","indicadorId":%d,"valor":"%s"}
+                                    """.formatted(workspaceA, indicator.getId(), value)))
+                    .andExpect(status().isBadRequest());
+        }
+
+        assertEquals(0, medicaoRepository.countByWorkspaceId(workspaceA));
+    }
+
+    @Test
+    void rejectsMeasurementTimesOutsideTheOperationalWindow() throws Exception {
+        Indicador indicator = indicator(workspaceA, "Cobertura vegetal", "%");
+
+        for (String measuredAt : List.of(
+                "1999-12-31T23:59:59Z",
+                FIXED_NOW.plusSeconds(301).toString())) {
+            mvc.perform(post("/api/medicoes")
+                            .cookie(session.cookie())
+                            .header("X-CSRF-Token", session.csrfToken())
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("""
+                                    {"workspaceId":"%s","indicadorId":%d,"valor":42.0,
+                                     "measuredAt":"%s"}
+                                    """.formatted(workspaceA, indicator.getId(), measuredAt)))
+                    .andExpect(status().isBadRequest());
+        }
+
+        assertEquals(0, medicaoRepository.countByWorkspaceId(workspaceA));
+    }
+
+    @Test
+    void measurementRequestDoesNotExposeAnActorOverride() {
+        assertTrue(Arrays.stream(MedicaoRequest.class.getRecordComponents())
+                .noneMatch(component -> "actorId".equals(component.getName())));
+    }
+
     private String resultPayload(String workspaceId, Long actionId, String title) {
         return """
                 {"workspaceId":"%s","acaoId":%d,"titulo":"%s"}
@@ -203,6 +324,17 @@ class ImpactResultDomainIntegrationTest {
         territory.setCreatedAt(Instant.now());
         territory.setUpdatedAt(Instant.now());
         return territorioRepository.save(territory);
+    }
+
+    private Indicador indicator(String workspaceId, String name, String unit) {
+        Indicador indicator = new Indicador();
+        indicator.setWorkspaceId(workspaceId);
+        indicator.setNome(name);
+        indicator.setUnidade(unit);
+        indicator.setStatus("ATIVO");
+        indicator.setCreatedAt(FIXED_NOW);
+        indicator.setUpdatedAt(FIXED_NOW);
+        return indicadorRepository.save(indicator);
     }
 
     private Pessoa createPerson(String workspaceId, String angicoId, String email) {
