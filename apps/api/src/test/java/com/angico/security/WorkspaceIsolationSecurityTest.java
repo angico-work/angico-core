@@ -17,6 +17,8 @@ import com.angico.mensagens.MensagemAnexoRepository;
 import com.angico.mensagens.MensagemRepository;
 import com.angico.pessoas.Pessoa;
 import com.angico.pessoas.PessoaRepository;
+import com.angico.territorios.Territorio;
+import com.angico.territorios.TerritorioRepository;
 import com.angico.workspaces.Workspace;
 import com.angico.workspaces.WorkspaceMember;
 import com.angico.workspaces.WorkspaceMemberRepository;
@@ -77,9 +79,13 @@ class WorkspaceIsolationSecurityTest {
     @Autowired
     private PasswordHasher passwordHasher;
 
+    @Autowired
+    private TerritorioRepository territorioRepository;
+
     private String workspaceA;
     private String workspaceB;
     private SessionCredentials memberA;
+    private Pessoa pessoaA;
 
     @BeforeEach
     void setUp() throws Exception {
@@ -89,8 +95,9 @@ class WorkspaceIsolationSecurityTest {
         workspaceRepository.save(new Workspace(workspaceA, "Workspace A " + id, null, Instant.now()));
         workspaceRepository.save(new Workspace(workspaceB, "Workspace B " + id, null, Instant.now()));
         createPerson(workspaceB, "member.b." + id, "member-b-" + id + "@example.test", "MEMBER", false);
-        memberA = login(createPerson(
-                workspaceA, "member.a." + id, "member-a-" + id + "@example.test", "MEMBER", true));
+        pessoaA = createPerson(
+                workspaceA, "member.a." + id, "member-a-" + id + "@example.test", "MEMBER", true);
+        memberA = login(pessoaA);
     }
 
     @ParameterizedTest
@@ -186,6 +193,28 @@ class WorkspaceIsolationSecurityTest {
                 .andExpect(status().isForbidden());
         mvc.perform(get("/api/mensagens/anexos/" + anexo.getId()).cookie(memberA.cookie()))
                 .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void memberCanCreateConversationInAnAuthorizedSecondaryWorkspace() throws Exception {
+        memberRepository.save(new WorkspaceMember(
+                workspaceB, pessoaA.getAngicoId(), pessoaA.getNome(), "MEMBER", "ACTIVE", Instant.now()));
+        Territorio territorio = new Territorio();
+        territorio.setWorkspaceId(workspaceB);
+        territorio.setNome("Território secundário");
+        territorio.setCreatedAt(Instant.now());
+        territorio.setUpdatedAt(Instant.now());
+        territorio = territorioRepository.save(territorio);
+
+        mvc.perform(post("/api/mensagens/conversas")
+                        .cookie(memberA.cookie())
+                        .header("X-CSRF-Token", memberA.csrfToken())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"workspaceId":"%s","territorioId":%d,"titulo":"Conversa secundária","participanteIds":[],"participanteRefs":[]}
+                                """.formatted(workspaceB, territorio.getId())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.workspaceId").value(workspaceB));
     }
 
     private Pessoa createPerson(

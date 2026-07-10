@@ -27,6 +27,7 @@ import com.angico.territorios.Territorio;
 import com.angico.territorios.TerritorioRepository;
 import com.angico.territorios.TerritorioService;
 import com.angico.workspaces.WorkspaceAuthorizationService;
+import com.angico.workspaces.WorkspaceMemberRepository;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.PathResource;
 import org.springframework.core.io.Resource;
@@ -56,6 +57,7 @@ public class MensagemService {
     private final TerritorioRepository territorioRepository;
     private final WorkspaceAuthorizationService authorizationService;
     private final MemoryRelationRepository relationRepository;
+    private final WorkspaceMemberRepository memberRepository;
     private final OperationalMemoryService memoryService;
     private final OntologyService ontologyService;
     private final Path uploadRoot;
@@ -70,6 +72,7 @@ public class MensagemService {
             TerritorioRepository territorioRepository,
             WorkspaceAuthorizationService authorizationService,
             MemoryRelationRepository relationRepository,
+            WorkspaceMemberRepository memberRepository,
             OperationalMemoryService memoryService,
             OntologyService ontologyService,
             @Value("${angico.uploads.dir:uploads}") String uploadDir,
@@ -83,6 +86,7 @@ public class MensagemService {
         this.territorioRepository = territorioRepository;
         this.authorizationService = authorizationService;
         this.relationRepository = relationRepository;
+        this.memberRepository = memberRepository;
         this.memoryService = memoryService;
         this.ontologyService = ontologyService;
         this.uploadRoot = Path.of(uploadDir).toAbsolutePath().normalize();
@@ -169,7 +173,7 @@ public class MensagemService {
                     .flatMap(ref -> Arrays.stream(ref.split("[,;\\s]+")))
                     .map(String::trim)
                     .filter(ref -> !ref.isBlank())
-                    .map(ref -> resolveParticipant(workspaceId, ref).getId())
+                    .map(ref -> resolveParticipant(ref).getId())
                     .forEach(resolvedParticipantIds::add);
         }
         resolvedParticipantIds.stream()
@@ -290,25 +294,28 @@ public class MensagemService {
                 );
     }
 
-    private Pessoa resolveParticipant(String workspaceId, String rawReference) {
+    private Pessoa resolveParticipant(String rawReference) {
         String reference = rawReference.trim();
         if (reference.startsWith("@")) {
             String angicoId = AngicoIdNormalizer.normalize(reference);
-            return pessoaRepository.findByWorkspaceIdAndAngicoIdIgnoreCase(workspaceId, angicoId)
+            return pessoaRepository.findByAngicoIdIgnoreCase(angicoId)
                     .orElseThrow(() -> new IllegalArgumentException("Angico ID nao encontrado: @" + angicoId));
         }
         if (reference.contains("@")) {
             String email = reference.toLowerCase(Locale.ROOT);
-            return pessoaRepository.findByWorkspaceIdAndEmailIgnoreCase(workspaceId, email)
+            return pessoaRepository.findByEmailIgnoreCase(email)
                     .orElseThrow(() -> new IllegalArgumentException("Email nao encontrado: " + email));
         }
         String angicoId = AngicoIdNormalizer.normalize(reference);
-        return pessoaRepository.findByWorkspaceIdAndAngicoIdIgnoreCase(workspaceId, angicoId)
+        return pessoaRepository.findByAngicoIdIgnoreCase(angicoId)
                 .orElseThrow(() -> new IllegalArgumentException("Angico ID nao encontrado: @" + angicoId));
     }
 
     private void registerParticipant(String workspaceId, String conversaId, Pessoa pessoa) {
-        if (!workspaceId.equals(pessoa.getWorkspaceId())) {
+        if (pessoa.getAngicoId() == null || memberRepository
+                .findByWorkspaceIdAndActorId(workspaceId, pessoa.getAngicoId())
+                .filter(member -> "ACTIVE".equalsIgnoreCase(member.getStatus()))
+                .isEmpty()) {
             throw new IllegalArgumentException("Participante fora do workspace da conversa.");
         }
         memoryService.registrarObjeto(
