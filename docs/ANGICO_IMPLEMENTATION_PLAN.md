@@ -31,6 +31,7 @@ O trabalho será feito em fatias verticais. Cada tarefa termina com testes e bui
 - Criar: `apps/site/index.html`
 - Criar: `apps/site/src/main.tsx`
 - Criar: `apps/site/src/Site.tsx`
+- Criar: `apps/site/src/Site.test.tsx`
 - Criar: `apps/site/src/styles.css`
 - Criar: `apps/site/.env.example`
 - Criar: `apps/site/.gitignore`
@@ -52,6 +53,7 @@ O trabalho será feito em fatias verticais. Cada tarefa termina com testes e bui
 
 **Verificação**
 
+- `cd apps/site && npm test -- --run`
 - `cd apps/site && npm ci && npm run build`
 - `cd apps/app && npm ci && npm run build`
 - `cd apps/api && mvn test`
