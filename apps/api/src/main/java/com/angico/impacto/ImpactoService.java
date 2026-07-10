@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.Map;
 
 import com.angico.core.memory.MemoryEvent;
+import com.angico.core.memory.MemoryRelationMetadata;
 import com.angico.core.memory.OperationalMemoryService;
 import com.angico.common.ForbiddenException;
 import com.angico.territorios.Territorio;
@@ -53,6 +54,7 @@ public class ImpactoService {
     @Transactional
     public Indicador createIndicador(IndicadorRequest request) {
         String workspaceId = authorizationService.requireAuthorizedWorkspace(request.workspaceId());
+        String actorId = authorizationService.currentActorId();
         Territorio territorio = territorioService.requireTerritorio(request.territorioId());
         if (!workspaceId.equals(territorio.getWorkspaceId())) {
             throw new ForbiddenException("Território fora do workspace autorizado.");
@@ -88,8 +90,8 @@ public class ImpactoService {
                             "RESULTADO",
                             String.valueOf(resultado.getId()),
                             "MEDE",
-                            "api",
-                            "Indicador mede resultado informado"
+                            new MemoryRelationMetadata(
+                                    "api", "Indicador mede resultado informado", actorId, null)
                     );
         }
         return indicador;
@@ -131,8 +133,8 @@ public class ImpactoService {
                 "INDICADOR",
                 String.valueOf(indicador.getId()),
                 "REFERE_SE_A",
-                "api",
-                "Medicao registrada para indicador"
+                new MemoryRelationMetadata(
+                        "api", "Medicao registrada para indicador", medicao.getActorId(), null)
         );
         memoryService.registrarEvento(new MemoryEvent(
                 medicao.getWorkspaceId(),

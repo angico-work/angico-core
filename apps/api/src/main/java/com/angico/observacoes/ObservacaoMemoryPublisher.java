@@ -1,6 +1,7 @@
 package com.angico.observacoes;
 
 import com.angico.core.memory.MemoryEvent;
+import com.angico.core.memory.MemoryRelationMetadata;
 import com.angico.core.memory.OperationalMemoryService;
 import com.angico.core.ontology.OntologyService;
 import java.util.HashMap;
@@ -40,7 +41,8 @@ public class ObservacaoMemoryPublisher {
         if (o.getTerritorioId() != null && !o.getTerritorioId().isBlank()) {
             memory.registrarRelacaoAtiva(
                     o.getWorkspaceId(), TIPO, entityId,
-                    OntologyService.TERRITORIO, o.getTerritorioId(), "OCORRE_EM", SOURCE, null);
+                    OntologyService.TERRITORIO, o.getTerritorioId(), "OCORRE_EM",
+                    new MemoryRelationMetadata(SOURCE, null, o.getAutorId(), null));
         }
     }
 }

@@ -1,6 +1,7 @@
 package com.angico.acoes;
 
 import com.angico.core.memory.MemoryEvent;
+import com.angico.core.memory.MemoryRelationMetadata;
 import com.angico.core.memory.OperationalMemoryService;
 import com.angico.core.ontology.OntologyService;
 import java.util.HashMap;
@@ -21,6 +22,7 @@ public class AcaoMemoryPublisher {
 
     public void publicarIniciada(Acao a, String actorId) {
         String entityId = String.valueOf(a.getId());
+        MemoryRelationMetadata metadata = new MemoryRelationMetadata(SOURCE, null, actorId, null);
 
         memory.registrarObjeto(
                 a.getWorkspaceId(), TIPO, entityId, null, a.getTitulo(), a.getStatus(), SOURCE);
@@ -36,13 +38,13 @@ public class AcaoMemoryPublisher {
         if (a.getMissaoId() != null && !a.getMissaoId().isBlank()) {
             memory.registrarRelacaoAtiva(
                     a.getWorkspaceId(), OntologyService.MISSAO, a.getMissaoId(),
-                    TIPO, entityId, "COMPOSTA_POR", SOURCE, null);
+                    TIPO, entityId, "COMPOSTA_POR", metadata);
         }
 
         if (a.getResponsavelId() != null && !a.getResponsavelId().isBlank()) {
             memory.registrarRelacaoAtiva(
                     a.getWorkspaceId(), OntologyService.PESSOA, a.getResponsavelId(),
-                    TIPO, entityId, "RESPONSAVEL_POR", SOURCE, null);
+                    TIPO, entityId, "RESPONSAVEL_POR", metadata);
         }
     }
 }

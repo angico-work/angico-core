@@ -1,6 +1,7 @@
 package com.angico.workspaces;
 
 import com.angico.core.memory.MemoryEvent;
+import com.angico.core.memory.MemoryRelationMetadata;
 import com.angico.core.memory.OperationalMemoryService;
 import com.angico.core.ontology.OntologyService;
 import java.util.HashMap;
@@ -42,7 +43,8 @@ public class WorkspaceMemoryPublisher {
         memory.registrarObjeto(member.getWorkspaceId(), TIPO_PESSOA, member.getActorId(), null,
                 member.getDisplayName(), member.getStatus(), SOURCE);
         memory.registrarRelacaoAtiva(member.getWorkspaceId(), TIPO_WORKSPACE, member.getWorkspaceId(),
-                TIPO_PESSOA, member.getActorId(), RELACAO_MEMBRO, SOURCE, null);
+                TIPO_PESSOA, member.getActorId(), RELACAO_MEMBRO,
+                new MemoryRelationMetadata(SOURCE, null, actorId, null));
         Map<String, Object> payload = new HashMap<>();
         payload.put("actorId", member.getActorId());
         payload.put("role", member.getRole());

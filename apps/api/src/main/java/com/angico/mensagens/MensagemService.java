@@ -17,6 +17,7 @@ import java.util.stream.Collectors;
 
 import com.angico.common.ForbiddenException;
 import com.angico.core.memory.MemoryEvent;
+import com.angico.core.memory.MemoryRelationMetadata;
 import com.angico.core.memory.MemoryRelationRepository;
 import com.angico.core.memory.OperationalMemoryService;
 import com.angico.core.ontology.OntologyService;
@@ -164,10 +165,9 @@ public class MensagemService {
                 OntologyService.TERRITORIO,
                 String.valueOf(territorio.getId()),
                 "PERTENCE_A",
-                "api",
-                "Conversa territorial"
+                relationMetadata(actor, "Conversa territorial")
         );
-        registerParticipant(workspaceId, conversaId, actor);
+        registerParticipant(workspaceId, conversaId, actor, actor);
         Set<Long> resolvedParticipantIds = new LinkedHashSet<>();
         if (request.participanteIds() != null) {
             resolvedParticipantIds.addAll(request.participanteIds());
@@ -184,7 +184,7 @@ public class MensagemService {
                 .filter(id -> !id.equals(actor.getId()))
                 .map(id -> pessoaRepository.findById(id)
                         .orElseThrow(() -> new IllegalArgumentException("Pessoa nao encontrada: " + id)))
-                .forEach(pessoa -> registerParticipant(workspaceId, conversaId, pessoa));
+                .forEach(pessoa -> registerParticipant(workspaceId, conversaId, pessoa, actor));
         memoryService.registrarEvento(new MemoryEvent(
                 workspaceId,
                 OntologyService.CONVERSA,
@@ -319,7 +319,12 @@ public class MensagemService {
                 .orElseThrow(() -> new IllegalArgumentException("Angico ID nao encontrado: @" + angicoId));
     }
 
-    private void registerParticipant(String workspaceId, String conversaId, Pessoa pessoa) {
+    private void registerParticipant(
+            String workspaceId,
+            String conversaId,
+            Pessoa pessoa,
+            Pessoa actor
+    ) {
         if (pessoa.getAngicoId() == null || memberRepository
                 .findByWorkspaceIdAndActorId(workspaceId, pessoa.getAngicoId())
                 .filter(member -> "ACTIVE".equalsIgnoreCase(member.getStatus()))
@@ -342,8 +347,7 @@ public class MensagemService {
                 OntologyService.PESSOA,
                 String.valueOf(pessoa.getId()),
                 "TEM_PARTICIPANTE",
-                "api",
-                "Participante da conversa"
+                relationMetadata(actor, "Participante da conversa")
         );
     }
 
@@ -453,16 +457,16 @@ public class MensagemService {
                 "api"
         );
         memoryService.registrarRelacaoAtiva(workspaceId, OntologyService.MENSAGEM, mensagemId, OntologyService.CONVERSA,
-                String.valueOf(conversa.getId()), "ENVIADA_EM", "api", "Mensagem interna");
+                String.valueOf(conversa.getId()), "ENVIADA_EM", relationMetadata(actor, "Mensagem interna"));
         memoryService.registrarRelacaoAtiva(workspaceId, OntologyService.MENSAGEM, mensagemId, OntologyService.PESSOA,
-                String.valueOf(actor.getId()), "ENVIADA_POR", "api", "Autor autenticado");
+                String.valueOf(actor.getId()), "ENVIADA_POR", relationMetadata(actor, "Autor autenticado"));
 
         anexos.forEach(anexo -> {
             String anexoId = String.valueOf(anexo.getId());
             memoryService.registrarObjeto(workspaceId, OntologyService.ANEXO, anexoId, null,
                     anexo.getOriginalFilename(), anexo.getAttachmentType(), "api");
             memoryService.registrarRelacaoAtiva(workspaceId, OntologyService.MENSAGEM, mensagemId, OntologyService.ANEXO,
-                    anexoId, "ANEXA", "api", anexo.getContentType());
+                    anexoId, "ANEXA", relationMetadata(actor, anexo.getContentType()));
         });
 
         if (mensagem.getLatitude() != null && mensagem.getLongitude() != null) {
@@ -479,9 +483,10 @@ public class MensagemService {
                     "api"
             );
             memoryService.registrarRelacaoAtiva(workspaceId, OntologyService.MENSAGEM, mensagemId, OntologyService.LOCALIZACAO,
-                    localizacaoId, "COMPARTILHA", "api", "My location");
+                    localizacaoId, "COMPARTILHA", relationMetadata(actor, "Localizacao compartilhada"));
             memoryService.registrarRelacaoAtiva(workspaceId, OntologyService.LOCALIZACAO, localizacaoId, OntologyService.TERRITORIO,
-                    String.valueOf(conversa.getTerritorioId()), "REFERE_SE_A", "api", "Localizacao em conversa territorial");
+                    String.valueOf(conversa.getTerritorioId()), "REFERE_SE_A",
+                    relationMetadata(actor, "Localizacao em conversa territorial"));
         }
 
         if (mensagem.getLinkedEntityType() != null && mensagem.getLinkedEntityId() != null) {
@@ -492,8 +497,7 @@ public class MensagemService {
                     mensagem.getLinkedEntityType(),
                     mensagem.getLinkedEntityId(),
                     "MENCIONA",
-                    "api",
-                    "Referencia enviada na conversa"
+                    relationMetadata(actor, "Referencia enviada na conversa")
             );
         }
 
@@ -516,6 +520,15 @@ public class MensagemService {
                 occurredAt,
                 payload
         ));
+    }
+
+    private MemoryRelationMetadata relationMetadata(Pessoa actor, String context) {
+        return new MemoryRelationMetadata(
+                "api",
+                context,
+                String.valueOf(actor.getId()),
+                null
+        );
     }
 
     private List<MensagemResponse> toMessageResponses(List<Mensagem> mensagens) {

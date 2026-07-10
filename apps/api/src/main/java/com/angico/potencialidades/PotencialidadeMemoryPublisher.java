@@ -1,6 +1,7 @@
 package com.angico.potencialidades;
 
 import com.angico.core.memory.MemoryEvent;
+import com.angico.core.memory.MemoryRelationMetadata;
 import com.angico.core.memory.OperationalMemoryService;
 import com.angico.core.ontology.OntologyService;
 import java.util.HashMap;
@@ -39,7 +40,8 @@ public class PotencialidadeMemoryPublisher {
         if (p.getTerritorioId() != null && !p.getTerritorioId().isBlank()) {
             memory.registrarRelacaoAtiva(
                     p.getWorkspaceId(), TIPO, entityId,
-                    OntologyService.TERRITORIO, p.getTerritorioId(), "EXISTE_EM", SOURCE, null);
+                    OntologyService.TERRITORIO, p.getTerritorioId(), "EXISTE_EM",
+                    new MemoryRelationMetadata(SOURCE, null, p.getAutorId(), null));
         }
     }
 }
