@@ -16,6 +16,7 @@ Copie `.env.example` para `.env.local` e configure `VITE_API_BASE_URL` quando a 
 ## Verificação
 
 ```bash
+npm test -- --run
 npm run typecheck
 npm run build
 ```

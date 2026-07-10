@@ -21,7 +21,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class AuthService {
 
     // Default workspace for self-service registration. Kept in sync with the
-    // web client's DEFAULT_WORKSPACE (apps/web/src/lib/api.ts) so a freshly
+    // app client's DEFAULT_WORKSPACE (apps/app/src/lib/api.ts) so a freshly
     // registered leader lands in the same territory the UI queries by default.
     public static final String DEFAULT_WORKSPACE_ID = "coletivo-jardim-novo";
 

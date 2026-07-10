@@ -4,7 +4,7 @@ import java.util.List;
 
 /**
  * Aggregated read-model for the territory dashboard. Shape mirrors the web
- * client's DashboardData (apps/web/src/types.ts) so it renders directly.
+ * client's DashboardData (apps/app/src/types.ts) so it renders directly.
  */
 public record DashboardResponse(
         String workspaceId,

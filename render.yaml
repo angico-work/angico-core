@@ -15,9 +15,9 @@ services:
         sync: false
       - key: ANGICO_AUTH_REQUIRED
         value: "true"
-      - key: ANGICO_SEED_LEADERS_ENABLED
-        value: "true"
-      - key: ANGICO_SEED_LEADER_PASSWORD
+      - key: ANGICO_SEED_DEMO_LEADER
+        value: "false"
+      - key: ANGICO_SEED_DEMO_LEADER_PASSWORD
         sync: false
       - key: ANGICO_UPLOAD_DIR
         value: /opt/render/project/src/uploads

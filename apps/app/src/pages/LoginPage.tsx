@@ -15,8 +15,8 @@ const FALLING_LEAVES: CSSProperties[] = [
 
 export default function LoginPage() {
   const navigate = useNavigate();
-  const [email, setEmail] = useState('julia@angico.demo');
-  const [password, setPassword] = useState('angico-demo');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -77,9 +77,6 @@ export default function LoginPage() {
           <button className="primary-button" type="submit" disabled={loading}>
             {loading ? 'Entrando…' : 'Entrar no território'}
           </button>
-          <div className="demo-hint">
-            Conta de demonstração já preenchida: <b>julia@angico.demo</b> / <b>angico-demo</b>.
-          </div>
         </form>
       </section>
     </main>

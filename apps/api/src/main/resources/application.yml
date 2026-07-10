@@ -21,19 +21,15 @@ server:
   # Honors the platform-provided PORT (Render/Railway/Heroku-style), 8082 locally.
   port: ${SERVER_PORT:${PORT:8082}}
 
-# Angico integration settings (auth slice ported from the dev "v.1 funcional").
+# Angico integration settings.
 angico:
   auth:
-    # Soft auth by default so the React demo flows work out of the box: the
-    # interceptor attaches the logged-in actor when a bearer token is present but
-    # does not reject anonymous requests. Set ANGICO_AUTH_REQUIRED=true to enforce
-    # authentication on every /api/** endpoint.
-    required: ${ANGICO_AUTH_REQUIRED:false}
+    required: ${ANGICO_AUTH_REQUIRED:true}
   # Comma-separated origins for cross-origin deploys (web served from a different
   # host than the API). Defaults to the local Vite dev hosts.
   allowed-origins: ${ANGICO_ALLOWED_ORIGINS:http://localhost:5175,http://127.0.0.1:5175,http://localhost:5176,http://127.0.0.1:5176}
-  # Seeds the demo leader (julia@angico.demo / angico-demo) on startup.
-  seed-demo-leader: ${ANGICO_SEED_DEMO_LEADER:true}
+  seed-demo-leader: ${ANGICO_SEED_DEMO_LEADER:false}
+  seed-demo-leader-password: ${ANGICO_SEED_DEMO_LEADER_PASSWORD:}
   # Geocoding via OpenStreetMap/Nominatim + IBGE municipality fallback. Keyless;
   # Nominatim's usage policy only asks for a descriptive User-Agent.
   geocoder:

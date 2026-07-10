@@ -7,7 +7,8 @@
     "dev": "vite --host 0.0.0.0 --port 5176",
     "build": "tsc && vite build",
     "preview": "vite preview --host 0.0.0.0 --port 4176",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "vitest"
   },
   "dependencies": {
     "leaflet": "^1.9.4",
@@ -21,8 +22,12 @@
     "@types/node": "^26.0.1",
     "@types/react": "latest",
     "@types/react-dom": "latest",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
     "@vitejs/plugin-react": "latest",
+    "jsdom": "^29.1.1",
     "typescript": "latest",
-    "vite": "latest"
+    "vite": "latest",
+    "vitest": "^4.1.10"
   }
 }
