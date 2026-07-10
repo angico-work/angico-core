@@ -1,6 +1,6 @@
 # Angico API
 
-API Spring Boot do Angico. Este projeto é executado e implantado de forma independente do site público e da aplicação operacional.
+API Spring Boot do Angico. O projeto possui build, configuração, testes e persistência independentes do site público e da aplicação operacional.
 
 ## Desenvolvimento
 
@@ -12,29 +12,42 @@ A API inicia em `http://localhost:8082` por padrão. As variáveis suportadas pa
 
 A autenticação é obrigatória por padrão. O usuário de demonstração só é criado quando `ANGICO_SEED_DEMO_LEADER=true` e `ANGICO_SEED_DEMO_LEADER_PASSWORD` possui uma senha definida explicitamente.
 
-## Testes
+## Verificação local
 
 ```bash
-mvn test
+mvn clean verify
 scripts/smoke-prod-postgres.sh
-ANGICO_SMOKE_UPGRADE_FROM_REF=002a464 scripts/smoke-prod-postgres.sh
+docker build -t angico-api:local .
 ```
 
-O segundo comando é o gate opcional de produção: requer Docker, cria PostgreSQL efêmero, inicia o JAR com perfil `prod` sobre banco vazio e confirma a sequência Flyway `0,1,2`. O terceiro também empacota e inicia primeiro a revisão informada, depois inicia o JAR atual sobre o mesmo banco; ele é o gate de compatibilidade de upgrade usado pela Task 2.
+O smoke requer Docker, cria um PostgreSQL efêmero no computador local, valida o perfil `prod` e remove o container ao terminar. Para provar compatibilidade com uma revisão anterior:
+
+```bash
+ANGICO_SMOKE_UPGRADE_FROM_REF=<commit-anterior> scripts/smoke-prod-postgres.sh
+```
+
+Nenhum desses comandos usa banco remoto ou publica a aplicação.
 
 O endpoint de saúde está disponível em `GET /health`.
 
-## Migração de sessão e identidade
+## Banco e migrations
 
-O perfil `prod` usa temporariamente `hibernate.ddl-auto=update` para materializar o modelo JPA real e, ainda durante a inicialização, aplica migrations Flyway aditivas. O coordenador depende do `EntityManagerFactory`, cria a baseline `0` automaticamente e executa V1/V2 antes de a aplicação ficar pronta. `render.yaml` habilita esse caminho com `ANGICO_FLYWAY_ENABLED=true`; qualquer duplicidade ou falha de migration encerra o startup.
+O perfil `prod` usa temporariamente `hibernate.ddl-auto=update` para materializar o modelo JPA e, ainda durante a inicialização, aplica migrations Flyway aditivas. O bootstrap cria a baseline `0` e executa as migrations específicas do banco antes de a aplicação ficar pronta. Qualquer incompatibilidade encerra o startup.
 
-As V1/V2 PostgreSQL são imutáveis e preservam exatamente os bytes da primeira linhagem que habilitou Flyway em produção (`4145b44`). A suíte fixa seus hashes e o smoke de upgrade prova a partida sobre o histórico criado por `002a464`. A V1 mais antiga de `cd664bf` nunca foi habilitada automaticamente; se ela tiver sido aplicada manualmente, interrompa o deploy e faça um plano explícito de inspeção/repair do `flyway_schema_history` em clone do banco — não desative a validação.
+| Versão | Conteúdo |
+| --- | --- |
+| `V1` | sessões autenticadas |
+| `V2` | unicidade de identidade e e-mail |
+| `V3` | idempotência de mutações offline |
+| `V4` | evidências, resultados, organizações e recursos |
+| `V5` | mensagens contextuais e recibos de leitura |
+| `V6` | vínculo explícito entre missão e território |
 
-Antes do primeiro deploy contra um banco existente:
+Antes de usar um banco existente em uma publicação futura:
 
 1. faça backup do banco;
 2. execute o preflight abaixo e resolva conflitos preservando os registros;
-3. implante normalmente; não crie a baseline manualmente.
+3. valide o upgrade em uma cópia isolada; não crie a baseline manualmente.
 
 ```sql
 SELECT lower(btrim(email)), count(*)
@@ -50,8 +63,10 @@ GROUP BY lower(regexp_replace(btrim(angico_id), '^@', ''))
 HAVING count(*) > 1;
 ```
 
-Esse regime é transicional: depois de gerar e revisar uma baseline completa do schema, a meta é voltar `ddl-auto` para `validate`. Não execute migrations contra `apps/api/data` durante testes. A suíte usa bancos H2 isolados em memória e também prova boot do perfil `prod` sobre banco vazio.
+Esse regime é transicional: depois de gerar e revisar uma baseline completa do schema, a meta é usar `ddl-auto=validate`. Não execute migrations contra `apps/api/data` durante testes. A suíte usa bancos H2 isolados em memória e o smoke usa PostgreSQL efêmero.
 
-## Uploads em produção
+## Uploads
 
-O Blueprint monta o disco persistente `angico-uploads` em `/app/uploads`; apenas arquivos gravados nesse caminho sobrevivem a restart e redeploy. O request multipart de produção é limitado a `4MB`, abaixo do teto de `4.5MB` da Vercel Function. Cada arquivo continua limitado a `2MB`, e o cliente limita o agregado a `3,75MB` para reservar o overhead do multipart.
+O diretório configurado por `ANGICO_UPLOAD_DIR` precisa ser privado e persistente em uma publicação futura. Cada arquivo é limitado a `2 MB` por padrão; nome, extensão, MIME, assinatura do conteúdo e tamanho são validados antes da gravação. O limite total do request é configurado separadamente por `ANGICO_UPLOAD_MAX_REQUEST_SIZE`.
+
+Consulte [segurança](../../docs/SECURITY.md), [ontologia](../../docs/ONTOLOGY.md) e [operação futura](../../docs/DEPLOYMENT.md) antes de preparar um ambiente externo.
