@@ -1,7 +1,10 @@
 package com.angico.core.ontology;
 
+import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
@@ -104,16 +107,27 @@ public class OntologyService {
     }
 
     public void requireObjectType(String objectType) {
-        if (!objectTypes.contains(objectType)) {
+        canonicalObjectType(objectType);
+    }
+
+    public String canonicalObjectType(String objectType) {
+        String canonical = canonicalToken(objectType, "Tipo ontologico invalido");
+        if (!objectTypes.contains(canonical)) {
             throw new IllegalArgumentException("Tipo ontologico invalido: " + objectType);
         }
+        return canonical;
+    }
+
+    public String canonicalRelationType(String relationType) {
+        return canonicalToken(relationType, "Relacao ontologica invalida");
     }
 
     public void requireValidRelation(String originType, String relationType, String destinationType) {
-        requireObjectType(originType);
-        requireObjectType(destinationType);
+        String canonicalOrigin = canonicalObjectType(originType);
+        String canonicalDestination = canonicalObjectType(destinationType);
+        String canonicalRelation = canonicalRelationType(relationType);
 
-        RelationRule candidate = new RelationRule(originType, relationType, destinationType);
+        RelationRule candidate = new RelationRule(canonicalOrigin, canonicalRelation, canonicalDestination);
         if (!relationRules.contains(candidate)) {
             throw new IllegalArgumentException(
                     "Relacao ontologica invalida: " + candidate.label()
@@ -122,9 +136,36 @@ public class OntologyService {
     }
 
     public OntologyValidationResponse validate() {
-        List<String> errors = List.of();
+        List<String> errors = new ArrayList<>();
+        Set<String> seenTypes = new HashSet<>();
+        for (String objectType : objectTypes) {
+            String canonical = canonicalToken(objectType, "Tipo ontologico invalido");
+            if (!canonical.equals(objectType)) {
+                errors.add("Tipo nao canonico: " + objectType);
+            }
+            if (!seenTypes.add(canonical)) {
+                errors.add("Tipo duplicado: " + canonical);
+            }
+        }
+
+        Set<String> seenRelations = new HashSet<>();
+        for (RelationRule rule : relationRules) {
+            if (!objectTypes.contains(rule.originType())) {
+                errors.add("Origem desconhecida: " + rule.label());
+            }
+            if (!objectTypes.contains(rule.destinationType())) {
+                errors.add("Destino desconhecido: " + rule.label());
+            }
+            if (!canonicalRelationType(rule.relationType()).equals(rule.relationType())) {
+                errors.add("Relacao nao canonica: " + rule.label());
+            }
+            if (!seenRelations.add(rule.label())) {
+                errors.add("Relacao duplicada: " + rule.label());
+            }
+        }
+
         return new OntologyValidationResponse(
-                true,
+                errors.isEmpty(),
                 objectTypes(),
                 relationTypes(),
                 List.of(
@@ -135,7 +176,14 @@ public class OntologyService {
                         "CONVERSA -> MENSAGEM -> LOCALIZACAO -> TERRITORIO",
                         "MENSAGEM -> MENCIONA -> OBJETO_OPERACIONAL"
                 ),
-                errors
+                List.copyOf(errors)
         );
+    }
+
+    private String canonicalToken(String value, String errorPrefix) {
+        if (value == null || value.isBlank()) {
+            throw new IllegalArgumentException(errorPrefix + ": valor vazio");
+        }
+        return value.strip().toUpperCase(Locale.ROOT);
     }
 }

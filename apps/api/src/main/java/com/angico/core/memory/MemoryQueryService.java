@@ -1,5 +1,8 @@
 package com.angico.core.memory;
 
+import com.angico.core.ontology.OntologyService;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -7,33 +10,33 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.stereotype.Service;
 
 @Service
 public class MemoryQueryService {
 
-    private final CoreObjectRepository objectRepository;
-    private final CoreRelationRepository relationRepository;
-    private final CoreEventRepository eventRepository;
+    private final MemoryObjectRepository objectRepository;
+    private final MemoryRelationRepository relationRepository;
+    private final MemoryEventRepository eventRepository;
+    private final OntologyService ontology;
     private final ObjectMapper objectMapper;
 
     public MemoryQueryService(
-            CoreObjectRepository objectRepository,
-            CoreRelationRepository relationRepository,
-            CoreEventRepository eventRepository,
+            MemoryObjectRepository objectRepository,
+            MemoryRelationRepository relationRepository,
+            MemoryEventRepository eventRepository,
+            OntologyService ontology,
             ObjectMapper objectMapper
     ) {
         this.objectRepository = objectRepository;
         this.relationRepository = relationRepository;
         this.eventRepository = eventRepository;
+        this.ontology = ontology;
         this.objectMapper = objectMapper;
     }
 
     public List<Map<String, Object>> timelineForWorkspace(String workspaceId) {
-        return eventRepository.findByWorkspaceIdOrderByCommitSequenceAsc(workspaceId)
+        return eventRepository.findByWorkspaceIdOrderBySequenceAsc(workspaceId)
                 .stream()
                 .map(this::eventMap)
                 .toList();
@@ -44,12 +47,10 @@ public class MemoryQueryService {
             String entityType,
             String entityId
     ) {
+        String canonicalType = ontology.canonicalObjectType(entityType);
         return eventRepository
-                .findByWorkspaceIdAndEntityTypeAndEntityIdOrderByCommitSequenceAsc(
-                        workspaceId,
-                        entityType,
-                        entityId
-                )
+                .findByWorkspaceIdAndEntityTypeIgnoreCaseAndEntityIdOrderBySequenceAsc(
+                        workspaceId, canonicalType, entityId)
                 .stream()
                 .map(this::eventMap)
                 .toList();
@@ -57,107 +58,134 @@ public class MemoryQueryService {
 
     public List<Map<String, Object>> timelineForTerritory(String workspaceId, String territorioEntityId) {
         Set<String> keys = new LinkedHashSet<>();
-        keys.add("TERRITORIO:" + territorioEntityId);
-        relationRepository.findActiveRelationsForNode(workspaceId, "TERRITORIO", territorioEntityId)
+        keys.add(nodeKey(OntologyService.TERRITORIO, territorioEntityId));
+        relationRepository.findActiveRelationsForNode(
+                        workspaceId, OntologyService.TERRITORIO, territorioEntityId)
                 .forEach(relation -> {
-                    keys.add(relation.getOriginType() + ":" + relation.getOriginId());
-                    keys.add(relation.getDestinationType() + ":" + relation.getDestinationId());
+                    keys.add(nodeKey(relation.getOriginType(), relation.getOriginId()));
+                    keys.add(nodeKey(relation.getDestinationType(), relation.getDestinationId()));
                 });
 
-        return eventRepository.findByWorkspaceIdOrderByCommitSequenceAsc(workspaceId)
+        return eventRepository.findByWorkspaceIdOrderBySequenceAsc(workspaceId)
                 .stream()
-                .filter(event -> keys.contains(event.getEntityType() + ":" + event.getEntityId()))
+                .filter(event -> keys.contains(nodeKey(event.getEntityType(), event.getEntityId())))
                 .map(this::eventMap)
                 .toList();
     }
 
     public Map<String, Object> graphForEntity(String workspaceId, String entityType, String entityId) {
-        List<CoreRelation> direct = relationRepository.findActiveRelationsForNode(
-                workspaceId,
-                entityType,
-                entityId
-        );
+        String canonicalType = ontology.canonicalObjectType(entityType);
+        List<StoredMemoryRelation> direct = relationRepository.findActiveRelationsForNode(
+                workspaceId, canonicalType, entityId);
         return graphFromRelations(workspaceId, direct);
     }
 
     public Map<String, Object> graphForTerritory(String workspaceId, String territorioEntityId) {
-        List<CoreRelation> direct = relationRepository.findActiveRelationsForNode(
-                workspaceId,
-                "TERRITORIO",
-                territorioEntityId
-        );
+        List<StoredMemoryRelation> direct = relationRepository.findActiveRelationsForNode(
+                workspaceId, OntologyService.TERRITORIO, territorioEntityId);
         Set<String> nodeKeys = new LinkedHashSet<>();
         direct.forEach(relation -> {
-            nodeKeys.add(relation.getOriginType() + ":" + relation.getOriginId());
-            nodeKeys.add(relation.getDestinationType() + ":" + relation.getDestinationId());
+            nodeKeys.add(nodeKey(relation.getOriginType(), relation.getOriginId()));
+            nodeKeys.add(nodeKey(relation.getDestinationType(), relation.getDestinationId()));
         });
 
-        List<CoreRelation> expanded = new ArrayList<>(direct);
-        relationRepository.findByWorkspaceIdAndEndedAtIsNull(workspaceId)
+        List<StoredMemoryRelation> expanded = new ArrayList<>(direct);
+        relationRepository.findByWorkspaceIdAndActiveTrue(workspaceId)
                 .stream()
-                .filter(relation ->
-                        nodeKeys.contains(relation.getOriginType() + ":" + relation.getOriginId())
-                                || nodeKeys.contains(relation.getDestinationType() + ":" + relation.getDestinationId())
-                )
+                .filter(relation -> nodeKeys.contains(nodeKey(relation.getOriginType(), relation.getOriginId()))
+                        || nodeKeys.contains(nodeKey(relation.getDestinationType(), relation.getDestinationId())))
+                .filter(relation -> !expanded.contains(relation))
                 .forEach(expanded::add);
 
         return graphFromRelations(workspaceId, expanded);
     }
 
-    private Map<String, Object> graphFromRelations(String workspaceId, List<CoreRelation> relations) {
-        Map<String, CoreObject> objects = new HashMap<>();
-        objectRepository.findByWorkspaceId(workspaceId).forEach(object ->
-                objects.put(object.getEntityType() + ":" + object.getEntityId(), object)
-        );
+    private Map<String, Object> graphFromRelations(
+            String workspaceId,
+            List<StoredMemoryRelation> relations
+    ) {
+        Map<String, StoredMemoryObject> objects = new HashMap<>();
+        objectRepository.findByWorkspaceId(workspaceId).forEach(object -> {
+            String key = nodeKey(object.getEntityType(), object.getEntityId());
+            if (objects.putIfAbsent(key, object) != null) {
+                throw new IllegalStateException("Objetos de memoria ambiguos para " + key);
+            }
+        });
 
         Map<String, Map<String, Object>> nodes = new LinkedHashMap<>();
         List<Map<String, Object>> edges = new ArrayList<>();
-
         relations.forEach(relation -> {
-            String originKey = relation.getOriginType() + ":" + relation.getOriginId();
-            String destinationKey = relation.getDestinationType() + ":" + relation.getDestinationId();
-
-            nodes.putIfAbsent(originKey, nodeMap(originKey, relation.getOriginType(), relation.getOriginId(), objects.get(originKey)));
-            nodes.putIfAbsent(destinationKey, nodeMap(destinationKey, relation.getDestinationType(), relation.getDestinationId(), objects.get(destinationKey)));
-
-            edges.add(Map.of(
-                    "id", relation.getId(),
-                    "from", originKey,
-                    "to", destinationKey,
-                    "relationType", relation.getRelationType(),
-                    "label", relation.getOriginType() + " " + relation.getRelationType() + " " + relation.getDestinationType()
-            ));
+            String originKey = nodeKey(relation.getOriginType(), relation.getOriginId());
+            String destinationKey = nodeKey(relation.getDestinationType(), relation.getDestinationId());
+            nodes.putIfAbsent(originKey, nodeMap(
+                    originKey, relation.getOriginType(), relation.getOriginId(), objects.get(originKey)));
+            nodes.putIfAbsent(destinationKey, nodeMap(
+                    destinationKey, relation.getDestinationType(), relation.getDestinationId(),
+                    objects.get(destinationKey)));
+            edges.add(relationMap(relation, originKey, destinationKey));
         });
 
         return Map.of(
                 "nodes", List.copyOf(nodes.values()),
-                "relations", edges
+                "relations", List.copyOf(edges)
         );
     }
 
-    private Map<String, Object> nodeMap(String key, String type, String id, CoreObject object) {
-        return Map.of(
-                "id", key,
-                "entityType", type,
-                "entityId", id,
-                "name", object == null ? key : object.getName(),
-                "status", object == null ? "DESCONHECIDO" : object.getStatus()
-        );
+    private Map<String, Object> nodeMap(
+            String key,
+            String type,
+            String id,
+            StoredMemoryObject object
+    ) {
+        Map<String, Object> node = new LinkedHashMap<>();
+        node.put("id", key);
+        node.put("entityType", ontology.canonicalObjectType(type));
+        node.put("entityId", id);
+        node.put("name", object == null || object.getName() == null ? key : object.getName());
+        node.put("status", object == null || object.getStatus() == null
+                ? "DESCONHECIDO" : object.getStatus());
+        return node;
     }
 
-    private Map<String, Object> eventMap(CoreEvent event) {
+    private Map<String, Object> relationMap(
+            StoredMemoryRelation relation,
+            String originKey,
+            String destinationKey
+    ) {
+        Map<String, Object> edge = new LinkedHashMap<>();
+        edge.put("id", relation.getId());
+        edge.put("from", originKey);
+        edge.put("to", destinationKey);
+        edge.put("relationType", ontology.canonicalRelationType(relation.getRelationType()));
+        edge.put("label", ontology.canonicalObjectType(relation.getOriginType()) + " "
+                + ontology.canonicalRelationType(relation.getRelationType()) + " "
+                + ontology.canonicalObjectType(relation.getDestinationType()));
+        edge.put("source", relation.getSource());
+        edge.put("notes", relation.getNotes());
+        edge.put("active", relation.isActive());
+        edge.put("createdAt", relation.getCreatedAt());
+        edge.put("endedAt", relation.getEndedAt());
+        return edge;
+    }
+
+    private Map<String, Object> eventMap(StoredMemoryEvent event) {
         Map<String, Object> result = new LinkedHashMap<>();
-        result.put("id", event.getId());
+        result.put("id", event.getEventId());
+        result.put("sequence", event.getSequence());
         result.put("workspaceId", event.getWorkspaceId());
-        result.put("entityType", event.getEntityType());
+        result.put("organizationId", event.getWorkspaceId());
+        result.put("entityType", ontology.canonicalObjectType(event.getEntityType()));
         result.put("entityId", event.getEntityId());
         result.put("eventType", event.getEventType());
-        result.put("actorId", event.getActorId() == null ? "" : event.getActorId());
-        result.put("deviceId", event.getDeviceId() == null ? "" : event.getDeviceId());
+        result.put("actorId", event.getActorId());
+        result.put("deviceId", event.getDeviceId());
+        result.put("correlationId", event.getCorrelationId());
+        result.put("causationId", event.getCausationId());
+        result.put("source", event.getSource());
+        result.put("schemaVersion", event.getSchemaVersion());
         result.put("payload", parsePayload(event.getPayloadJson()));
         result.put("occurredAt", event.getOccurredAt());
-        result.put("entityVersion", event.getEntityVersion());
-        result.put("commitSequence", event.getCommitSequence());
+        result.put("commitSequence", event.getSequence());
         return result;
     }
 
@@ -166,7 +194,11 @@ public class MemoryQueryService {
             return objectMapper.readValue(payloadJson, new TypeReference<>() {
             });
         } catch (Exception ex) {
-            return Map.of();
+            throw new IllegalStateException("Payload de memoria persistido e invalido.", ex);
         }
+    }
+
+    private String nodeKey(String type, String id) {
+        return ontology.canonicalObjectType(type) + ":" + id;
     }
 }

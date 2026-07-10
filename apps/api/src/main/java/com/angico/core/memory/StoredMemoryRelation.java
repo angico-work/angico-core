@@ -88,4 +88,48 @@ public class StoredMemoryRelation {
     public Long getId() {
         return id;
     }
+
+    public String getWorkspaceId() {
+        return workspaceId;
+    }
+
+    public String getOriginType() {
+        return originType;
+    }
+
+    public String getOriginId() {
+        return originId;
+    }
+
+    public String getDestinationType() {
+        return destinationType;
+    }
+
+    public String getDestinationId() {
+        return destinationId;
+    }
+
+    public String getRelationType() {
+        return relationType;
+    }
+
+    public String getSource() {
+        return source;
+    }
+
+    public String getNotes() {
+        return notes;
+    }
+
+    public boolean isActive() {
+        return active;
+    }
+
+    public Instant getCreatedAt() {
+        return createdAt;
+    }
+
+    public Instant getEndedAt() {
+        return endedAt;
+    }
 }

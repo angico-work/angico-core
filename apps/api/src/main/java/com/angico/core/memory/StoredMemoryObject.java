@@ -88,8 +88,16 @@ public class StoredMemoryObject {
         this.updatedAt = now;
     }
 
+    public void canonicalizeType(String entityType) {
+        this.entityType = entityType;
+    }
+
     public Long getId() {
         return id;
+    }
+
+    public String getWorkspaceId() {
+        return workspaceId;
     }
 
     public String getEntityType() {
@@ -100,7 +108,27 @@ public class StoredMemoryObject {
         return entityId;
     }
 
+    public String getExternalCode() {
+        return externalCode;
+    }
+
+    public String getName() {
+        return name;
+    }
+
     public String getStatus() {
         return status;
+    }
+
+    public String getSource() {
+        return source;
+    }
+
+    public Instant getCreatedAt() {
+        return createdAt;
+    }
+
+    public Instant getUpdatedAt() {
+        return updatedAt;
     }
 }

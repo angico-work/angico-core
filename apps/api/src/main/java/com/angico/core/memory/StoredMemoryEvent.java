@@ -122,7 +122,31 @@ public class StoredMemoryEvent {
         return actorId;
     }
 
+    public String getSource() {
+        return source;
+    }
+
+    public String getDeviceId() {
+        return deviceId;
+    }
+
+    public String getCorrelationId() {
+        return correlationId;
+    }
+
+    public String getCausationId() {
+        return causationId;
+    }
+
+    public int getSchemaVersion() {
+        return schemaVersion;
+    }
+
     public Instant getOccurredAt() {
         return occurredAt;
+    }
+
+    public String getPayloadJson() {
+        return payloadJson;
     }
 }

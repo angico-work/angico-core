@@ -145,7 +145,7 @@ public class GlimpseService {
     }
 
     private long count(String workspaceId, String entityType) {
-        return objects.countByWorkspaceIdAndEntityType(workspaceId, entityType);
+        return objects.countByWorkspaceIdAndEntityTypeIgnoreCase(workspaceId, entityType);
     }
 
     private List<DashboardResponse.Mission> missions(String workspaceId) {
