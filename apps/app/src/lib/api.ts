@@ -428,7 +428,7 @@ export async function sendMensagem(
 
 export interface CreateConversaInput {
   workspaceId: string;
-  territorioId: number;
+  territorioId?: number;
   contextEntityType?: string;
   contextEntityId?: string;
   titulo: string;

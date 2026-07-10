@@ -1,4 +1,5 @@
 import 'fake-indexeddb/auto';
+import { openDB } from 'idb';
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { ObservacaoInput } from '../types';
 import {
@@ -20,6 +21,7 @@ import {
   listOutbox,
   markOutboxStatus,
   recordSyncAttempt,
+  recoverMessageAsDraft,
   reviseObservation,
   saveMessageDraft,
   resetOfflineDatabase
@@ -193,6 +195,14 @@ describe('offline observation store', () => {
     expect(await loadMessageDraft('ana.sp', 'territorio-a', 13)).toMatchObject({ body: 'Segundo' });
   });
 
+  it('treats a non-empty message draft as unsent work during logout cleanup', async () => {
+    await saveMessageDraft('ana.sp', 'territorio-a', 12, 'Ainda não enviada.');
+
+    expect(await getOfflineOwnerState('ana.sp')).toMatchObject({ unsynced: 1, drafts: 1 });
+    await expect(clearOfflineOwner('ana.sp')).rejects.toThrow('1 registro');
+    expect(await loadMessageDraft('ana.sp', 'territorio-a', 12)).toMatchObject({ body: 'Ainda não enviada.' });
+  });
+
   it('persists an offline message, its blob and its fixed operation atomically', async () => {
     const file = new File(['imagem'], 'nascente.png', { type: 'image/png' });
 
@@ -264,6 +274,59 @@ describe('offline observation store', () => {
     expect(await listLocalMessages('bia.sp', 'territorio-a', 12)).toHaveLength(1);
   });
 
+  it('recovers a rejected message as a draft and closes the original operation explicitly', async () => {
+    const queued = await enqueueMessage({
+      workspaceId: 'territorio-a',
+      conversationId: 12,
+      body: 'Revisar antes de reenviar.',
+      attachments: [new File(['anexo'], 'anexo.txt', { type: 'text/plain' })]
+    }, 'ana.sp');
+    await markOutboxStatus(queued.clientMessageId, 'CONFLICT', { message: 'Conteúdo divergente.' });
+
+    await recoverMessageAsDraft(queued.clientMessageId, 'ana.sp', 'territorio-a');
+
+    const draft = await loadMessageDraft('ana.sp', 'territorio-a', 12);
+    expect(draft).toMatchObject({ body: 'Revisar antes de reenviar.' });
+    expect(draft?.attachments).toHaveLength(1);
+    expect(draft?.attachments[0].name).toBe('anexo.txt');
+    expect((await listOutbox('ana.sp', 'territorio-a'))[0]).toMatchObject({ status: 'DISCARDED' });
+    expect(await getLocalMessage('ana.sp', 'territorio-a', queued.clientMessageId)).toMatchObject({
+      syncStatus: 'DISCARDED'
+    });
+  });
+
+  it('refuses to overwrite another local draft during message recovery', async () => {
+    const queued = await enqueueMessage({
+      workspaceId: 'territorio-a', conversationId: 12, body: 'Mensagem recusada.', attachments: []
+    }, 'ana.sp');
+    await markOutboxStatus(queued.clientMessageId, 'ACTION_REQUIRED', { message: 'Revise.' });
+    await saveMessageDraft('ana.sp', 'territorio-a', 12, 'Meu rascunho atual.');
+
+    await expect(recoverMessageAsDraft(queued.clientMessageId, 'ana.sp', 'territorio-a'))
+      .rejects.toThrow('Já existe um rascunho');
+    expect(await loadMessageDraft('ana.sp', 'territorio-a', 12)).toMatchObject({ body: 'Meu rascunho atual.' });
+    expect((await listOutbox('ana.sp', 'territorio-a'))[0]).toMatchObject({ status: 'ACTION_REQUIRED' });
+  });
+
+  it('discards a rejected message and releases its private local attachment', async () => {
+    const queued = await enqueueMessage({
+      workspaceId: 'territorio-a',
+      conversationId: 12,
+      body: '',
+      attachments: [new File(['descartar'], 'descartar.txt', { type: 'text/plain' })]
+    }, 'ana.sp');
+    const local = await getLocalMessage('ana.sp', 'territorio-a', queued.clientMessageId);
+    await markOutboxStatus(queued.clientMessageId, 'ACTION_REQUIRED', { message: 'Arquivo recusado.' });
+
+    await discardOutboxEntry(queued.clientMessageId, 'ana.sp', 'territorio-a');
+
+    expect((await listOutbox('ana.sp', 'territorio-a'))[0]).toMatchObject({ status: 'DISCARDED' });
+    expect(await getLocalMessage('ana.sp', 'territorio-a', queued.clientMessageId)).toMatchObject({
+      syncStatus: 'DISCARDED'
+    });
+    expect(await getMessageAttachmentFile(local!.attachments[0].blobKey)).toBeUndefined();
+  });
+
   it('removes drafts, messages and blobs with an explicitly confirmed owner cleanup', async () => {
     await saveMessageDraft('ana.sp', 'territorio-a', 12, 'Rascunho', [
       new File(['rascunho'], 'rascunho.txt', { type: 'text/plain' })
@@ -307,8 +370,12 @@ describe('offline observation store', () => {
 
   it('caches confirmed remote messages without duplicating the matching local operation', async () => {
     const queued = await enqueueMessage({
-      workspaceId: 'territorio-a', conversationId: 12, body: 'Confirmada.', attachments: []
+      workspaceId: 'territorio-a',
+      conversationId: 12,
+      body: 'Confirmada.',
+      attachments: [new File(['prova'], 'prova.txt', { type: 'text/plain' })]
     }, 'ana.sp');
+    const localBefore = await getLocalMessage('ana.sp', 'territorio-a', queued.clientMessageId);
     const remote = {
       id: 92,
       workspaceId: 'territorio-a',
@@ -331,7 +398,7 @@ describe('offline observation store', () => {
       relacoes: []
     };
 
-    await cacheRemoteMessages('ana.sp', 'territorio-a', 12, [remote]);
+    await cacheRemoteMessages('ana.sp', 'territorio-a', 12, 7, [remote]);
 
     const cached = await listLocalMessages('ana.sp', 'territorio-a', 12);
     expect(cached).toHaveLength(1);
@@ -340,5 +407,130 @@ describe('offline observation store', () => {
       syncStatus: 'SYNCED',
       remote: { id: 92 }
     });
+    expect((await listOutbox('ana.sp', 'territorio-a'))[0]).toMatchObject({
+      id: queued.clientMessageId,
+      operation: 'MESSAGE_SEND',
+      status: 'SYNCED'
+    });
+    expect(await getMessageAttachmentFile(localBefore!.attachments[0].blobKey)).toBeUndefined();
+  });
+
+  it('does not reconcile a client message identifier returned for another conversation', async () => {
+    const queued = await enqueueMessage({
+      workspaceId: 'territorio-a', conversationId: 12, body: 'Conversa correta.', attachments: []
+    }, 'ana.sp');
+    const mismatched = {
+      id: 94,
+      workspaceId: 'territorio-a',
+      conversaId: 13,
+      senderPessoaId: 7,
+      senderNome: 'Ana',
+      corpo: 'Outra conversa.',
+      latitude: null,
+      longitude: null,
+      localDescricao: null,
+      linkedEntityType: null,
+      linkedEntityId: null,
+      clientMessageId: queued.clientMessageId,
+      deviceId: queued.deviceId,
+      status: 'ENVIADA',
+      occurredAt: queued.occurredAt,
+      recordedAt: queued.occurredAt,
+      createdAt: queued.occurredAt,
+      anexos: [],
+      relacoes: []
+    };
+
+    await cacheRemoteMessages('ana.sp', 'territorio-a', 13, 7, [mismatched]);
+
+    const localAfter = await getLocalMessage('ana.sp', 'territorio-a', queued.clientMessageId);
+    expect(localAfter).toMatchObject({
+      conversationId: 12,
+      syncStatus: 'QUEUED'
+    });
+    expect(localAfter?.remote).toBeUndefined();
+    expect((await listOutbox('ana.sp', 'territorio-a'))[0]).toMatchObject({ status: 'QUEUED' });
+  });
+
+  it('does not reconcile another sender message that happens to reuse the local client id', async () => {
+    const queued = await enqueueMessage({
+      workspaceId: 'territorio-a', conversationId: 12, body: 'Mensagem da Ana.', attachments: []
+    }, 'ana.sp');
+    const fromAnotherSender = {
+      id: 95,
+      workspaceId: 'territorio-a',
+      conversaId: 12,
+      senderPessoaId: 8,
+      senderNome: 'Bia',
+      corpo: 'Mensagem da Bia.',
+      latitude: null,
+      longitude: null,
+      localDescricao: null,
+      linkedEntityType: null,
+      linkedEntityId: null,
+      clientMessageId: queued.clientMessageId,
+      deviceId: 'device-bia',
+      status: 'ENVIADA',
+      occurredAt: queued.occurredAt,
+      recordedAt: queued.occurredAt,
+      createdAt: queued.occurredAt,
+      anexos: [],
+      relacoes: []
+    };
+
+    await cacheRemoteMessages('ana.sp', 'territorio-a', 12, 7, [fromAnotherSender]);
+
+    const messages = await listLocalMessages('ana.sp', 'territorio-a', 12);
+    expect(messages).toHaveLength(2);
+    expect(messages.find((message) => message.clientMessageId === queued.clientMessageId && !message.remote))
+      .toMatchObject({ syncStatus: 'QUEUED', body: 'Mensagem da Ana.' });
+    expect(messages.find((message) => message.remote?.id === 95)?.remote).toMatchObject({ senderPessoaId: 8 });
+    expect((await listOutbox('ana.sp', 'territorio-a'))[0]).toMatchObject({ status: 'QUEUED' });
+  });
+
+  it('upgrades the observation-only database without losing its pending operation', async () => {
+    const legacy = await openDB('angico-operational-data', 1, {
+      upgrade(db) {
+        const outbox = db.createObjectStore('outbox', { keyPath: 'id' });
+        outbox.createIndex('by-owner-workspace', ['ownerId', 'workspaceId']);
+        outbox.createIndex('by-status', 'status');
+        const entities = db.createObjectStore('entities', { keyPath: 'key' });
+        entities.createIndex('by-owner-workspace', ['ownerId', 'workspaceId']);
+        const drafts = db.createObjectStore('drafts', { keyPath: 'key' });
+        drafts.createIndex('by-owner-workspace', ['ownerId', 'workspaceId']);
+        const blobs = db.createObjectStore('blobs', { keyPath: 'key' });
+        blobs.createIndex('by-owner-workspace', ['ownerId', 'workspaceId']);
+        const syncMeta = db.createObjectStore('syncMeta', { keyPath: 'key' });
+        syncMeta.createIndex('by-owner-workspace', ['ownerId', 'workspaceId']);
+      }
+    });
+    const now = '2026-07-10T12:00:00.000Z';
+    await legacy.add('outbox', {
+      id: 'legacy-observation',
+      operation: 'CREATE_OBSERVATION',
+      ownerId: 'ana.sp',
+      workspaceId: 'territorio-a',
+      localEntityKey: 'legacy-local',
+      body: {
+        ...observation,
+        clientMutationId: 'legacy-observation',
+        occurredAt: now,
+        deviceId: 'legacy-device'
+      },
+      status: 'QUEUED',
+      attemptCount: 0,
+      createdAt: now,
+      updatedAt: now,
+      nextAttemptAt: now
+    });
+    legacy.close();
+
+    expect(await listOutbox('ana.sp', 'territorio-a')).toEqual([
+      expect.objectContaining({ id: 'legacy-observation', operation: 'CREATE_OBSERVATION' })
+    ]);
+    await enqueueMessage({
+      workspaceId: 'territorio-a', conversationId: 12, body: 'Depois da migração.', attachments: []
+    }, 'ana.sp');
+    expect(await listLocalMessages('ana.sp', 'territorio-a', 12)).toHaveLength(1);
   });
 });

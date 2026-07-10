@@ -61,6 +61,9 @@
 .sync-review-form { margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--line); }
 .sync-review-form > p { margin: 0 0 1rem; color: var(--muted); font-size: .86rem; }
 .sync-review-actions { display: flex; align-items: center; justify-content: flex-end; gap: .6rem; }
+.sync-message-actions { margin-top: .45rem; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: .35rem; }
+.sync-message-actions .danger-text-button { margin: 0; }
+.sync-notice { margin-bottom: .8rem; padding: .7rem .85rem; border-left: 3px solid var(--growth); color: var(--forest); background: rgba(53, 168, 107, .08); }
 .danger-text-button { min-height: 44px; margin-right: auto; padding: .45rem .2rem; color: #873b24; background: transparent; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
 .danger-text-button:disabled { opacity: .55; cursor: wait; }
 

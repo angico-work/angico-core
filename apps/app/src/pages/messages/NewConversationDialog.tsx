@@ -1,29 +1,31 @@
 import { useState, type FormEvent } from 'react';
 import { createConversa } from '../../lib/api';
-import type { Conversa, Territorio } from '../../types';
+import type { Conversa } from '../../types';
+import type { ConversationContext } from './messageView';
 
 interface NewConversationDialogProps {
   workspaceId: string;
-  territories: Territorio[];
+  contexts: ConversationContext[];
   onClose: () => void;
   onCreated: (conversation: Conversa) => void;
 }
 
 export function NewConversationDialog({
   workspaceId,
-  territories,
+  contexts,
   onClose,
   onCreated
 }: NewConversationDialogProps) {
   const [title, setTitle] = useState('');
-  const [territoryId, setTerritoryId] = useState(() => territories[0]?.id ?? 0);
+  const [contextKey, setContextKey] = useState(() => contexts[0]?.key ?? '');
   const [participants, setParticipants] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
-    if (!territoryId) return;
+    const context = contexts.find((candidate) => candidate.key === contextKey);
+    if (!context) return;
     setSubmitting(true);
     setError(null);
     const refs = participants
@@ -33,9 +35,9 @@ export function NewConversationDialog({
     try {
       onCreated(await createConversa({
         workspaceId,
-        territorioId: territoryId,
-        contextEntityType: 'TERRITORIO',
-        contextEntityId: String(territoryId),
+        territorioId: context.territoryId,
+        contextEntityType: context.type,
+        contextEntityId: context.id,
         titulo: title.trim(),
         participanteRefs: refs
       }));
@@ -60,10 +62,10 @@ export function NewConversationDialog({
             <input id="conversation-name" required value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Ex.: Organização do mutirão" />
           </div>
           <div className="field">
-            <label htmlFor="conversation-territory">Território relacionado</label>
-            <select id="conversation-territory" value={territoryId} onChange={(event) => setTerritoryId(Number(event.target.value))}>
-              {territories.map((territory) => (
-                <option key={territory.id} value={territory.id}>{territory.nome}{territory.cidade ? ` · ${territory.cidade}` : ''}</option>
+            <label htmlFor="conversation-context">Contexto da conversa</label>
+            <select id="conversation-context" value={contextKey} onChange={(event) => setContextKey(event.target.value)}>
+              {contexts.map((context) => (
+                <option key={context.key} value={context.key}>{context.label}</option>
               ))}
             </select>
           </div>
@@ -75,7 +77,7 @@ export function NewConversationDialog({
           {error && <div className="form-error" role="alert">{error}</div>}
           <footer className="dialog-actions">
             <button type="button" className="ghost-button" onClick={onClose}>Cancelar</button>
-            <button type="submit" className="primary-button" disabled={submitting || !territoryId}>{submitting ? 'Criando…' : 'Criar conversa'}</button>
+            <button type="submit" className="primary-button" disabled={submitting || !contextKey}>{submitting ? 'Criando…' : 'Criar conversa'}</button>
           </footer>
         </form>
       </section>

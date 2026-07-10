@@ -6,6 +6,7 @@ import {
   discardOutboxEntry,
   getSyncMetadata,
   listOutbox,
+  recoverMessageAsDraft,
   reviseObservation
 } from '../lib/offlineStore';
 import { syncPendingObservations } from '../lib/offlineSync';
@@ -14,6 +15,7 @@ vi.mock('../lib/offlineStore', () => ({
   discardOutboxEntry: vi.fn(),
   getSyncMetadata: vi.fn(),
   listOutbox: vi.fn(),
+  recoverMessageAsDraft: vi.fn(),
   reviseObservation: vi.fn()
 }));
 
@@ -109,5 +111,36 @@ describe('SyncCenter', () => {
       'conflict-1', 'ana.sp', 'territorio-a'
     ));
     expect(confirm).toHaveBeenCalledTimes(2);
+  });
+
+  it('offers recovery and explicit discard for a rejected message operation', async () => {
+    const rejectedMessage = {
+      ...conflict,
+      id: 'message-conflict-1',
+      operation: 'MESSAGE_SEND' as const,
+      body: {
+        workspaceId: 'territorio-a',
+        conversationId: 12,
+        body: 'Confirmar a próxima visita.',
+        clientMessageId: 'message-conflict-1',
+        occurredAt: '2026-07-10T12:00:00Z',
+        deviceId: 'device-1',
+        attachments: []
+      }
+    };
+    vi.mocked(listOutbox).mockResolvedValue([rejectedMessage]);
+    vi.mocked(recoverMessageAsDraft).mockResolvedValue(12);
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    render(<SyncCenter ownerId="ana.sp" workspaceId="territorio-a" online onClose={vi.fn()} />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Retomar como rascunho: Confirmar a próxima visita.' }));
+    await waitFor(() => expect(recoverMessageAsDraft).toHaveBeenCalledWith(
+      'message-conflict-1', 'ana.sp', 'territorio-a'
+    ));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Descartar mensagem: Confirmar a próxima visita.' }));
+    await waitFor(() => expect(discardOutboxEntry).toHaveBeenCalledWith(
+      'message-conflict-1', 'ana.sp', 'territorio-a'
+    ));
   });
 });

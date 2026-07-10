@@ -6,6 +6,7 @@ import MensagensPage from './MensagensPage';
 import {
   createConversa,
   listConversas,
+  listEntities,
   listMensagens,
   listTerritorios,
   markConversaRead,
@@ -40,6 +41,7 @@ vi.mock('../lib/api', async (importOriginal) => {
       csrfToken: 'csrf'
     })),
     listConversas: vi.fn(),
+    listEntities: vi.fn(),
     listMensagens: vi.fn(),
     listTerritorios: vi.fn(),
     markConversaRead: vi.fn(),
@@ -110,11 +112,11 @@ function deferred<T>() {
   return { promise, resolve };
 }
 
-function renderPage() {
-  return render(
+function PageUnderTest({ workspaceId = 'territorio-a' }: { workspaceId?: string }) {
+  return (
     <MemoryRouter initialEntries={['/']}>
       <Routes>
-        <Route element={<Outlet context={{ workspaceId: 'territorio-a' }} />}>
+        <Route element={<Outlet context={{ workspaceId }} />}>
           <Route index element={<MensagensPage />} />
         </Route>
       </Routes>
@@ -122,10 +124,15 @@ function renderPage() {
   );
 }
 
+function renderPage(workspaceId = 'territorio-a') {
+  return render(<PageUnderTest workspaceId={workspaceId} />);
+}
+
 describe('MensagensPage', () => {
   beforeEach(() => {
     Object.defineProperty(navigator, 'onLine', { configurable: true, value: true });
     vi.mocked(listConversas).mockResolvedValue([conversation]);
+    vi.mocked(listEntities).mockResolvedValue([]);
     vi.mocked(listTerritorios).mockResolvedValue([{ id: 4, workspaceId: 'territorio-a', nome: 'Nascente Sul', cidade: 'Recife', estado: 'PE', status: 'ATIVO' }]);
     vi.mocked(listMensagens).mockResolvedValue([remoteMessage]);
     vi.mocked(markConversaRead).mockRejectedValue(new Error('leitura indisponível'));
@@ -152,7 +159,7 @@ describe('MensagensPage', () => {
     expect(screen.getByText('2 novas')).toBeInTheDocument();
     expect(screen.getByText('Território relacionado')).toBeInTheDocument();
     expect(markConversaRead).toHaveBeenCalledWith(12);
-    expect(cacheRemoteMessages).toHaveBeenCalledWith('ana.sp', 'territorio-a', 12, [remoteMessage]);
+    expect(cacheRemoteMessages).toHaveBeenCalledWith('ana.sp', 'territorio-a', 12, 7, [remoteMessage]);
   });
 
   it('restores a saved draft and its local attachment', async () => {
@@ -244,6 +251,7 @@ describe('MensagensPage', () => {
     const secondResponse = deferred<typeof remoteMessage[]>();
     vi.mocked(listConversas).mockResolvedValue([conversation, secondConversation]);
     vi.mocked(listMensagens).mockImplementation((id) => id === 12 ? firstResponse.promise : secondResponse.promise);
+    vi.mocked(markConversaRead).mockResolvedValue(undefined);
     renderPage();
 
     fireEvent.click(await screen.findByRole('button', { name: /Segunda conversa/ }));
@@ -253,6 +261,8 @@ describe('MensagensPage', () => {
     firstResponse.resolve([{ ...remoteMessage, corpo: 'Resposta atrasada.' }]);
     await waitFor(() => expect(screen.queryByText('Resposta atrasada.')).not.toBeInTheDocument());
     expect(screen.getByText('Resposta da conversa ativa.')).toBeInTheDocument();
+    expect(markConversaRead).toHaveBeenCalledWith(13);
+    expect(markConversaRead).not.toHaveBeenCalledWith(12);
   });
 
   it('does not offer a queued message for duplicate submission if draft cleanup fails', async () => {
@@ -317,5 +327,78 @@ describe('MensagensPage', () => {
     const poll = vi.mocked(startOnlinePolling).mock.calls[0][0];
 
     await expect(poll()).rejects.toThrow('sem rede');
+  });
+
+  it('polling marks newly loaded active messages and refreshes inactive unread badges', async () => {
+    const inactive = { ...conversation, id: 13, titulo: 'Equipe de campo', unreadCount: 3 };
+    renderPage();
+    await screen.findByText('A nascente precisa de proteção.');
+    vi.mocked(markConversaRead).mockClear().mockResolvedValue(undefined);
+    vi.mocked(listConversas).mockClear().mockResolvedValue([{ ...conversation, unreadCount: 0 }, inactive]);
+    const poll = vi.mocked(startOnlinePolling).mock.calls[0][0];
+
+    await poll();
+
+    expect(markConversaRead).toHaveBeenCalledWith(12);
+    expect(listConversas).toHaveBeenCalledWith('territorio-a');
+    expect(await screen.findByText('3 novas')).toBeInTheDocument();
+  });
+
+  it('backs off after a read receipt failure without skipping the badge refresh', async () => {
+    renderPage();
+    await screen.findByText('A nascente precisa de proteção.');
+    vi.mocked(markConversaRead).mockClear().mockRejectedValue(new Error('leitura indisponível'));
+    vi.mocked(listConversas).mockClear().mockResolvedValue([conversation]);
+    const poll = vi.mocked(startOnlinePolling).mock.calls[0][0];
+
+    await expect(poll()).rejects.toThrow('leitura indisponível');
+    expect(listConversas).toHaveBeenCalledWith('territorio-a');
+  });
+
+  it('creates a conversation from a named mission context without exposing raw id fields', async () => {
+    vi.mocked(listEntities).mockImplementation(async (path) => path === '/api/missoes'
+      ? [{ id: 21, titulo: 'Recuperar a margem do rio' }]
+      : []);
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Nova conversa' }));
+    fireEvent.change(screen.getByLabelText('Assunto'), { target: { value: 'Próxima mobilização' } });
+    fireEvent.change(screen.getByLabelText('Contexto da conversa'), { target: { value: 'MISSAO:21' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Criar conversa' }));
+
+    await waitFor(() => expect(createConversa).toHaveBeenCalledWith({
+      workspaceId: 'territorio-a',
+      territorioId: undefined,
+      contextEntityType: 'MISSAO',
+      contextEntityId: '21',
+      titulo: 'Próxima mobilização',
+      participanteRefs: []
+    }));
+    expect(screen.queryByLabelText(/identificador/i)).not.toBeInTheDocument();
+  });
+
+  it('does not render a late conversation response from the previous workspace', async () => {
+    const firstWorkspace = deferred<typeof conversation[]>();
+    const secondWorkspace = deferred<typeof conversation[]>();
+    const otherConversation = {
+      ...conversation,
+      id: 22,
+      workspaceId: 'territorio-b',
+      titulo: 'Conversa do território B',
+      unreadCount: 0
+    };
+    vi.mocked(listConversas).mockImplementation((workspace) => workspace === 'territorio-a'
+      ? firstWorkspace.promise
+      : secondWorkspace.promise);
+    const view = renderPage('territorio-a');
+    await waitFor(() => expect(listConversas).toHaveBeenCalledWith('territorio-a'));
+
+    view.rerender(<PageUnderTest workspaceId="territorio-b" />);
+    await waitFor(() => expect(listConversas).toHaveBeenCalledWith('territorio-b'));
+    secondWorkspace.resolve([otherConversation]);
+    expect(await screen.findByRole('heading', { name: 'Conversa do território B' })).toBeInTheDocument();
+
+    firstWorkspace.resolve([conversation]);
+    await waitFor(() => expect(screen.queryByRole('heading', { name: 'Cuidado da nascente' })).not.toBeInTheDocument());
+    expect(screen.getByRole('heading', { name: 'Conversa do território B' })).toBeInTheDocument();
   });
 });

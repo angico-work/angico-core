@@ -3,7 +3,9 @@ import {
   discardOutboxEntry,
   getSyncMetadata,
   listOutbox,
+  recoverMessageAsDraft,
   reviseObservation,
+  type MessageOutboxEntry,
   type ObservationOutboxEntry,
   type OutboxEntry,
   type OutboxStatus,
@@ -68,6 +70,7 @@ export default function SyncCenter({ ownerId, workspaceId, online, onClose }: Pr
   const [reviewingId, setReviewingId] = useState<string>();
   const [revision, setRevision] = useState<RevisionDraft>();
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     if (!ownerId) {
@@ -144,7 +147,9 @@ export default function SyncCenter({ ownerId, workspaceId, online, onClose }: Pr
   async function discard(entry: OutboxEntry) {
     if (!ownerId) return;
     const confirmed = window.confirm(
-      'Descartar interrompe este envio. A cópia original continuará no histórico local como descartada. Deseja continuar?'
+      entry.operation === 'MESSAGE_SEND'
+        ? 'Descartar remove os anexos locais desta mensagem e interrompe o envio. Deseja continuar?'
+        : 'Descartar interrompe este envio. A cópia original continuará no histórico local como descartada. Deseja continuar?'
     );
     if (!confirmed) return;
     setWorkingId(entry.id);
@@ -156,6 +161,22 @@ export default function SyncCenter({ ownerId, workspaceId, online, onClose }: Pr
       await refresh();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Não foi possível descartar o registro.');
+    } finally {
+      setWorkingId(undefined);
+    }
+  }
+
+  async function recoverMessage(entry: MessageOutboxEntry) {
+    if (!ownerId) return;
+    setWorkingId(entry.id);
+    setError(null);
+    setNotice(null);
+    try {
+      await recoverMessageAsDraft(entry.id, ownerId, workspaceId);
+      setNotice('Mensagem retomada como rascunho. Abra a conversa para revisar e enviar uma nova cópia.');
+      await refresh();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Não foi possível recuperar a mensagem.');
     } finally {
       setWorkingId(undefined);
     }
@@ -195,6 +216,7 @@ export default function SyncCenter({ ownerId, workspaceId, online, onClose }: Pr
         </div>
 
         {error && <div className="form-error" role="alert">{error}</div>}
+        {notice && <div className="sync-notice" role="status">{notice}</div>}
         <div className="sync-list" aria-busy={loading}>
           {!loading && entries.length === 0 && (
             <div className="empty-state compact">
@@ -229,6 +251,28 @@ export default function SyncCenter({ ownerId, workspaceId, online, onClose }: Pr
                       >
                         Revisar
                       </button>
+                    )}
+                    {!isObservationEntry(entry) && REVIEWABLE.includes(entry.status) && (
+                      <div className="sync-message-actions">
+                        <button
+                          type="button"
+                          className="secondary-button compact-button"
+                          aria-label={`Retomar como rascunho: ${entryTitle(entry)}`}
+                          disabled={workingId === entry.id}
+                          onClick={() => void recoverMessage(entry)}
+                        >
+                          Retomar rascunho
+                        </button>
+                        <button
+                          type="button"
+                          className="danger-text-button compact-button"
+                          aria-label={`Descartar mensagem: ${entryTitle(entry)}`}
+                          disabled={workingId === entry.id}
+                          onClick={() => void discard(entry)}
+                        >
+                          Descartar
+                        </button>
+                      </div>
                     )}
                   </div>
                 </div>

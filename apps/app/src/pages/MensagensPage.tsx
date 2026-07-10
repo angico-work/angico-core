@@ -11,6 +11,7 @@ import { EmptyState, ErrorState, LoadingState } from '../components/PageFeedback
 import {
   getSession,
   listConversas,
+  listEntities,
   listMensagens,
   listTerritorios,
   markConversaRead,
@@ -28,17 +29,19 @@ import {
   saveMessageDraft
 } from '../lib/offlineStore';
 import { captureMessage, retryPendingMessages } from '../lib/offlineSync';
-import type { Conversa, Mensagem, MensagemBusca, Territorio } from '../types';
+import type { Conversa, Mensagem, MensagemBusca } from '../types';
 import { LocalMessageAttachment } from './messages/LocalMessageAttachment';
 import { NewConversationDialog } from './messages/NewConversationDialog';
 import { RemoteMessageAttachments } from './messages/RemoteMessageAttachments';
 import { SelectedMessageFile } from './messages/SelectedMessageFile';
 import {
   contextLabel,
+  conversationContexts,
   fileSignature,
   LOCAL_MESSAGE_STATUS,
   mergeTimeline,
   when,
+  type ConversationContext,
   type TimelineItem
 } from './messages/messageView';
 
@@ -52,7 +55,7 @@ export default function MensagensPage() {
   const ownerId = ownerFromSession();
   const meId = getSession()?.pessoaId ?? null;
   const [conversations, setConversations] = useState<Conversa[]>([]);
-  const [territories, setTerritories] = useState<Territorio[]>([]);
+  const [contexts, setContexts] = useState<ConversationContext[]>([]);
   const [activeId, setActiveId] = useState<number | null>(null);
   const [timeline, setTimeline] = useState<TimelineItem[]>([]);
   const [draft, setDraft] = useState('');
@@ -72,12 +75,16 @@ export default function MensagensPage() {
   const [searchError, setSearchError] = useState<string | null>(null);
   const streamRef = useRef<HTMLDivElement>(null);
   const savedFilesSignature = useRef('');
+  const draftSaveTimer = useRef<number | undefined>(undefined);
   const activeConversationRef = useRef<number | null>(activeId);
+  const activeWorkspaceRef = useRef(workspaceId);
   activeConversationRef.current = activeId;
+  activeWorkspaceRef.current = workspaceId;
 
   const active = conversations.find((conversation) => conversation.id === activeId) ?? null;
 
   const refreshConversations = useCallback(async (background = false) => {
+    const requestedWorkspace = workspaceId;
     if (!ownerId) {
       setError('Entre novamente para abrir as conversas deste aparelho.');
       setLoading(false);
@@ -90,15 +97,23 @@ export default function MensagensPage() {
       if (navigator.onLine) {
         conversationList = await listConversas(workspaceId);
         await cacheConversations(ownerId, workspaceId, conversationList);
+        if (activeWorkspaceRef.current !== requestedWorkspace) return;
         setUsingCache(false);
         try {
-          setTerritories(await listTerritorios(workspaceId));
+          const [territories, missions, actions] = await Promise.all([
+            listTerritorios(workspaceId).catch(() => []),
+            listEntities<Record<string, unknown>>('/api/missoes', workspaceId).catch(() => []),
+            listEntities<Record<string, unknown>>('/api/acoes', workspaceId).catch(() => [])
+          ]);
+          if (activeWorkspaceRef.current !== requestedWorkspace) return;
+          setContexts(conversationContexts(territories, missions, actions));
         } catch {
-          setTerritories([]);
+          setContexts([]);
         }
       } else {
         conversationList = await loadCachedConversations(ownerId, workspaceId);
-        setTerritories([]);
+        if (activeWorkspaceRef.current !== requestedWorkspace) return;
+        setContexts([]);
         setUsingCache(true);
       }
       setConversations(conversationList);
@@ -110,6 +125,7 @@ export default function MensagensPage() {
       }
     } catch (caught) {
       const cached = await loadCachedConversations(ownerId, workspaceId);
+      if (activeWorkspaceRef.current !== requestedWorkspace) return;
       if (cached.length > 0) {
         setConversations(cached);
         setActiveId((current) => current && cached.some((entry) => entry.id === current)
@@ -120,7 +136,7 @@ export default function MensagensPage() {
         setError(caught instanceof Error ? caught.message : 'Não foi possível carregar as conversas.');
       }
     } finally {
-      if (!background) setLoading(false);
+      if (!background && activeWorkspaceRef.current === requestedWorkspace) setLoading(false);
     }
   }, [ownerId, workspaceId]);
 
@@ -137,20 +153,24 @@ export default function MensagensPage() {
     if (navigator.onLine) {
       try {
         remote = await listMensagens(conversationId);
-        await cacheRemoteMessages(ownerId, workspaceId, conversationId, remote);
-        if (markRead) {
+        await cacheRemoteMessages(ownerId, workspaceId, conversationId, meId, remote);
+        if (markRead
+          && activeConversationRef.current === conversationId
+          && activeWorkspaceRef.current === workspaceId) {
           try {
             await markConversaRead(conversationId);
             setConversations((current) => current.map((conversation) => (
               conversation.id === conversationId ? { ...conversation, unreadCount: 0 } : conversation
             )));
-          } catch {
+          } catch (caught) {
             readFailed = true;
+            if (propagateNetworkError) networkError = caught;
           }
         }
       } catch (caught) {
         networkError = caught;
-        if (activeConversationRef.current === conversationId) {
+        if (activeConversationRef.current === conversationId
+          && activeWorkspaceRef.current === workspaceId) {
           setMessageError(caught instanceof Error ? caught.message : 'Não foi possível atualizar as mensagens.');
         }
       }
@@ -158,14 +178,38 @@ export default function MensagensPage() {
     const refreshedLocal = remote.length > 0
       ? await listLocalMessages(ownerId, workspaceId, conversationId)
       : local;
-    if (activeConversationRef.current !== conversationId) {
+    if (activeConversationRef.current !== conversationId
+      || activeWorkspaceRef.current !== workspaceId) {
       if (networkError && propagateNetworkError) throw networkError;
       return;
     }
-    setTimeline(mergeTimeline(remote, refreshedLocal));
+    setTimeline(mergeTimeline(remote, refreshedLocal, meId));
     if (!readFailed && remote.length > 0) setMessageError(null);
     if (networkError && propagateNetworkError) throw networkError;
+  }, [meId, ownerId, workspaceId]);
+
+  const refreshConversationBadges = useCallback(async () => {
+    if (!ownerId || !navigator.onLine) return;
+    const next = await listConversas(workspaceId);
+    await cacheConversations(ownerId, workspaceId, next);
+    if (activeWorkspaceRef.current !== workspaceId) return;
+    setConversations(next);
+    setActiveId((current) => current && next.some((conversation) => conversation.id === current)
+      ? current
+      : next[0]?.id ?? null);
   }, [ownerId, workspaceId]);
+
+  useEffect(() => {
+    setConversations([]);
+    setContexts([]);
+    setActiveId(null);
+    setTimeline([]);
+    setShowNew(false);
+    setSearching(false);
+    setSearchQuery('');
+    setSearchError(null);
+    setSearchResults([]);
+  }, [workspaceId]);
 
   useEffect(() => {
     void refreshConversations();
@@ -183,13 +227,24 @@ export default function MensagensPage() {
       if (activeEffect) setMessageLoading(false);
     });
     const stop = startOnlinePolling(async () => {
-      await refreshMessages(activeId, false, true);
+      let pollingError: unknown;
+      try {
+        await refreshMessages(activeId, true, true);
+      } catch (caught) {
+        pollingError = caught;
+      }
+      try {
+        await refreshConversationBadges();
+      } catch (caught) {
+        pollingError ??= caught;
+      }
+      if (pollingError) throw pollingError;
     });
     return () => {
       activeEffect = false;
       stop();
     };
-  }, [activeId, ownerId, refreshMessages]);
+  }, [activeId, ownerId, refreshConversationBadges, refreshMessages]);
 
   useEffect(() => {
     if (activeId == null || !ownerId) return;
@@ -212,7 +267,10 @@ export default function MensagensPage() {
   }, [activeId, ownerId, workspaceId]);
 
   useEffect(() => {
-    if (activeId == null || !ownerId || draftKey !== `${ownerId}:${workspaceId}:${activeId}`) return;
+    if (activeId == null
+      || !ownerId
+      || sending
+      || draftKey !== `${ownerId}:${workspaceId}:${activeId}`) return;
     const timer = window.setTimeout(() => {
       if (!draft.trim() && files.length === 0) {
         void clearMessageDraft(ownerId, workspaceId, activeId)
@@ -233,8 +291,12 @@ export default function MensagensPage() {
           setMessageError(caught instanceof Error ? caught.message : 'Não foi possível salvar o rascunho.');
         });
     }, 400);
-    return () => window.clearTimeout(timer);
-  }, [activeId, draft, draftKey, files, ownerId, workspaceId]);
+    draftSaveTimer.current = timer;
+    return () => {
+      window.clearTimeout(timer);
+      if (draftSaveTimer.current === timer) draftSaveTimer.current = undefined;
+    };
+  }, [activeId, draft, draftKey, files, ownerId, sending, workspaceId]);
 
   useEffect(() => {
     const stream = streamRef.current;
@@ -246,10 +308,18 @@ export default function MensagensPage() {
   async function handleSend(event: FormEvent) {
     event.preventDefault();
     if (activeId == null || !ownerId || (!draft.trim() && files.length === 0)) return;
+    const requestedWorkspace = workspaceId;
+    const requestedConversation = activeId;
+    if (draftSaveTimer.current !== undefined) {
+      window.clearTimeout(draftSaveTimer.current);
+      draftSaveTimer.current = undefined;
+    }
     setSending(true);
     setMessageError(null);
     try {
       await captureMessage({ workspaceId, conversationId: activeId, body: draft, attachments: files });
+      if (activeWorkspaceRef.current !== requestedWorkspace
+        || activeConversationRef.current !== requestedConversation) return;
       setDraft('');
       setFiles([]);
       savedFilesSignature.current = '';
@@ -257,7 +327,9 @@ export default function MensagensPage() {
       await refreshMessages(activeId, false);
       if (navigator.onLine) await refreshConversations(true);
     } catch (caught) {
-      setMessageError(caught instanceof Error ? caught.message : 'Não foi possível guardar a mensagem.');
+      if (activeWorkspaceRef.current === requestedWorkspace) {
+        setMessageError(caught instanceof Error ? caught.message : 'Não foi possível guardar a mensagem.');
+      }
     } finally {
       setSending(false);
     }
@@ -265,13 +337,17 @@ export default function MensagensPage() {
 
   async function retryMessages() {
     if (!ownerId) return;
+    const requestedWorkspace = workspaceId;
     setSending(true);
     setMessageError(null);
     try {
       await retryPendingMessages(ownerId, workspaceId);
+      if (activeWorkspaceRef.current !== requestedWorkspace) return;
       if (activeId != null) await refreshMessages(activeId, false);
     } catch (caught) {
-      setMessageError(caught instanceof Error ? caught.message : 'Não foi possível reenviar as mensagens.');
+      if (activeWorkspaceRef.current === requestedWorkspace) {
+        setMessageError(caught instanceof Error ? caught.message : 'Não foi possível reenviar as mensagens.');
+      }
     } finally {
       setSending(false);
     }
@@ -289,10 +365,14 @@ export default function MensagensPage() {
     }
     setSearching(true);
     setSearchError(null);
+    const requestedWorkspace = workspaceId;
     try {
-      setSearchResults(await searchMensagens(workspaceId, searchQuery));
+      const results = await searchMensagens(workspaceId, searchQuery);
+      if (activeWorkspaceRef.current === requestedWorkspace) setSearchResults(results);
     } catch (caught) {
-      setSearchError(caught instanceof Error ? caught.message : 'Não foi possível buscar nas conversas.');
+      if (activeWorkspaceRef.current === requestedWorkspace) {
+        setSearchError(caught instanceof Error ? caught.message : 'Não foi possível buscar nas conversas.');
+      }
     } finally {
       setSearching(false);
     }
@@ -319,7 +399,7 @@ export default function MensagensPage() {
           <h1>Conversas</h1>
           <p>Trocas ligadas ao trabalho real. O que for enviado entra na memória operacional.</p>
         </div>
-        <button className="primary-button" disabled={!navigator.onLine || territories.length === 0} onClick={() => setShowNew(true)}>Nova conversa</button>
+        <button className="primary-button" disabled={!navigator.onLine || contexts.length === 0} onClick={() => setShowNew(true)}>Nova conversa</button>
       </header>
 
       <form className="message-search" role="search" onSubmit={handleSearch}>
@@ -353,9 +433,9 @@ export default function MensagensPage() {
         <ErrorState message={error} onRetry={() => void refreshConversations()} />
       ) : conversations.length === 0 ? (
         <EmptyState
-          title={territories.length === 0 ? 'Nenhuma conversa disponível' : 'Nenhuma conversa iniciada'}
-          message={navigator.onLine ? 'Crie uma conversa ligada a um território existente.' : 'Conecte este aparelho uma vez para guardar as conversas autorizadas.'}
-          action={territories.length > 0 ? <button className="secondary-button" onClick={() => setShowNew(true)}>Nova conversa</button> : undefined}
+          title={contexts.length === 0 ? 'Nenhuma conversa disponível' : 'Nenhuma conversa iniciada'}
+          message={navigator.onLine ? 'Crie uma conversa ligada a um território, missão ou ação existente.' : 'Conecte este aparelho uma vez para guardar as conversas autorizadas.'}
+          action={contexts.length > 0 ? <button className="secondary-button" onClick={() => setShowNew(true)}>Nova conversa</button> : undefined}
         />
       ) : (
         <div className="message-layout">
@@ -436,7 +516,7 @@ export default function MensagensPage() {
 
       {showNew && <NewConversationDialog
         workspaceId={workspaceId}
-        territories={territories}
+        contexts={contexts}
         onClose={() => setShowNew(false)}
         onCreated={(conversation) => {
           setShowNew(false);

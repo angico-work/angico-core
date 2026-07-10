@@ -584,20 +584,49 @@ export async function cacheRemoteMessages(
   ownerId: string,
   workspaceId: string,
   conversationId: number,
+  currentPessoaId: number | null,
   messages: Mensagem[]
 ): Promise<void> {
   requirePartition(ownerId, workspaceId);
   const db = await database();
-  const tx = db.transaction(['messages', 'blobs'], 'readwrite');
+  const tx = db.transaction(['messages', 'outbox', 'blobs'], 'readwrite');
   const store = tx.objectStore('messages');
+  const outbox = tx.objectStore('outbox');
   for (const message of messages) {
     if (message.workspaceId !== workspaceId || message.conversaId !== conversationId) continue;
+    const matchingClientMessageId = typeof message.clientMessageId === 'string'
+      && currentPessoaId != null
+      && message.senderPessoaId === currentPessoaId
+      ? message.clientMessageId
+      : undefined;
     const clientMessageId = message.clientMessageId || `remote-${message.id}`;
-    const localKey = message.clientMessageId
-      ? localMessageKey(ownerId, workspaceId, message.clientMessageId)
+    const localKey = matchingClientMessageId
+      ? localMessageKey(ownerId, workspaceId, matchingClientMessageId)
       : remoteMessageKey(ownerId, workspaceId, message.id);
     const existing = await store.get(localKey);
     if (existing) {
+      if (existing.ownerId !== ownerId
+        || existing.workspaceId !== workspaceId
+        || existing.conversationId !== conversationId) {
+        continue;
+      }
+      const pending = matchingClientMessageId
+        ? await outbox.get(matchingClientMessageId)
+        : undefined;
+      const matchingOperation = pending?.operation === 'MESSAGE_SEND'
+        && pending.ownerId === ownerId
+        && pending.workspaceId === workspaceId
+        && pending.body.conversationId === conversationId;
+      if (pending && !matchingOperation) continue;
+      if (matchingOperation) {
+        await outbox.put({
+          ...pending,
+          status: 'SYNCED',
+          lastError: undefined,
+          leaseUntil: undefined,
+          updatedAt: message.recordedAt || message.createdAt
+        });
+      }
       await store.put({
         ...existing,
         syncStatus: 'SYNCED',
@@ -605,9 +634,11 @@ export async function cacheRemoteMessages(
         remote: message,
         updatedAt: message.recordedAt || message.createdAt
       });
-      await Promise.all(existing.attachments.map((attachment) => (
-        tx.objectStore('blobs').delete(attachment.blobKey)
-      )));
+      if (!pending || matchingOperation) {
+        await Promise.all(existing.attachments.map((attachment) => (
+          tx.objectStore('blobs').delete(attachment.blobKey)
+        )));
+      }
     } else {
       await store.put({
         key: localKey,
@@ -657,21 +688,36 @@ export async function listLocalObservations(
 export interface OfflineOwnerState {
   total: number;
   unsynced: number;
+  drafts: number;
   conflicts: number;
   blocked: number;
   actionRequired: number;
 }
 
 export async function getOfflineOwnerState(ownerId: string): Promise<OfflineOwnerState> {
-  const entries = await listOutbox(ownerId);
-  return entries.reduce<OfflineOwnerState>((state, entry) => {
-    state.total += 1;
-    if (!['SYNCED', 'SUPERSEDED', 'DISCARDED'].includes(entry.status)) state.unsynced += 1;
-    if (entry.status === 'CONFLICT') state.conflicts += 1;
-    if (entry.status === 'BLOCKED') state.blocked += 1;
-    if (entry.status === 'ACTION_REQUIRED') state.actionRequired += 1;
-    return state;
-  }, { total: 0, unsynced: 0, conflicts: 0, blocked: 0, actionRequired: 0 });
+  const db = await database();
+  const [entries, storedDrafts] = await Promise.all([
+    listOutbox(ownerId),
+    db.getAll('drafts')
+  ]);
+  const state = entries.reduce<OfflineOwnerState>((current, entry) => {
+    current.total += 1;
+    if (!['SYNCED', 'SUPERSEDED', 'DISCARDED'].includes(entry.status)) current.unsynced += 1;
+    if (entry.status === 'CONFLICT') current.conflicts += 1;
+    if (entry.status === 'BLOCKED') current.blocked += 1;
+    if (entry.status === 'ACTION_REQUIRED') current.actionRequired += 1;
+    return current;
+  }, { total: 0, unsynced: 0, drafts: 0, conflicts: 0, blocked: 0, actionRequired: 0 });
+  storedDrafts
+    .filter((draft) => draft.ownerId === ownerId && draft.kind === 'MESSAGE')
+    .forEach((draft) => {
+      const value = draft.value as MessageDraftValue;
+      if (!value.body.trim() && value.attachments.length === 0) return;
+      state.total += 1;
+      state.unsynced += 1;
+      state.drafts += 1;
+    });
+  return state;
 }
 
 export async function clearOfflineOwner(
@@ -782,7 +828,7 @@ export async function markOutboxStatus(
         remote: remote ?? local.remote,
         updatedAt: now
       });
-      if (status === 'SYNCED' && remote) {
+      if ((status === 'SYNCED' && remote) || status === 'DISCARDED') {
         await Promise.all(local.attachments.map((attachment) => (
           tx.objectStore('blobs').delete(attachment.blobKey)
         )));
@@ -804,6 +850,63 @@ export async function requeueManualOutbox(
   const now = new Date().toISOString();
   await Promise.all(blocked.map((entry) => markOutboxStatus(entry.id, 'QUEUED', { nextAttemptAt: now })));
   return blocked.length;
+}
+
+export async function recoverMessageAsDraft(
+  id: string,
+  ownerId: string,
+  workspaceId: string
+): Promise<number> {
+  requirePartition(ownerId, workspaceId);
+  const db = await database();
+  const tx = db.transaction(['outbox', 'messages', 'drafts'], 'readwrite');
+  const outbox = tx.objectStore('outbox');
+  const messages = tx.objectStore('messages');
+  const drafts = tx.objectStore('drafts');
+  const entry = await outbox.get(id);
+  if (!entry
+    || entry.operation !== 'MESSAGE_SEND'
+    || entry.ownerId !== ownerId
+    || entry.workspaceId !== workspaceId) {
+    throw new Error('A mensagem não pertence a esta pessoa e a este território.');
+  }
+  if (entry.status !== 'CONFLICT' && entry.status !== 'ACTION_REQUIRED') {
+    throw new Error('Somente mensagens recusadas podem voltar para o rascunho.');
+  }
+  const draftKey = messageDraftKey(ownerId, workspaceId, entry.body.conversationId);
+  const existingDraft = await drafts.get(draftKey);
+  if (existingDraft?.kind === 'MESSAGE') {
+    const value = existingDraft.value as MessageDraftValue;
+    if (value.body.trim() || value.attachments.length > 0) {
+      throw new Error('Já existe um rascunho nesta conversa. Envie ou descarte esse conteúdo antes de recuperar a mensagem.');
+    }
+  }
+  const now = new Date().toISOString();
+  await drafts.put({
+    key: draftKey,
+    ownerId,
+    workspaceId,
+    kind: 'MESSAGE',
+    value: {
+      conversationId: entry.body.conversationId,
+      body: entry.body.body,
+      attachments: entry.body.attachments
+    } satisfies MessageDraftValue,
+    updatedAt: now
+  });
+  await outbox.put({
+    ...entry,
+    status: 'DISCARDED',
+    leaseUntil: undefined,
+    updatedAt: now
+  });
+  const local = await messages.get(entry.localEntityKey);
+  if (local) {
+    await messages.put({ ...local, syncStatus: 'DISCARDED', updatedAt: now });
+  }
+  await tx.done;
+  announceChange();
+  return entry.body.conversationId;
 }
 
 type ObservationRevision = Partial<Pick<ObservacaoInput,

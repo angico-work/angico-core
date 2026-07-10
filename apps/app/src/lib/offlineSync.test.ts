@@ -13,6 +13,7 @@ import {
 } from './offlineStore';
 import {
   captureMessage,
+  retryPendingMessages,
   retryPendingObservations,
   syncPendingMessages,
   syncPendingObservations
@@ -294,5 +295,49 @@ describe('offline synchronization', () => {
       body: 'Anotação offline.',
       syncStatus: 'QUEUED'
     });
+  });
+
+  it('retries only message operations after an explicit request with a revalidated session', async () => {
+    const queuedMessage = await enqueueMessage({
+      workspaceId: 'territorio-a', conversationId: 12, body: 'Tentar novamente.', attachments: []
+    }, 'ana.sp');
+    await enqueueObservation(observation, 'ana.sp');
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response(503, { detail: 'indisponível' })));
+    await syncPendingMessages({ ownerId: 'ana.sp' });
+    await syncPendingObservations({ ownerId: 'ana.sp' });
+    localStorage.setItem('angico.session.validatedAt', new Date().toISOString());
+    const sent = {
+      id: 93,
+      workspaceId: 'territorio-a',
+      conversaId: 12,
+      senderPessoaId: 7,
+      senderNome: 'Ana',
+      corpo: 'Tentar novamente.',
+      latitude: null,
+      longitude: null,
+      localDescricao: null,
+      linkedEntityType: null,
+      linkedEntityId: null,
+      clientMessageId: queuedMessage.clientMessageId,
+      deviceId: queuedMessage.deviceId,
+      status: 'ENVIADA',
+      occurredAt: queuedMessage.occurredAt,
+      recordedAt: queuedMessage.occurredAt,
+      createdAt: queuedMessage.occurredAt,
+      anexos: [],
+      relacoes: []
+    };
+    const retryFetch = vi.fn().mockResolvedValue(response(201, sent));
+    vi.stubGlobal('fetch', retryFetch);
+
+    await retryPendingMessages('ana.sp', 'territorio-a');
+
+    expect(retryFetch).toHaveBeenCalledTimes(1);
+    expect(String(retryFetch.mock.calls[0][0])).toContain('/api/mensagens/conversas/12/mensagens');
+    expect(await getLocalMessage('ana.sp', 'territorio-a', queuedMessage.clientMessageId)).toMatchObject({
+      syncStatus: 'SYNCED'
+    });
+    expect((await listOutbox('ana.sp', 'territorio-a')).find((entry) => entry.operation === 'CREATE_OBSERVATION'))
+      .toMatchObject({ status: 'RETRYABLE_ERROR' });
   });
 });
