@@ -22,6 +22,11 @@ self.addEventListener('fetch', (event) => {
 
   const url = new URL(request.url);
 
+  if (url.origin === self.location.origin && url.pathname.startsWith('/api/')) {
+    event.respondWith(fetch(request, { cache: 'no-store' }));
+    return;
+  }
+
   // SPA navigations → network-first, fall back to the cached shell.
   if (request.mode === 'navigate') {
     event.respondWith(
@@ -37,12 +42,6 @@ self.addEventListener('fetch', (event) => {
   }
 
   if (url.origin !== self.location.origin) return;
-
-  // Private API responses cannot be shared safely across browser users.
-  if (url.pathname.startsWith('/api/')) {
-    event.respondWith(fetch(request, { cache: 'no-store' }));
-    return;
-  }
 
   // Static assets → stale-while-revalidate.
   event.respondWith(
