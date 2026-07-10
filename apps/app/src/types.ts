@@ -67,6 +67,9 @@ export interface ObservacaoInput {
   autorId?: string;
   latitude?: number;
   longitude?: number;
+  clientMutationId?: string;
+  occurredAt?: string;
+  deviceId?: string;
 }
 
 // Response from the observações endpoints
