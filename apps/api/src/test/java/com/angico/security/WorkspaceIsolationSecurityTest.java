@@ -135,6 +135,10 @@ class WorkspaceIsolationSecurityTest {
                 Arguments.of("/api/glimpse/memoria?workspaceId=%s"),
                 Arguments.of("/api/indicadores?workspaceId=%s"),
                 Arguments.of("/api/medicoes?workspaceId=%s"),
+                Arguments.of("/api/evidencias?workspaceId=%s"),
+                Arguments.of("/api/resultados?workspaceId=%s"),
+                Arguments.of("/api/organizacoes?workspaceId=%s"),
+                Arguments.of("/api/recursos?workspaceId=%s"),
                 Arguments.of("/api/territorios?workspaceId=%s"),
                 Arguments.of("/api/history/workspaces/%s")
         );

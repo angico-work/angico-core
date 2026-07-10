@@ -107,7 +107,7 @@ if [[ -n "$UPGRADE_FROM_REF" ]]; then
     "$PREVIOUS_SOURCE_DIR/apps/api/target/angico-api-0.0.1-SNAPSHOT.jar" \
     "Upgrade source $UPGRADE_FROM_REF"
   PREVIOUS_VERSIONS="$(flyway_versions)"
-  if [[ "$PREVIOUS_VERSIONS" != "0,1,2" ]]; then
+  if [[ "$PREVIOUS_VERSIONS" != "0,1,2" && "$PREVIOUS_VERSIONS" != "0,1,2,3" ]]; then
     echo "Unexpected pre-upgrade Flyway history: $PREVIOUS_VERSIONS" >&2
     exit 1
   fi
@@ -117,7 +117,7 @@ fi
 run_app "$ROOT_DIR/target/angico-api-0.0.1-SNAPSHOT.jar" "Current production profile"
 
 VERSIONS="$(flyway_versions)"
-if [[ "$VERSIONS" != "0,1,2,3" ]]; then
+if [[ "$VERSIONS" != "0,1,2,3,4" ]]; then
   echo "Unexpected Flyway history: $VERSIONS" >&2
   exit 1
 fi

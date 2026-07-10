@@ -13,20 +13,20 @@ public class Organizacao {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
-    @Column(nullable = false)
+    @Column
     private String workspaceId;
-    @Column(nullable = false, length = 200)
+    @Column(length = 200)
     private String nome;
-    @Column(nullable = false, length = 40)
+    @Column(length = 40)
     private String tipo;
-    @Column(nullable = false, length = 20)
+    @Column(length = 20)
     private String status;
     private Long missionId;
     @Column(length = 20)
     private String missionRelation;
-    @Column(nullable = false)
+    @Column
     private String actorId;
-    @Column(nullable = false)
+    @Column
     private Instant createdAt;
 
     public Long getId() {

@@ -20,16 +20,16 @@ public class Evidencia {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(nullable = false)
+    @Column
     private String workspaceId;
 
-    @Column(nullable = false, length = 40)
+    @Column(length = 40)
     private String subjectType;
 
-    @Column(nullable = false)
+    @Column
     private Long subjectId;
 
-    @Column(nullable = false, length = 200)
+    @Column(length = 200)
     private String title;
 
     @Column(length = 2000)
@@ -49,13 +49,13 @@ public class Evidencia {
     @Column(length = 1000)
     private String storagePath;
 
-    @Column(nullable = false)
+    @Column
     private Instant capturedAt;
 
-    @Column(nullable = false)
+    @Column
     private Instant recordedAt;
 
-    @Column(nullable = false)
+    @Column
     private String actorId;
 
     @Column(length = 128)

@@ -20,30 +20,30 @@ public class Participacao {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(nullable = false)
+    @Column
     private String workspaceId;
 
-    @Column(nullable = false)
+    @Column
     private Long organizationId;
 
-    @Column(nullable = false)
+    @Column
     private Long pessoaId;
 
-    @Column(nullable = false, length = 40)
+    @Column(length = 40)
     private String papel;
 
-    @Column(nullable = false, length = 20)
+    @Column(length = 20)
     private String status;
 
-    @Column(nullable = false)
+    @Column
     private Instant startedAt;
 
     private Instant endedAt;
 
-    @Column(nullable = false)
+    @Column
     private Instant recordedAt;
 
-    @Column(nullable = false)
+    @Column
     private String actorId;
 
     @Column(length = 64)

@@ -15,7 +15,7 @@ public class Resultado {
     private Long id;
     private String workspaceId;
     private Long acaoId;
-    @Column(nullable = false, length = 200)
+    @Column(length = 200)
     private String titulo;
     @Column(length = 2000)
     private String descricao;

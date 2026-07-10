@@ -23,6 +23,12 @@ class OntologyServiceTest {
                 .anyMatch(path -> path.equals("OBSERVACAO IDENTIFICA PROBLEMA")));
         assertTrue(response.validatedPaths().stream()
                 .anyMatch(path -> path.equals("MENSAGEM COMPARTILHA LOCALIZACAO")));
+        assertTrue(response.validatedPaths().stream()
+                .anyMatch(path -> path.equals("EVIDENCIA SUSTENTA RESULTADO")));
+        assertTrue(response.validatedPaths().stream()
+                .anyMatch(path -> path.equals("PESSOA PARTICIPA_DE ORGANIZACAO")));
+        assertTrue(response.validatedPaths().stream()
+                .anyMatch(path -> path.equals("ACAO UTILIZA RECURSO")));
     }
 
     @Test
