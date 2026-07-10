@@ -84,7 +84,7 @@ O trabalho será feito em fatias verticais. Cada tarefa termina com testes e bui
 **Interfaces**
 
 ```java
-public interface WorkspaceAuthorizationService {
+public final class WorkspaceAuthorizationService {
     void requireMember(String workspaceId);
     void requireRole(String workspaceId, Set<String> roles);
     String requireAuthorizedWorkspace(String requestedWorkspaceId);
@@ -98,8 +98,9 @@ export interface AuthSession {
   email: string | null;
   angicoId: string | null;
   papel: string | null;
-  workspaceId: string;
+  workspaceId: string | null;
   expiresAt: string;
+  csrfToken: string;
 }
 ```
 
@@ -107,7 +108,7 @@ export interface AuthSession {
 
 - Autenticação obrigatória por padrão.
 - Seed de demonstração desligado por padrão e sem senha fixa no código.
-- Cadastro público não atribui liderança nem acesso ao workspace existente.
+- Cadastro público fica desligado por padrão; quando habilitado, cria workspace isolado e associação `OWNER`, nunca acesso ao workspace existente.
 - Sessão possui expiração e endpoint de revalidação.
 - Cookie de sessão usa `HttpOnly`, `Secure` em produção e `SameSite=Lax`; mutações autenticadas por cookie exigem token CSRF associado à sessão.
 - A migration cria sessões e índices únicos de email e Angico ID sem remover registros existentes.
