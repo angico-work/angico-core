@@ -1,6 +1,7 @@
 package com.angico.impacto;
 
 import jakarta.persistence.Entity;
+import jakarta.persistence.Column;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
@@ -14,9 +15,13 @@ public class Resultado {
     private Long id;
     private String workspaceId;
     private Long acaoId;
+    @Column(nullable = false, length = 200)
     private String titulo;
+    @Column(length = 2000)
     private String descricao;
     private String status;
+    private String actorId;
+    private Instant occurredAt;
     private Instant createdAt;
 
     public Long getId() {
@@ -65,6 +70,22 @@ public class Resultado {
 
     public void setStatus(String status) {
         this.status = status;
+    }
+
+    public String getActorId() {
+        return actorId;
+    }
+
+    public void setActorId(String actorId) {
+        this.actorId = actorId;
+    }
+
+    public Instant getOccurredAt() {
+        return occurredAt == null ? createdAt : occurredAt;
+    }
+
+    public void setOccurredAt(Instant occurredAt) {
+        this.occurredAt = occurredAt;
     }
 
     public Instant getCreatedAt() {

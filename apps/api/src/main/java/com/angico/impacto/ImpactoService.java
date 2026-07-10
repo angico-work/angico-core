@@ -7,6 +7,7 @@ import java.util.Map;
 import com.angico.core.memory.MemoryEvent;
 import com.angico.core.memory.MemoryRelationMetadata;
 import com.angico.core.memory.OperationalMemoryService;
+import com.angico.core.ontology.OntologyService;
 import com.angico.common.ForbiddenException;
 import com.angico.territorios.Territorio;
 import com.angico.territorios.TerritorioService;
@@ -14,6 +15,7 @@ import com.angico.workspaces.WorkspaceAuthorizationService;
 import com.angico.workspaces.WorkspaceReferenceValidator;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import java.util.HashMap;
 
 @Service
 public class ImpactoService {
@@ -63,9 +65,10 @@ public class ImpactoService {
         Indicador indicador = new Indicador();
         indicador.setWorkspaceId(territorio.getWorkspaceId());
         indicador.setTerritorioId(territorio.getId());
-        indicador.setNome(TerritorioService.requireText(request.nome(), "nome"));
-        indicador.setUnidade(TerritorioService.defaultText(request.unidade(), "un"));
-        indicador.setDescricao(request.descricao());
+        indicador.setNome(TerritorioService.requireText(request.nome(), "nome").strip());
+        indicador.setUnidade(TerritorioService.defaultText(request.unidade(), "un").strip());
+        indicador.setDescricao(request.descricao() == null || request.descricao().isBlank()
+                ? null : request.descricao().strip());
         indicador.setStatus("ATIVO");
         indicador.setCreatedAt(now);
         indicador.setUpdatedAt(now);
@@ -73,7 +76,7 @@ public class ImpactoService {
 
         memoryService.registrarObjeto(
                 indicador.getWorkspaceId(),
-                "INDICADOR",
+                OntologyService.INDICADOR,
                 String.valueOf(indicador.getId()),
                 null,
                 indicador.getNome(),
@@ -85,15 +88,36 @@ public class ImpactoService {
             var resultado = referenceValidator.requireResultado(request.resultadoId(), workspaceId);
             memoryService.registrarRelacaoAtiva(
                             indicadorSalvo.getWorkspaceId(),
-                            "INDICADOR",
+                            OntologyService.INDICADOR,
                             String.valueOf(indicadorSalvo.getId()),
-                            "RESULTADO",
+                            OntologyService.RESULTADO,
                             String.valueOf(resultado.getId()),
                             "MEDE",
                             new MemoryRelationMetadata(
                                     "api", "Indicador mede resultado informado", actorId, null)
                     );
         }
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("territorioId", territorio.getId());
+        payload.put("nome", indicador.getNome());
+        payload.put("unidade", indicador.getUnidade());
+        if (request.resultadoId() != null) {
+            payload.put("resultadoId", request.resultadoId());
+        }
+        memoryService.registrarEvento(new MemoryEvent(
+                indicador.getWorkspaceId(),
+                OntologyService.INDICADOR,
+                String.valueOf(indicador.getId()),
+                "indicador.criado",
+                "api",
+                actorId,
+                null,
+                null,
+                null,
+                1,
+                now,
+                payload
+        ));
         return indicador;
     }
 

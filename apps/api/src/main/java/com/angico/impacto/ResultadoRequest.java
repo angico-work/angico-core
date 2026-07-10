@@ -4,13 +4,13 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
+import java.time.Instant;
 
-public record IndicadorRequest(
+public record ResultadoRequest(
         String workspaceId,
-        @NotNull @Positive Long territorioId,
-        @Positive Long resultadoId,
-        @NotBlank @Size(max = 200) String nome,
-        @Size(max = 40) String unidade,
-        @Size(max = 2000) String descricao
+        @NotNull @Positive Long acaoId,
+        @NotBlank @Size(max = 200) String titulo,
+        @Size(max = 2000) String descricao,
+        Instant occurredAt
 ) {
 }
