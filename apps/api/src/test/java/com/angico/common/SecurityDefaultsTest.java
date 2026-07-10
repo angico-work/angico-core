@@ -29,7 +29,8 @@ class SecurityDefaultsTest {
         assertEquals("${ANGICO_SEED_DEMO_LEADER_PASSWORD:}",
                 property(sources, "angico.seed-demo-leader-password"));
         assertEquals("dev", property(sources, "spring.profiles.default"));
-        assertEquals("${ANGICO_FLYWAY_ENABLED:false}", property(sources, "spring.flyway.enabled"));
+        assertEquals("${ANGICO_FLYWAY_ENABLED:false}",
+                property(sources, "angico.database.migrations-enabled"));
     }
 
     @Test
@@ -44,20 +45,33 @@ class SecurityDefaultsTest {
         assertEquals(false, property(devSources, "angico.auth.cookie-secure"));
         assertEquals(true, property(prodSources, "angico.auth.cookie-secure"));
         assertEquals("update", property(devSources, "spring.jpa.hibernate.ddl-auto"));
-        assertEquals("validate", property(prodSources, "spring.jpa.hibernate.ddl-auto"));
+        assertEquals("update", property(prodSources, "spring.jpa.hibernate.ddl-auto"));
+        assertEquals("${ANGICO_FLYWAY_ENABLED:true}",
+                property(prodSources, "angico.database.migrations-enabled"));
         assertEquals("${ANGICO_ALLOWED_ORIGINS}", property(prodSources, "angico.allowed-origins"));
     }
 
     @Test
-    void productionMigrationIsAdditiveAndFlywayActivationIsOptIn() throws IOException {
-        ClassPathResource migration = new ClassPathResource(
-                "db/migration/V1__session_and_identity_constraints.sql");
-        assertTrue(migration.exists(), "the versioned production migration must exist");
-        String sql = migration.getContentAsString(StandardCharsets.UTF_8).toLowerCase();
+    void productionMigrationsAreAdditiveAndVendorSpecific() throws IOException {
+        List<ClassPathResource> migrations = List.of(
+                new ClassPathResource("db/migration/common/V1__session_table.sql"),
+                new ClassPathResource("db/migration/postgresql/V2__identity_constraints.sql"),
+                new ClassPathResource("db/migration/h2/V2__identity_constraints.sql")
+        );
+        assertTrue(migrations.stream().allMatch(ClassPathResource::exists));
+        String sql = migrations.stream()
+                .map(resource -> {
+                    try {
+                        return resource.getContentAsString(StandardCharsets.UTF_8).toLowerCase();
+                    } catch (IOException exception) {
+                        throw new IllegalStateException(exception);
+                    }
+                })
+                .reduce("", String::concat);
         assertTrue(sql.contains("create table if not exists auth_session"));
         assertTrue(sql.contains("create unique index"));
-        assertTrue(sql.contains("lower(email)"));
-        assertTrue(sql.contains("lower(angico_id)"));
+        assertTrue(sql.contains("lower("));
+        assertTrue(sql.contains("regexp_replace"));
         assertFalse(sql.contains("delete from"));
         assertFalse(sql.contains("drop table"));
     }
@@ -80,7 +94,7 @@ class SecurityDefaultsTest {
         assertTrue(render.contains("key: SPRING_PROFILES_ACTIVE"));
         assertTrue(render.contains("value: prod"));
         assertTrue(render.contains("key: ANGICO_PUBLIC_REGISTRATION"));
-        assertTrue(render.contains("key: ANGICO_FLYWAY_ENABLED"));
+        assertTrue(render.contains("key: ANGICO_FLYWAY_ENABLED\n        value: \"true\""));
     }
 
     private int occurrences(String value, String needle) {

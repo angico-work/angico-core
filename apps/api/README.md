@@ -22,13 +22,26 @@ O endpoint de saúde está disponível em `GET /health`.
 
 ## Migração de sessão e identidade
 
-O Flyway fica desativado por padrão porque bancos existentes foram criados por `hibernate.ddl-auto=update` e ainda não possuem histórico de migrations. A migration `V1__session_and_identity_constraints.sql` é aditiva, mas os índices únicos recusam dados legados duplicados em vez de apagar ou escolher registros silenciosamente.
+O perfil `prod` usa temporariamente `hibernate.ddl-auto=update` para materializar o modelo JPA real e, ainda durante a inicialização, aplica migrations Flyway aditivas. O coordenador depende do `EntityManagerFactory`, cria a baseline `0` automaticamente e executa V1/V2 antes de a aplicação ficar pronta. `render.yaml` habilita esse caminho com `ANGICO_FLYWAY_ENABLED=true`; qualquer duplicidade ou falha de migration encerra o startup.
 
-Antes de ativar `ANGICO_FLYWAY_ENABLED=true` em um banco existente:
+Antes do primeiro deploy contra um banco existente:
 
 1. faça backup do banco;
-2. execute as consultas de duplicidade no cabeçalho da migration e resolva os conflitos preservando os registros;
-3. crie uma baseline Flyway na versão `0` para o schema legado;
-4. execute a migration e só então inicie o perfil `prod`, que usa `ddl-auto=validate`.
+2. execute o preflight abaixo e resolva conflitos preservando os registros;
+3. implante normalmente; não crie a baseline manualmente.
 
-Não execute esse procedimento contra `apps/api/data` durante testes. A suíte de segurança usa bancos H2 isolados em memória.
+```sql
+SELECT lower(btrim(email)), count(*)
+FROM pessoa
+WHERE email IS NOT NULL AND btrim(email) <> ''
+GROUP BY lower(btrim(email))
+HAVING count(*) > 1;
+
+SELECT lower(regexp_replace(btrim(angico_id), '^@', '')), count(*)
+FROM pessoa
+WHERE angico_id IS NOT NULL AND btrim(angico_id) <> ''
+GROUP BY lower(regexp_replace(btrim(angico_id), '^@', ''))
+HAVING count(*) > 1;
+```
+
+Esse regime é transicional: depois de gerar e revisar uma baseline completa do schema, a meta é voltar `ddl-auto` para `validate`. Não execute migrations contra `apps/api/data` durante testes. A suíte usa bancos H2 isolados em memória e também prova boot do perfil `prod` sobre banco vazio.

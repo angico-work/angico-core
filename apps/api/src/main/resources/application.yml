@@ -9,14 +9,12 @@ spring:
       max-request-size: ${ANGICO_UPLOAD_MAX_REQUEST_SIZE:8MB}
   jpa:
     open-in-view: false
-  flyway:
-    enabled: ${ANGICO_FLYWAY_ENABLED:false}
-    baseline-on-migrate: false
-
 server:
   port: ${SERVER_PORT:${PORT:8082}}
 
 angico:
+  database:
+    migrations-enabled: ${ANGICO_FLYWAY_ENABLED:false}
   auth:
     required: ${ANGICO_AUTH_REQUIRED:true}
     public-registration: ${ANGICO_PUBLIC_REGISTRATION:false}

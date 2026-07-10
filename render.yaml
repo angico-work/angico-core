@@ -22,7 +22,7 @@ services:
       - key: ANGICO_COOKIE_SECURE
         value: "true"
       - key: ANGICO_FLYWAY_ENABLED
-        value: "false"
+        value: "true"
       - key: ANGICO_SEED_DEMO_LEADER
         value: "false"
       - key: ANGICO_SEED_DEMO_LEADER_PASSWORD

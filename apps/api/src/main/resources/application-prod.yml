@@ -8,9 +8,11 @@ spring:
     password: ${ANGICO_DB_PASSWORD}
   jpa:
     hibernate:
-      ddl-auto: validate
+      ddl-auto: update
 
 angico:
+  database:
+    migrations-enabled: ${ANGICO_FLYWAY_ENABLED:true}
   auth:
     cookie-secure: true
   allowed-origins: ${ANGICO_ALLOWED_ORIGINS}
