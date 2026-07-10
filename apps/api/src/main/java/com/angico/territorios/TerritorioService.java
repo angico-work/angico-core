@@ -101,6 +101,7 @@ public class TerritorioService {
 
     @Transactional
     public TerritorioResponse create(TerritorioCreateRequest request) {
+        validateCoordinates(request.latitude(), request.longitude());
         Instant now = Instant.now();
         Territorio territorio = new Territorio();
         territorio.setWorkspaceId(authorizationService.requireAuthorizedWorkspace(request.workspaceId()));
@@ -110,8 +111,8 @@ public class TerritorioService {
         territorio.setBairro(request.bairro());
         territorio.setEstado(request.estado());
         territorio.setPais(defaultText(request.pais(), "Brasil"));
-        territorio.setLatitude(defaultNumber(request.latitude(), -23.5614));
-        territorio.setLongitude(defaultNumber(request.longitude(), -46.6559));
+        territorio.setLatitude(request.latitude());
+        territorio.setLongitude(request.longitude());
         territorio.setBoundingBox(toJson(request.boundingBox()));
         territorio.setStatus("ATIVO");
         territorio.setCreatedAt(now);
@@ -183,8 +184,14 @@ public class TerritorioService {
         return value == null ? "" : value;
     }
 
-    private Double defaultNumber(Double value, Double defaultValue) {
-        return value == null ? defaultValue : value;
+    private void validateCoordinates(Double latitude, Double longitude) {
+        if ((latitude == null) != (longitude == null)) {
+            throw new IllegalArgumentException("Latitude e longitude devem ser informadas juntas.");
+        }
+        if (latitude != null && (latitude < -90 || latitude > 90
+                || longitude < -180 || longitude > 180)) {
+            throw new IllegalArgumentException("Coordenadas inválidas.");
+        }
     }
 
     private String toJson(List<Double> values) {

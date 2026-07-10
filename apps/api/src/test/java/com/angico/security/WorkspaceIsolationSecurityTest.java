@@ -2,6 +2,7 @@ package com.angico.security;
 
 import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.not;
+import static org.hamcrest.Matchers.nullValue;
 import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.containsString;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -155,6 +156,41 @@ class WorkspaceIsolationSecurityTest {
                                 """.formatted(workspaceB)))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.status").value(403));
+    }
+
+    @Test
+    void territoryWithoutCoordinatesDoesNotReceiveInventedLocation() throws Exception {
+        mvc.perform(post("/api/territorios")
+                        .cookie(memberA.cookie())
+                        .header("X-CSRF-Token", memberA.csrfToken())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"workspaceId":"%s","nome":"Território sem coordenadas"}
+                                """.formatted(workspaceA)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.latitude", nullValue()))
+                .andExpect(jsonPath("$.longitude", nullValue()));
+    }
+
+    @Test
+    void territoryRejectsPartialOrOutOfRangeCoordinates() throws Exception {
+        mvc.perform(post("/api/territorios")
+                        .cookie(memberA.cookie())
+                        .header("X-CSRF-Token", memberA.csrfToken())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"workspaceId":"%s","nome":"Local incompleto","latitude":-10.5}
+                                """.formatted(workspaceA)))
+                .andExpect(status().isBadRequest());
+
+        mvc.perform(post("/api/territorios")
+                        .cookie(memberA.cookie())
+                        .header("X-CSRF-Token", memberA.csrfToken())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"workspaceId":"%s","nome":"Local inválido","latitude":91,"longitude":0}
+                                """.formatted(workspaceA)))
+                .andExpect(status().isBadRequest());
     }
 
     @Test
