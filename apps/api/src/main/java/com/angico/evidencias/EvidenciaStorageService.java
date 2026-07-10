@@ -53,7 +53,7 @@ public class EvidenciaStorageService {
                 .collect(Collectors.toUnmodifiableSet());
     }
 
-    public StoredEvidence store(MultipartFile file) {
+    public PreparedEvidence prepare(MultipartFile file) {
         if (file == null || file.isEmpty()) {
             throw new IllegalArgumentException("O arquivo de evidência está vazio.");
         }
@@ -82,6 +82,13 @@ public class EvidenciaStorageService {
         }
 
         String sha256 = sha256(bytes);
+        return new PreparedEvidence(
+                filename, contentType, (long) bytes.length, sha256, extension, bytes);
+    }
+
+    public StoredEvidence store(PreparedEvidence prepared) {
+        String extension = prepared.extension();
+        String sha256 = prepared.sha256();
         Path directory = uploadRoot.resolve("evidencias").resolve(sha256.substring(0, 2)).normalize();
         Path target = directory.resolve(UUID.randomUUID() + "." + extension).normalize();
         if (!target.startsWith(uploadRoot)) {
@@ -89,11 +96,17 @@ public class EvidenciaStorageService {
         }
         try {
             Files.createDirectories(directory);
-            Files.write(target, bytes, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE);
+            Files.write(target, prepared.bytes(), StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE);
         } catch (IOException exception) {
             throw new IllegalStateException("Não foi possível armazenar o arquivo de evidência.", exception);
         }
-        return new StoredEvidence(filename, contentType, (long) bytes.length, sha256, target);
+        return new StoredEvidence(
+                prepared.originalFilename(),
+                prepared.contentType(),
+                prepared.sizeBytes(),
+                sha256,
+                target
+        );
     }
 
     public Resource resource(Evidencia evidencia) {
@@ -210,6 +223,16 @@ public class EvidenciaStorageService {
             Long sizeBytes,
             String sha256,
             Path path
+    ) {
+    }
+
+    public record PreparedEvidence(
+            String originalFilename,
+            String contentType,
+            Long sizeBytes,
+            String sha256,
+            String extension,
+            byte[] bytes
     ) {
     }
 }

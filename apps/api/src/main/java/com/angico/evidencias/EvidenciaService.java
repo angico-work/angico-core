@@ -2,6 +2,9 @@ package com.angico.evidencias;
 
 import com.angico.common.ClockProvider;
 import com.angico.common.ConflictException;
+import com.angico.common.idempotency.IdempotencyOperation;
+import com.angico.common.idempotency.IdempotencyRecord;
+import com.angico.common.idempotency.IdempotencyService;
 import com.angico.core.ontology.OntologyService;
 import com.angico.workspaces.WorkspaceAuthorizationService;
 import com.angico.workspaces.WorkspaceReferenceValidator;
@@ -9,14 +12,17 @@ import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Locale;
+import java.util.Objects;
 import java.util.Set;
 import java.util.regex.Pattern;
 import org.springframework.core.io.Resource;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.multipart.MultipartFile;
 
 @Service
@@ -25,6 +31,7 @@ public class EvidenciaService {
     private static final Set<String> SUBJECT_TYPES = Set.of(
             OntologyService.OBSERVACAO, OntologyService.ACAO, OntologyService.RESULTADO);
     private static final Pattern OFFLINE_ID = Pattern.compile("[A-Za-z0-9._:-]{1,128}");
+    private static final String RESOURCE_TYPE = OntologyService.EVIDENCIA;
 
     private final EvidenciaRepository evidenciaRepository;
     private final EvidenciaStorageService storage;
@@ -32,6 +39,8 @@ public class EvidenciaService {
     private final WorkspaceAuthorizationService authorization;
     private final WorkspaceReferenceValidator references;
     private final ClockProvider clock;
+    private final IdempotencyService idempotencyService;
+    private final TransactionTemplate transactions;
 
     public EvidenciaService(
             EvidenciaRepository evidenciaRepository,
@@ -39,7 +48,9 @@ public class EvidenciaService {
             EvidenciaMemoryPublisher publisher,
             WorkspaceAuthorizationService authorization,
             WorkspaceReferenceValidator references,
-            ClockProvider clock
+            ClockProvider clock,
+            IdempotencyService idempotencyService,
+            PlatformTransactionManager transactionManager
     ) {
         this.evidenciaRepository = evidenciaRepository;
         this.storage = storage;
@@ -47,9 +58,10 @@ public class EvidenciaService {
         this.authorization = authorization;
         this.references = references;
         this.clock = clock;
+        this.idempotencyService = idempotencyService;
+        this.transactions = new TransactionTemplate(transactionManager);
     }
 
-    @Transactional
     public EvidenciaMetadataResponse create(
             String requestedWorkspaceId,
             String requestedSubjectType,
@@ -59,41 +71,184 @@ public class EvidenciaService {
             Instant capturedAt,
             String deviceId,
             String clientMutationId,
+            String rawIdempotencyKey,
             MultipartFile file
     ) {
         String workspaceId = authorization.requireAuthorizedWorkspace(requestedWorkspaceId);
-        String subjectType = validateSubject(requestedSubjectType, subjectId, workspaceId);
         String actorId = authorization.currentActorId();
-        Instant now = clock.now();
-        Instant captureTime = validateCapturedAt(capturedAt, now);
+        String subjectType = normalizeSubject(requestedSubjectType, subjectId);
+        String safeTitle = requiredText(title, "title", 200);
+        String safeDescription = optionalText(description, "description", 2000);
         String safeDeviceId = optionalOfflineId(deviceId, "deviceId");
         String safeMutationId = optionalOfflineId(clientMutationId, "clientMutationId");
+        String headerKey = idempotencyService.normalizeKey(rawIdempotencyKey);
+        if (safeMutationId != null && headerKey != null && !safeMutationId.equals(headerKey)) {
+            throw new IllegalArgumentException("clientMutationId deve coincidir com Idempotency-Key.");
+        }
+        String idempotencyKey = headerKey == null ? safeMutationId : headerKey;
+        if (safeMutationId == null) {
+            safeMutationId = idempotencyKey;
+        }
+        Instant now = clock.now();
+        Instant captureTime = validateCapturedAt(capturedAt, now);
+        EvidenciaStorageService.PreparedEvidence preparedFile = file == null
+                ? null
+                : storage.prepare(file);
+        CanonicalEvidencePayload payload = new CanonicalEvidencePayload(
+                workspaceId,
+                subjectType,
+                subjectId,
+                safeTitle,
+                safeDescription,
+                capturedAt == null ? null : captureTime.toString(),
+                safeDeviceId,
+                safeMutationId,
+                preparedFile == null ? null : new CanonicalFilePayload(
+                        preparedFile.originalFilename(),
+                        preparedFile.contentType(),
+                        preparedFile.sizeBytes(),
+                        preparedFile.sha256())
+        );
+        String requestHash = idempotencyKey == null
+                ? null
+                : idempotencyService.canonicalPayloadHash(payload);
+        String finalMutationId = safeMutationId;
+        try {
+            return Objects.requireNonNull(transactions.execute(status -> createInTransaction(
+                    workspaceId,
+                    actorId,
+                    subjectType,
+                    subjectId,
+                    safeTitle,
+                    safeDescription,
+                    captureTime,
+                    safeDeviceId,
+                    finalMutationId,
+                    idempotencyKey,
+                    requestHash,
+                    preparedFile
+            )));
+        } catch (DataIntegrityViolationException exception) {
+            return recoverAfterConstraint(
+                    workspaceId, actorId, finalMutationId, idempotencyKey, requestHash, exception);
+        }
+    }
 
-        EvidenciaStorageService.StoredEvidence stored = file == null ? null : storage.store(file);
+    private EvidenciaMetadataResponse createInTransaction(
+            String workspaceId,
+            String actorId,
+            String subjectType,
+            Long subjectId,
+            String title,
+            String description,
+            Instant capturedAt,
+            String deviceId,
+            String clientMutationId,
+            String idempotencyKey,
+            String requestHash,
+            EvidenciaStorageService.PreparedEvidence preparedFile
+    ) {
+        if (idempotencyKey != null) {
+            var existing = idempotencyService.find(
+                    workspaceId, actorId, IdempotencyOperation.EVIDENCIA_CREATE, idempotencyKey);
+            if (existing.isPresent()) {
+                return replay(existing.get(), workspaceId, requestHash);
+            }
+        }
+        if (clientMutationId != null && evidenciaRepository
+                .findByWorkspaceIdAndClientMutationId(workspaceId, clientMutationId)
+                .isPresent()) {
+            throw new ConflictException("clientMutationId já foi usado neste workspace.");
+        }
+        references.requireLinkableEntity(subjectType, String.valueOf(subjectId), workspaceId);
+        IdempotencyRecord reservation = idempotencyKey == null
+                ? null
+                : idempotencyService.reserve(
+                        workspaceId,
+                        actorId,
+                        IdempotencyOperation.EVIDENCIA_CREATE,
+                        idempotencyKey,
+                        requestHash
+                );
+
+        EvidenciaStorageService.StoredEvidence stored = preparedFile == null
+                ? null
+                : storage.store(preparedFile);
         registerRollbackCleanup(stored);
 
         Evidencia evidence = new Evidencia(
                 workspaceId,
                 subjectType,
                 subjectId,
-                requiredText(title, "title", 200),
-                optionalText(description, "description", 2000),
-                captureTime,
-                now,
+                title,
+                description,
+                capturedAt,
+                clock.now(),
                 actorId,
-                safeDeviceId,
-                safeMutationId
+                deviceId,
+                clientMutationId
         );
         if (stored != null) {
             evidence.attach(stored);
         }
-        try {
-            evidence = evidenciaRepository.saveAndFlush(evidence);
-        } catch (DataIntegrityViolationException exception) {
-            throw new ConflictException("clientMutationId já foi usado neste workspace.");
-        }
+        evidence = evidenciaRepository.saveAndFlush(evidence);
         publisher.publish(evidence);
+        if (reservation != null) {
+            reservation.complete(
+                    RESOURCE_TYPE,
+                    String.valueOf(evidence.getId()),
+                    201,
+                    "application/json",
+                    clock.now()
+            );
+        }
         return EvidenciaMetadataResponse.from(evidence);
+    }
+
+    private EvidenciaMetadataResponse recoverAfterConstraint(
+            String workspaceId,
+            String actorId,
+            String clientMutationId,
+            String idempotencyKey,
+            String requestHash,
+            DataIntegrityViolationException original
+    ) {
+        return Objects.requireNonNull(transactions.execute(status -> {
+            if (idempotencyKey != null) {
+                var existing = idempotencyService.find(
+                        workspaceId, actorId, IdempotencyOperation.EVIDENCIA_CREATE, idempotencyKey);
+                if (existing.isPresent()) {
+                    return replay(existing.get(), workspaceId, requestHash);
+                }
+            }
+            if (clientMutationId != null && evidenciaRepository
+                    .findByWorkspaceIdAndClientMutationId(workspaceId, clientMutationId)
+                    .isPresent()) {
+                throw new ConflictException("clientMutationId já foi usado neste workspace.");
+            }
+            throw original;
+        }));
+    }
+
+    private EvidenciaMetadataResponse replay(
+            IdempotencyRecord record,
+            String workspaceId,
+            String requestHash
+    ) {
+        idempotencyService.validateReplay(record, requestHash);
+        if (!RESOURCE_TYPE.equals(record.getResourceType())) {
+            throw new ConflictException("Resultado idempotente incompatível com evidência.");
+        }
+        long evidenceId;
+        try {
+            evidenceId = Long.parseLong(record.getResourceId());
+        } catch (NumberFormatException exception) {
+            throw new ConflictException("Resultado idempotente inválido.");
+        }
+        return evidenciaRepository.findByIdAndWorkspaceId(evidenceId, workspaceId)
+                .map(EvidenciaMetadataResponse::from)
+                .orElseThrow(() -> new ConflictException(
+                        "Evidência idempotente não está mais disponível."));
     }
 
     @Transactional(readOnly = true)
@@ -131,6 +286,12 @@ public class EvidenciaService {
     }
 
     private String validateSubject(String requestedType, Long subjectId, String workspaceId) {
+        String type = normalizeSubject(requestedType, subjectId);
+        references.requireLinkableEntity(type, String.valueOf(subjectId), workspaceId);
+        return type;
+    }
+
+    private String normalizeSubject(String requestedType, Long subjectId) {
         if (requestedType == null || requestedType.isBlank()) {
             throw new IllegalArgumentException("subjectType é obrigatório.");
         }
@@ -141,7 +302,6 @@ public class EvidenciaService {
         if (!SUBJECT_TYPES.contains(type)) {
             throw new IllegalArgumentException("Evidências só podem apoiar observações, ações ou resultados.");
         }
-        references.requireLinkableEntity(type, String.valueOf(subjectId), workspaceId);
         return type;
     }
 
@@ -196,5 +356,26 @@ public class EvidenciaService {
                 }
             }
         });
+    }
+
+    private record CanonicalEvidencePayload(
+            String workspaceId,
+            String subjectType,
+            Long subjectId,
+            String title,
+            String description,
+            String capturedAt,
+            String deviceId,
+            String clientMutationId,
+            CanonicalFilePayload file
+    ) {
+    }
+
+    private record CanonicalFilePayload(
+            String originalFilename,
+            String contentType,
+            long sizeBytes,
+            String sha256
+    ) {
     }
 }

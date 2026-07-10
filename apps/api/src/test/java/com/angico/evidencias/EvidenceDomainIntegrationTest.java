@@ -1,6 +1,7 @@
 package com.angico.evidencias;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doThrow;
@@ -13,10 +14,12 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.angico.auth.PasswordHasher;
+import com.angico.common.idempotency.IdempotencyRecordRepository;
 import com.angico.core.memory.JpaMemoryGateway;
 import com.angico.core.memory.MemoryEventRepository;
 import com.angico.core.memory.MemoryObjectRepository;
 import com.angico.core.memory.MemoryRelationRepository;
+import com.angico.core.memory.StoredMemoryEvent;
 import com.angico.observacoes.ObservacaoRepository;
 import com.angico.observacoes.ObservacaoTerritorial;
 import com.angico.pessoas.Pessoa;
@@ -32,6 +35,9 @@ import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.time.Instant;
 import java.util.HexFormat;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.BeforeEach;
@@ -75,6 +81,7 @@ class EvidenceDomainIntegrationTest {
     @Autowired private MemoryEventRepository eventRepository;
     @Autowired private MemoryObjectRepository objectRepository;
     @Autowired private MemoryRelationRepository relationRepository;
+    @Autowired private IdempotencyRecordRepository idempotencyRepository;
 
     @MockitoSpyBean
     private JpaMemoryGateway memoryGateway;
@@ -93,6 +100,8 @@ class EvidenceDomainIntegrationTest {
         workspaceRepository.save(new Workspace(workspaceA, "Evidence A " + id, null, Instant.now()));
         workspaceRepository.save(new Workspace(workspaceB, "Evidence B " + id, null, Instant.now()));
         actor = createPerson(workspaceA, "evidence.actor." + id, "evidence-" + id + "@example.test");
+        memberRepository.save(new WorkspaceMember(
+                workspaceB, actor.getAngicoId(), actor.getNome(), "MEMBER", "ACTIVE", Instant.now()));
         session = login(actor);
     }
 
@@ -170,6 +179,7 @@ class EvidenceDomainIntegrationTest {
     void memoryFailureRollsBackMetadataAndDeletesTheStoredFile() throws Exception {
         ObservacaoTerritorial observation = observation(workspaceA, "Falha atômica");
         long fileCountBefore = regularFileCount(UPLOAD_ROOT);
+        long idempotencyRecordsBefore = idempotencyRepository.count();
         doThrow(new IllegalStateException("memory unavailable")).when(memoryGateway).appendEvent(any());
 
         createEvidence(workspaceA, "OBSERVACAO", observation.getId(), "Não persiste",
@@ -177,17 +187,201 @@ class EvidenceDomainIntegrationTest {
 
         assertEquals(0, evidenciaRepository.findByWorkspaceIdOrderByRecordedAtDesc(workspaceA).size());
         assertEquals(fileCountBefore, regularFileCount(UPLOAD_ROOT));
+        assertEquals(idempotencyRecordsBefore, idempotencyRepository.count());
     }
 
     @Test
-    void duplicateClientMutationReturnsConflictWithoutCreatingAnotherEvidence() throws Exception {
+    void identicalOfflineMutationReplaysTheOriginalEvidence() throws Exception {
         ObservacaoTerritorial observation = observation(workspaceA, "Mutação repetida");
         String mutation = "evidence-duplicate-" + IDS.incrementAndGet();
 
-        createMetadataEvidence(observation.getId(), mutation, 201);
-        createMetadataEvidence(observation.getId(), mutation, 409);
+        MvcResult first = createMetadataEvidence(observation.getId(), mutation, 201);
+        MvcResult replay = createMetadataEvidence(observation.getId(), mutation, 201);
+
+        assertEquals(responseId(first), responseId(replay));
+        assertEquals(1, evidenciaRepository.findByWorkspaceIdOrderByRecordedAtDesc(workspaceA).size());
+    }
+
+    @Test
+    void sameKeyWithDifferentMetadataReturnsConflict() throws Exception {
+        ObservacaoTerritorial observation = observation(workspaceA, "Payload protegido");
+        String mutation = "evidence-conflict-" + IDS.incrementAndGet();
+
+        createMetadataEvidence(
+                workspaceA, observation.getId(), mutation, "Versão original", null, null, null, 201);
+        createMetadataEvidence(
+                workspaceA, observation.getId(), mutation, "Versão alterada", null, null, null, 409);
 
         assertEquals(1, evidenciaRepository.findByWorkspaceIdOrderByRecordedAtDesc(workspaceA).size());
+    }
+
+    @Test
+    void identicalFileReplayKeepsOneResourceAndOneStoredFile() throws Exception {
+        ObservacaoTerritorial observation = observation(workspaceA, "Arquivo repetido");
+        String mutation = "evidence-file-replay-" + IDS.incrementAndGet();
+        byte[] content = "conteúdo offline estável".getBytes(StandardCharsets.UTF_8);
+        long filesBefore = regularFileCount(UPLOAD_ROOT);
+
+        MvcResult first = createFileEvidence(observation.getId(), mutation, content, 201);
+        MvcResult replay = createFileEvidence(observation.getId(), mutation, content, 201);
+
+        assertEquals(responseId(first), responseId(replay));
+        assertEquals(1, evidenciaRepository.findByWorkspaceIdOrderByRecordedAtDesc(workspaceA).size());
+        assertEquals(filesBefore + 1, regularFileCount(UPLOAD_ROOT));
+    }
+
+    @Test
+    void sameKeyWithDifferentFileBytesReturnsConflict() throws Exception {
+        ObservacaoTerritorial observation = observation(workspaceA, "Arquivo protegido");
+        String mutation = "evidence-file-conflict-" + IDS.incrementAndGet();
+
+        createFileEvidence(
+                observation.getId(), mutation,
+                "conteúdo original".getBytes(StandardCharsets.UTF_8), 201);
+        createFileEvidence(
+                observation.getId(), mutation,
+                "conteúdo alterado".getBytes(StandardCharsets.UTF_8), 409);
+
+        assertEquals(1, evidenciaRepository.findByWorkspaceIdOrderByRecordedAtDesc(workspaceA).size());
+    }
+
+    @Test
+    void offlineMetadataReachesEvidenceMemoryAndIdempotencyRecord() throws Exception {
+        ObservacaoTerritorial observation = observation(workspaceA, "Coleta desconectada");
+        String mutation = "evidence-offline-" + IDS.incrementAndGet();
+        Instant capturedAt = Instant.parse("2026-07-09T18:42:00Z");
+        long recordsBefore = idempotencyRepository.count();
+
+        MvcResult result = createMetadataEvidence(
+                workspaceA,
+                observation.getId(),
+                mutation,
+                "Registro coletado sem rede",
+                capturedAt,
+                "field-phone-9",
+                null,
+                201
+        );
+        long evidenceId = responseId(result);
+        Evidencia saved = evidenciaRepository.findById(evidenceId).orElseThrow();
+        assertEquals(capturedAt, saved.getCapturedAt());
+        assertEquals("field-phone-9", saved.getDeviceId());
+        assertEquals(mutation, saved.getClientMutationId());
+
+        StoredMemoryEvent event = eventRepository.findByWorkspaceIdOrderBySequenceAsc(workspaceA)
+                .stream()
+                .filter(candidate -> "evidencia.registrada".equals(candidate.getEventType()))
+                .filter(candidate -> String.valueOf(evidenceId).equals(candidate.getEntityId()))
+                .findFirst()
+                .orElseThrow();
+        assertEquals(capturedAt, event.getOccurredAt());
+        assertEquals("field-phone-9", event.getDeviceId());
+        assertEquals(mutation, event.getIdempotencyKey());
+        assertEquals("SYNCED_FROM_OFFLINE", event.getSyncStatus());
+        assertEquals(recordsBefore + 1, idempotencyRepository.count());
+        assertEquals("EVIDENCIA", idempotencyRepository.findAll().stream()
+                .filter(record -> String.valueOf(evidenceId).equals(record.getResourceId()))
+                .findFirst()
+                .orElseThrow()
+                .getResourceType());
+        assertEquals("EVIDENCIA_CREATE", idempotencyRepository.findAll().stream()
+                .filter(record -> String.valueOf(evidenceId).equals(record.getResourceId()))
+                .findFirst()
+                .orElseThrow()
+                .getOperationKind());
+    }
+
+    @Test
+    void clientMutationIdAloneProvidesReplaySafety() throws Exception {
+        ObservacaoTerritorial observation = observation(workspaceA, "Chave no formulário");
+        String mutation = "evidence-form-key-" + IDS.incrementAndGet();
+        var request = multipart("/api/evidencias")
+                .param("workspaceId", workspaceA)
+                .param("subjectType", "OBSERVACAO")
+                .param("subjectId", String.valueOf(observation.getId()))
+                .param("title", "Envio sem cabeçalho")
+                .param("clientMutationId", mutation)
+                .cookie(session.cookie())
+                .header("X-CSRF-Token", session.csrfToken());
+
+        long first = responseId(mvc.perform(request)
+                .andExpect(status().isCreated())
+                .andReturn());
+        long replay = responseId(mvc.perform(multipart("/api/evidencias")
+                        .param("workspaceId", workspaceA)
+                        .param("subjectType", "OBSERVACAO")
+                        .param("subjectId", String.valueOf(observation.getId()))
+                        .param("title", "Envio sem cabeçalho")
+                        .param("clientMutationId", mutation)
+                        .cookie(session.cookie())
+                        .header("X-CSRF-Token", session.csrfToken()))
+                .andExpect(status().isCreated())
+                .andReturn());
+
+        assertEquals(first, replay);
+    }
+
+    @Test
+    void headerAndClientMutationMustIdentifyTheSameOperation() throws Exception {
+        ObservacaoTerritorial observation = observation(workspaceA, "Chaves divergentes");
+
+        mvc.perform(multipart("/api/evidencias")
+                        .param("workspaceId", workspaceA)
+                        .param("subjectType", "OBSERVACAO")
+                        .param("subjectId", String.valueOf(observation.getId()))
+                        .param("title", "Não deve persistir")
+                        .param("clientMutationId", "mutation-form")
+                        .cookie(session.cookie())
+                        .header("Idempotency-Key", "mutation-header")
+                        .header("X-CSRF-Token", session.csrfToken()))
+                .andExpect(status().isBadRequest());
+
+        assertEquals(0, evidenciaRepository.findByWorkspaceIdOrderByRecordedAtDesc(workspaceA).size());
+    }
+
+    @Test
+    void idempotencyKeyIsIsolatedByWorkspace() throws Exception {
+        ObservacaoTerritorial observationA = observation(workspaceA, "Workspace A");
+        ObservacaoTerritorial observationB = observation(workspaceB, "Workspace B");
+        String mutation = "evidence-scope-" + IDS.incrementAndGet();
+
+        long evidenceA = responseId(createMetadataEvidence(
+                workspaceA, observationA.getId(), mutation, "Mesmo registro", null, null, null, 201));
+        long evidenceB = responseId(createMetadataEvidence(
+                workspaceB, observationB.getId(), mutation, "Mesmo registro", null, null, null, 201));
+
+        assertNotEquals(evidenceA, evidenceB);
+        assertEquals(1, evidenciaRepository.findByWorkspaceIdOrderByRecordedAtDesc(workspaceA).size());
+        assertEquals(1, evidenciaRepository.findByWorkspaceIdOrderByRecordedAtDesc(workspaceB).size());
+    }
+
+    @Test
+    void concurrentIdenticalRequestsReturnTheSameEvidence() throws Exception {
+        ObservacaoTerritorial observation = observation(workspaceA, "Concorrência offline");
+        String mutation = "evidence-concurrent-" + IDS.incrementAndGet();
+        long recordsBefore = idempotencyRepository.count();
+        CountDownLatch ready = new CountDownLatch(2);
+        CountDownLatch start = new CountDownLatch(1);
+
+        try (var executor = Executors.newFixedThreadPool(2)) {
+            var first = executor.submit(() -> {
+                ready.countDown();
+                assertTrue(start.await(5, TimeUnit.SECONDS));
+                return createMetadataEvidence(observation.getId(), mutation, 201);
+            });
+            var second = executor.submit(() -> {
+                ready.countDown();
+                assertTrue(start.await(5, TimeUnit.SECONDS));
+                return createMetadataEvidence(observation.getId(), mutation, 201);
+            });
+            assertTrue(ready.await(5, TimeUnit.SECONDS));
+            start.countDown();
+
+            assertEquals(responseId(first.get(10, TimeUnit.SECONDS)),
+                    responseId(second.get(10, TimeUnit.SECONDS)));
+        }
+        assertEquals(1, evidenciaRepository.findByWorkspaceIdOrderByRecordedAtDesc(workspaceA).size());
+        assertEquals(recordsBefore + 1, idempotencyRepository.count());
     }
 
     private org.springframework.test.web.servlet.ResultActions createEvidence(
@@ -215,16 +409,61 @@ class EvidenceDomainIntegrationTest {
         return mvc.perform(request).andExpect(status().is(expectedStatus));
     }
 
-    private void createMetadataEvidence(Long observationId, String mutation, int expectedStatus) throws Exception {
-        mvc.perform(multipart("/api/evidencias")
-                        .param("workspaceId", workspaceA)
-                        .param("subjectType", "OBSERVACAO")
-                        .param("subjectId", String.valueOf(observationId))
-                        .param("title", "Evidência idempotente")
-                        .param("clientMutationId", mutation)
-                        .cookie(session.cookie())
-                        .header("X-CSRF-Token", session.csrfToken()))
-                .andExpect(status().is(expectedStatus));
+    private MvcResult createMetadataEvidence(Long observationId, String mutation, int expectedStatus) throws Exception {
+        return createMetadataEvidence(
+                workspaceA, observationId, mutation, "Evidência idempotente", null, null, null,
+                expectedStatus);
+    }
+
+    private MvcResult createMetadataEvidence(
+            String workspaceId,
+            Long observationId,
+            String mutation,
+            String title,
+            Instant capturedAt,
+            String deviceId,
+            MockMultipartFile file,
+            int expectedStatus
+    ) throws Exception {
+        var request = multipart("/api/evidencias")
+                .param("workspaceId", workspaceId)
+                .param("subjectType", "OBSERVACAO")
+                .param("subjectId", String.valueOf(observationId))
+                .param("title", title)
+                .param("clientMutationId", mutation)
+                .cookie(session.cookie())
+                .header("Idempotency-Key", mutation)
+                .header("X-CSRF-Token", session.csrfToken());
+        if (capturedAt != null) {
+            request.param("capturedAt", capturedAt.toString());
+        }
+        if (deviceId != null) {
+            request.param("deviceId", deviceId);
+        }
+        if (file != null) {
+            request.file(file);
+        }
+        return mvc.perform(request)
+                .andExpect(status().is(expectedStatus))
+                .andReturn();
+    }
+
+    private MvcResult createFileEvidence(
+            Long observationId,
+            String mutation,
+            byte[] content,
+            int expectedStatus
+    ) throws Exception {
+        return createMetadataEvidence(
+                workspaceA,
+                observationId,
+                mutation,
+                "Evidência com arquivo",
+                Instant.parse("2026-07-09T18:42:00Z"),
+                "field-phone",
+                new MockMultipartFile("file", "campo.txt", "text/plain", content),
+                expectedStatus
+        );
     }
 
     private ObservacaoTerritorial observation(String workspaceId, String title) {

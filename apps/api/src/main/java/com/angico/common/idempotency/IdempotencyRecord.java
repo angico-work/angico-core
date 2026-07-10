@@ -96,6 +96,10 @@ public class IdempotencyRecord {
         return requestHash;
     }
 
+    public String getOperationKind() {
+        return operationKind;
+    }
+
     public String getResourceType() {
         return resourceType;
     }
