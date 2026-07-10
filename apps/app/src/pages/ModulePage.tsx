@@ -95,24 +95,36 @@ export default function ModulePage({ configKey }: { configKey: string }) {
   const refresh = useCallback(async () => {
     setLoading(true);
     setError(null);
-    let localPending: Item[] = [];
+    let localSnapshots: Item[] = [];
     try {
       if (configKey === 'observacoes') {
         const session = getSession();
         const ownerId = session?.angicoId || (session ? `pessoa-${session.pessoaId}` : undefined);
         const local = ownerId ? await listLocalObservations(ownerId, workspaceId) : [];
-        localPending = local.filter((record) => record.syncStatus !== 'SYNCED').map<Item>((record) => ({
-          ...record.data, localKey: record.clientMutationId, status: record.syncStatus, syncStatus: record.syncStatus
-        }));
+        localSnapshots = local
+          .filter((record) => !['SUPERSEDED', 'DISCARDED'].includes(record.syncStatus))
+          .map<Item>((record) => ({
+            ...record.data,
+            ...record.remote,
+            localKey: record.clientMutationId,
+            syncStatus: record.syncStatus
+          }));
       }
       const remote = await listEntities<Item>(config.path, workspaceId);
       if (configKey !== 'observacoes') {
         setItems(remote);
       } else {
-        setItems([...localPending, ...remote]);
+        const remoteIds = new Set(remote
+          .map((item) => item.id)
+          .filter((id) => id != null)
+          .map(String));
+        const localOnly = localSnapshots.filter((item) => (
+          item.syncStatus !== 'SYNCED' || item.id == null || !remoteIds.has(String(item.id))
+        ));
+        setItems([...localOnly, ...remote]);
       }
     } catch (caught) {
-      setItems(localPending);
+      setItems(localSnapshots);
       setError(caught instanceof Error ? caught.message : 'Não foi possível carregar os registros.');
     } finally {
       setLoading(false);
