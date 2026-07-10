@@ -1,13 +1,10 @@
 package com.angico.mensagens;
 
 import java.io.IOException;
-import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.text.Normalizer;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -20,7 +17,6 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
-import java.util.HexFormat;
 import java.util.stream.Collectors;
 
 import com.angico.common.ClockProvider;
@@ -29,6 +25,8 @@ import com.angico.common.ForbiddenException;
 import com.angico.common.idempotency.IdempotencyOperation;
 import com.angico.common.idempotency.IdempotencyRecord;
 import com.angico.common.idempotency.IdempotencyService;
+import com.angico.common.upload.SafeUploadValidator;
+import com.angico.common.upload.SafeUploadValidator.PreparedUpload;
 import com.angico.core.memory.MemoryEvent;
 import com.angico.core.memory.MemoryRelationMetadata;
 import com.angico.core.memory.MemoryRelationRepository;
@@ -86,9 +84,8 @@ public class MensagemService {
     private final IdempotencyService idempotencyService;
     private final ClockProvider clock;
     private final TransactionTemplate transactions;
+    private final SafeUploadValidator uploadValidator;
     private final Path uploadRoot;
-    private final long maxBytes;
-    private final Set<String> allowedContentTypes;
 
     public MensagemService(
             ConversaRepository conversaRepository,
@@ -106,9 +103,8 @@ public class MensagemService {
             IdempotencyService idempotencyService,
             ClockProvider clock,
             PlatformTransactionManager transactionManager,
-            @Value("${angico.uploads.dir:uploads}") String uploadDir,
-            @Value("${angico.uploads.max-bytes:2097152}") long maxBytes,
-            @Value("${angico.uploads.allowed-content-types}") String allowedContentTypes
+            SafeUploadValidator uploadValidator,
+            @Value("${angico.uploads.dir:uploads}") String uploadDir
     ) {
         this.conversaRepository = conversaRepository;
         this.mensagemRepository = mensagemRepository;
@@ -125,12 +121,8 @@ public class MensagemService {
         this.idempotencyService = idempotencyService;
         this.clock = clock;
         this.transactions = new TransactionTemplate(transactionManager);
+        this.uploadValidator = uploadValidator;
         this.uploadRoot = Path.of(uploadDir).toAbsolutePath().normalize();
-        this.maxBytes = maxBytes;
-        this.allowedContentTypes = Arrays.stream(allowedContentTypes.split(","))
-                .map(String::trim)
-                .filter(value -> !value.isBlank())
-                .collect(Collectors.toUnmodifiableSet());
     }
 
     public List<ConversaResponse> list(String workspaceId) {
@@ -349,7 +341,8 @@ public class MensagemService {
             clientMessageId = idempotencyKey;
         }
         String deviceId = normalizeDeviceId(rawDeviceId);
-        List<AttachmentFingerprint> attachmentFingerprints = fingerprintAttachments(attachments);
+        List<PreparedUpload> preparedAttachments = prepareAttachments(attachments);
+        List<AttachmentFingerprint> attachmentFingerprints = fingerprintAttachments(preparedAttachments);
         MessagePayload payload = new MessagePayload(
                 conversaId,
                 corpo == null ? "" : corpo.trim(),
@@ -371,7 +364,7 @@ public class MensagemService {
             return Objects.requireNonNull(transactions.execute(status -> sendInTransaction(
                     conversaId,
                     payload,
-                    attachments,
+                    preparedAttachments,
                     actor,
                     finalClientMessageId,
                     idempotencyKey,
@@ -392,7 +385,7 @@ public class MensagemService {
     private MensagemResponse sendInTransaction(
             Long conversaId,
             MessagePayload payload,
-            List<MultipartFile> attachments,
+            List<PreparedUpload> attachments,
             Pessoa actor,
             String clientMessageId,
             String idempotencyKey,
@@ -663,27 +656,16 @@ public class MensagemService {
     private List<MensagemAnexo> saveAttachments(
             String workspaceId,
             Mensagem mensagem,
-            List<MultipartFile> attachments
+            List<PreparedUpload> attachments
     ) {
-        if (attachments == null) {
-            return List.of();
-        }
         List<MensagemAnexo> saved = new ArrayList<>();
-        attachments.stream()
-                .filter(file -> file != null && !file.isEmpty())
-                .forEach(file -> saved.add(saveAttachment(workspaceId, mensagem, file)));
+        attachments.forEach(file -> saved.add(saveAttachment(workspaceId, mensagem, file)));
         return saved;
     }
 
-    private MensagemAnexo saveAttachment(String workspaceId, Mensagem mensagem, MultipartFile file) {
-        String contentType = file.getContentType() == null ? "application/octet-stream" : file.getContentType();
-        if (!allowedContentTypes.contains(contentType)) {
-            throw new IllegalArgumentException("Tipo de anexo nao permitido: " + contentType);
-        }
-        if (file.getSize() > maxBytes) {
-            throw new IllegalArgumentException("Anexo excede o limite de " + maxBytes + " bytes.");
-        }
-        String originalName = sanitizeFilename(file.getOriginalFilename());
+    private MensagemAnexo saveAttachment(String workspaceId, Mensagem mensagem, PreparedUpload file) {
+        String contentType = file.contentType();
+        String originalName = file.originalFilename();
         String storedName = UUID.randomUUID() + "_" + originalName;
         Path folder = uploadRoot.resolve(workspaceId).resolve("mensagens").normalize();
         if (!folder.startsWith(uploadRoot)) {
@@ -699,11 +681,7 @@ public class MensagemService {
                 throw new IllegalArgumentException("Caminho de anexo inválido.");
             }
             destination = realFolder.resolve(storedName).normalize();
-            byte[] bytes = file.getBytes();
-            if (bytes.length == 0 || bytes.length > maxBytes) {
-                throw new IllegalArgumentException("Tamanho de anexo inválido.");
-            }
-            Files.write(destination, bytes, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE);
+            Files.write(destination, file.bytes(), StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE);
         } catch (IOException ex) {
             throw new IllegalStateException("Falha ao gravar anexo.", ex);
         }
@@ -714,20 +692,11 @@ public class MensagemService {
         anexo.setMensagemId(mensagem.getId());
         anexo.setOriginalFilename(originalName);
         anexo.setContentType(contentType);
-        anexo.setSizeBytes(file.getSize());
+        anexo.setSizeBytes(file.sizeBytes());
         anexo.setStoragePath(destination.toString());
         anexo.setAttachmentType(contentType.startsWith("image/") ? "IMAGEM" : "ARQUIVO");
         anexo.setCreatedAt(clock.now());
         return anexoRepository.save(anexo);
-    }
-
-    private String sanitizeFilename(String value) {
-        String filename = value == null || value.isBlank() ? "anexo" : Path.of(value).getFileName().toString();
-        String sanitized = filename.replaceAll("[^A-Za-z0-9._-]", "_");
-        if (sanitized.length() > 180) {
-            sanitized = sanitized.substring(sanitized.length() - 180);
-        }
-        return sanitized;
     }
 
     private void registerRollbackCleanup(Path path) {
@@ -886,45 +855,29 @@ public class MensagemService {
         return value == null || value.isBlank() ? null : value.strip();
     }
 
-    private List<AttachmentFingerprint> fingerprintAttachments(List<MultipartFile> attachments) {
+    private List<PreparedUpload> prepareAttachments(List<MultipartFile> attachments) {
         if (attachments == null) {
             return List.of();
         }
-        List<AttachmentFingerprint> fingerprints = new ArrayList<>();
+        List<PreparedUpload> prepared = new ArrayList<>();
         for (MultipartFile file : attachments) {
             if (file == null || file.isEmpty()) {
                 continue;
             }
-            String contentType = file.getContentType() == null
-                    ? "application/octet-stream"
-                    : file.getContentType();
-            if (!allowedContentTypes.contains(contentType) || file.getSize() > maxBytes) {
-                throw new IllegalArgumentException("Anexo não permitido.");
-            }
-            fingerprints.add(new AttachmentFingerprint(
-                    sanitizeFilename(file.getOriginalFilename()),
-                    contentType,
-                    file.getSize(),
-                    sha256(file)
-            ));
+            prepared.add(uploadValidator.prepare(file));
         }
-        return List.copyOf(fingerprints);
+        return List.copyOf(prepared);
     }
 
-    private String sha256(MultipartFile file) {
-        try (InputStream input = file.getInputStream()) {
-            MessageDigest digest = MessageDigest.getInstance("SHA-256");
-            byte[] buffer = new byte[8192];
-            int read;
-            while ((read = input.read(buffer)) >= 0) {
-                if (read > 0) {
-                    digest.update(buffer, 0, read);
-                }
-            }
-            return HexFormat.of().formatHex(digest.digest());
-        } catch (IOException | NoSuchAlgorithmException exception) {
-            throw new IllegalArgumentException("Não foi possível identificar o anexo.", exception);
-        }
+    private List<AttachmentFingerprint> fingerprintAttachments(List<PreparedUpload> attachments) {
+        return attachments.stream()
+                .map(file -> new AttachmentFingerprint(
+                        file.originalFilename(),
+                        file.contentType(),
+                        file.sizeBytes(),
+                        file.sha256()
+                ))
+                .toList();
     }
 
     private String normalizeSearchQuery(String value) {

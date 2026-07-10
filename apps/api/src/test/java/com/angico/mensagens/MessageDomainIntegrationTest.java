@@ -30,6 +30,7 @@ import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
+import org.springframework.mock.web.MockMultipartFile;
 
 @SpringBootTest(properties = {
         "spring.datasource.url=jdbc:h2:mem:message-domain;MODE=PostgreSQL;DB_CLOSE_DELAY=-1",
@@ -276,6 +277,57 @@ class MessageDomainIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$", hasSize(1)))
                 .andExpect(jsonPath("$[0].senderNome").value(participant.getNome()));
+    }
+
+    @Test
+    void attachmentsRejectForgedContentAndMismatchedExtensions() throws Exception {
+        long conversationId = createConversation("Arquivos do território", ownerSession);
+
+        MockMultipartFile forgedPng = new MockMultipartFile(
+                "attachments",
+                "registro.png",
+                MediaType.IMAGE_PNG_VALUE,
+                "isto não é uma imagem".getBytes(java.nio.charset.StandardCharsets.UTF_8)
+        );
+        mvc.perform(multipart("/api/mensagens/conversas/{id}/mensagens", conversationId)
+                        .file(forgedPng)
+                        .header("X-CSRF-Token", ownerSession.csrfToken())
+                        .cookie(ownerSession.cookie()))
+                .andExpect(status().isBadRequest());
+
+        MockMultipartFile mismatchedText = new MockMultipartFile(
+                "attachments",
+                "registro.html",
+                MediaType.TEXT_PLAIN_VALUE,
+                "<script>alert(1)</script>".getBytes(java.nio.charset.StandardCharsets.UTF_8)
+        );
+        mvc.perform(multipart("/api/mensagens/conversas/{id}/mensagens", conversationId)
+                        .file(mismatchedText)
+                        .header("X-CSRF-Token", ownerSession.csrfToken())
+                        .cookie(ownerSession.cookie()))
+                .andExpect(status().isBadRequest());
+
+        assertEquals(0, mensagemRepository.countByWorkspaceId(workspaceId));
+    }
+
+    @Test
+    void attachmentAcceptsValidatedUtf8Text() throws Exception {
+        long conversationId = createConversation("Relato de campo", ownerSession);
+        MockMultipartFile attachment = new MockMultipartFile(
+                "attachments",
+                "relato.txt",
+                MediaType.TEXT_PLAIN_VALUE,
+                "Nível do rio registrado pela equipe.".getBytes(java.nio.charset.StandardCharsets.UTF_8)
+        );
+
+        mvc.perform(multipart("/api/mensagens/conversas/{id}/mensagens", conversationId)
+                        .file(attachment)
+                        .header("X-CSRF-Token", ownerSession.csrfToken())
+                        .cookie(ownerSession.cookie()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.anexos", hasSize(1)))
+                .andExpect(jsonPath("$.anexos[0].originalFilename").value("relato.txt"))
+                .andExpect(jsonPath("$.anexos[0].contentType").value(MediaType.TEXT_PLAIN_VALUE));
     }
 
     private org.springframework.test.web.servlet.ResultActions sendMessage(
