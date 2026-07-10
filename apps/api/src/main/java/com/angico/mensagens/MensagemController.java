@@ -1,6 +1,7 @@
 package com.angico.mensagens;
 
 import java.util.List;
+import java.time.Instant;
 
 import org.springframework.core.io.Resource;
 import org.springframework.http.ContentDisposition;
@@ -11,6 +12,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -55,6 +57,10 @@ public class MensagemController {
             @RequestParam(required = false) String localDescricao,
             @RequestParam(required = false) String linkedEntityType,
             @RequestParam(required = false) String linkedEntityId,
+            @RequestParam(required = false) String clientMessageId,
+            @RequestParam(required = false) String deviceId,
+            @RequestParam(required = false) Instant occurredAt,
+            @RequestHeader(name = "Idempotency-Key", required = false) String idempotencyKey,
             @RequestParam(required = false) List<MultipartFile> attachments
     ) {
         return mensagemService.send(
@@ -65,8 +71,26 @@ public class MensagemController {
                 localDescricao,
                 linkedEntityType,
                 linkedEntityId,
+                clientMessageId,
+                deviceId,
+                occurredAt,
+                idempotencyKey,
                 attachments
         );
+    }
+
+    @PostMapping("/conversas/{id}/leitura")
+    public ResponseEntity<Void> markRead(@PathVariable Long id) {
+        mensagemService.markRead(id);
+        return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping("/busca")
+    public List<MensagemBuscaResponse> search(
+            @RequestParam(required = false) String workspaceId,
+            @RequestParam String q
+    ) {
+        return mensagemService.search(workspaceId, q);
     }
 
     @GetMapping("/recentes")

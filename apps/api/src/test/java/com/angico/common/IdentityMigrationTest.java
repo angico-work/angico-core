@@ -55,7 +55,7 @@ class IdentityMigrationTest {
                 var statement = connection.createStatement()) {
             assertEquals(1, scalar(statement,
                     "SELECT COUNT(*) FROM pessoa WHERE email = 'legacy@example.test'"));
-            assertEquals(List.of("0", "1", "2", "3", "4"), versions(statement));
+            assertEquals(List.of("0", "1", "2", "3", "4", "5"), versions(statement));
             assertTrue(scalar(statement,
                     "SELECT COUNT(*) FROM information_schema.tables "
                             + "WHERE table_name = 'AUTH_SESSION'") > 0);
@@ -78,6 +78,9 @@ class IdentityMigrationTest {
             assertEquals(1, scalar(statement,
                     "SELECT COUNT(*) FROM information_schema.tables "
                             + "WHERE table_name = 'USO_RECURSO'"));
+            assertEquals(1, scalar(statement,
+                    "SELECT COUNT(*) FROM information_schema.tables "
+                            + "WHERE table_name = 'MESSAGE_READ_RECEIPT'"));
 
             assertThrows(SQLException.class, () -> statement.execute(
                     "INSERT INTO pessoa (email, angico_id) VALUES "

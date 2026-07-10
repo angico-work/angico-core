@@ -5,9 +5,22 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.Index;
+import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
 import java.time.Instant;
 
 @Entity
+@Table(
+        uniqueConstraints = @UniqueConstraint(
+                name = "uk_mensagem_workspace_client_message",
+                columnNames = {"workspaceId", "senderPessoaId", "clientMessageId"}
+        ),
+        indexes = @Index(
+                name = "idx_mensagem_conversation_occurred",
+                columnList = "conversaId,occurredAt,id"
+        )
+)
 public class Mensagem {
 
     @Id
@@ -25,7 +38,13 @@ public class Mensagem {
     private String localDescricao;
     private String linkedEntityType;
     private String linkedEntityId;
+    @Column(length = 128)
+    private String clientMessageId;
+    @Column(length = 128)
+    private String deviceId;
     private String status;
+    private Instant occurredAt;
+    private Instant recordedAt;
     private Instant createdAt;
 
     public Long getId() {
@@ -116,12 +135,44 @@ public class Mensagem {
         this.linkedEntityId = linkedEntityId;
     }
 
+    public String getClientMessageId() {
+        return clientMessageId;
+    }
+
+    public void setClientMessageId(String clientMessageId) {
+        this.clientMessageId = clientMessageId;
+    }
+
+    public String getDeviceId() {
+        return deviceId;
+    }
+
+    public void setDeviceId(String deviceId) {
+        this.deviceId = deviceId;
+    }
+
     public String getStatus() {
         return status;
     }
 
     public void setStatus(String status) {
         this.status = status;
+    }
+
+    public Instant getOccurredAt() {
+        return occurredAt == null ? createdAt : occurredAt;
+    }
+
+    public void setOccurredAt(Instant occurredAt) {
+        this.occurredAt = occurredAt;
+    }
+
+    public Instant getRecordedAt() {
+        return recordedAt == null ? createdAt : recordedAt;
+    }
+
+    public void setRecordedAt(Instant recordedAt) {
+        this.recordedAt = recordedAt;
     }
 
     public Instant getCreatedAt() {

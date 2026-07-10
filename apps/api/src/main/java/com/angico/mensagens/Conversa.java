@@ -5,9 +5,15 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.Index;
+import jakarta.persistence.Table;
 import java.time.Instant;
 
 @Entity
+@Table(indexes = @Index(
+        name = "idx_conversa_workspace_context",
+        columnList = "workspaceId,contextEntityType,contextEntityId"
+))
 public class Conversa {
 
     @Id
@@ -15,6 +21,8 @@ public class Conversa {
     private Long id;
     private String workspaceId;
     private Long territorioId;
+    private String contextEntityType;
+    private String contextEntityId;
     @Column(length = 240)
     private String titulo;
     private Long createdByPessoaId;
@@ -44,6 +52,22 @@ public class Conversa {
 
     public void setTerritorioId(Long territorioId) {
         this.territorioId = territorioId;
+    }
+
+    public String getContextEntityType() {
+        return contextEntityType;
+    }
+
+    public void setContextEntityType(String contextEntityType) {
+        this.contextEntityType = contextEntityType;
+    }
+
+    public String getContextEntityId() {
+        return contextEntityId;
+    }
+
+    public void setContextEntityId(String contextEntityId) {
+        this.contextEntityId = contextEntityId;
     }
 
     public String getTitulo() {
