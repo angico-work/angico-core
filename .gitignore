@@ -8,6 +8,3 @@ apps/api/data/
 *.log
 .vscode/
 .idea/
-
-# Local tooling / scratch data
-.neurotrace/
