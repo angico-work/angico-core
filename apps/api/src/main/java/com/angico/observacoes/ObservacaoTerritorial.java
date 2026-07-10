@@ -5,6 +5,8 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
 import java.time.Instant;
 
 /**
@@ -13,6 +15,10 @@ import java.time.Instant;
  * observar → registrar → compreender → priorizar → agir → medir.
  */
 @Entity
+@Table(uniqueConstraints = @UniqueConstraint(
+        name = "uk_observacao_workspace_client_mutation",
+        columnNames = {"workspaceId", "clientMutationId"}
+))
 public class ObservacaoTerritorial {
 
     @Id
@@ -48,6 +54,14 @@ public class ObservacaoTerritorial {
 
     private String autorId;
 
+    @Column(length = 128)
+    private String clientMutationId;
+
+    private Instant occurredAt;
+
+    @Column(length = 128)
+    private String deviceId;
+
     @Column(nullable = false)
     private Instant createdAt;
 
@@ -68,6 +82,42 @@ public class ObservacaoTerritorial {
             String autorId,
             Instant createdAt
     ) {
+        this(
+                workspaceId,
+                territorioId,
+                categoria,
+                titulo,
+                descricao,
+                localizacao,
+                latitude,
+                longitude,
+                urgencia,
+                status,
+                autorId,
+                null,
+                createdAt,
+                null,
+                createdAt
+        );
+    }
+
+    public ObservacaoTerritorial(
+            String workspaceId,
+            String territorioId,
+            String categoria,
+            String titulo,
+            String descricao,
+            String localizacao,
+            Double latitude,
+            Double longitude,
+            String urgencia,
+            String status,
+            String autorId,
+            String clientMutationId,
+            Instant occurredAt,
+            String deviceId,
+            Instant createdAt
+    ) {
         this.workspaceId = workspaceId;
         this.territorioId = territorioId;
         this.categoria = categoria;
@@ -79,6 +129,9 @@ public class ObservacaoTerritorial {
         this.urgencia = urgencia;
         this.status = status;
         this.autorId = autorId;
+        this.clientMutationId = clientMutationId;
+        this.occurredAt = occurredAt;
+        this.deviceId = deviceId;
         this.createdAt = createdAt;
     }
 
@@ -152,6 +205,18 @@ public class ObservacaoTerritorial {
 
     public String getAutorId() {
         return autorId;
+    }
+
+    public String getClientMutationId() {
+        return clientMutationId;
+    }
+
+    public Instant getOccurredAt() {
+        return occurredAt == null ? createdAt : occurredAt;
+    }
+
+    public String getDeviceId() {
+        return deviceId;
     }
 
     public Instant getCreatedAt() {

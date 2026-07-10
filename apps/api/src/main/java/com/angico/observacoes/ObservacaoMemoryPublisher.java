@@ -2,6 +2,7 @@ package com.angico.observacoes;
 
 import com.angico.core.memory.MemoryEvent;
 import com.angico.core.memory.MemoryRelationMetadata;
+import com.angico.core.memory.MemorySyncStatus;
 import com.angico.core.memory.OperationalMemoryService;
 import com.angico.core.ontology.OntologyService;
 import java.util.HashMap;
@@ -21,6 +22,14 @@ public class ObservacaoMemoryPublisher {
     }
 
     public void publicarRegistrada(ObservacaoTerritorial o) {
+        publicarRegistrada(o, null, false);
+    }
+
+    public void publicarRegistrada(
+            ObservacaoTerritorial o,
+            String idempotencyKey,
+            boolean offlineMetadataPresent
+    ) {
         String entityId = String.valueOf(o.getId());
 
         memory.registrarObjeto(
@@ -33,10 +42,17 @@ public class ObservacaoMemoryPublisher {
             payload.put("localizacao", o.getLocalizacao());
         }
         payload.put("titulo", o.getTitulo());
+        if (o.getClientMutationId() != null) {
+            payload.put("clientMutationId", o.getClientMutationId());
+        }
 
         memory.registrarEvento(new MemoryEvent(
                 o.getWorkspaceId(), TIPO, entityId, "observacao.registrada", SOURCE,
-                o.getAutorId(), null, null, null, 1, o.getCreatedAt(), payload));
+                o.getAutorId(), o.getDeviceId(), null, null, 1, o.getOccurredAt(), payload,
+                idempotencyKey,
+                offlineMetadataPresent
+                        ? MemorySyncStatus.SYNCED_FROM_OFFLINE
+                        : MemorySyncStatus.SERVER_RECORDED));
 
         if (o.getTerritorioId() != null && !o.getTerritorioId().isBlank()) {
             memory.registrarRelacaoAtiva(
