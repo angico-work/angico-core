@@ -1,8 +1,7 @@
-import { useState, type CSSProperties, type FormEvent } from 'react';
-import { createEntity, reverseGeocode, resolveCoords, getSession } from '../lib/api';
-import { captureObservation } from '../lib/offlineSync';
-import type { ObservacaoInput } from '../types';
-import type { GeoResult } from '../types';
+import { useState, type FormEvent } from 'react';
+import { createEntity, getSession, reverseGeocode, resolveCoords } from '../lib/api';
+import { captureObservation, type CaptureResult } from '../lib/offlineSync';
+import type { GeoResult, ObservacaoInput } from '../types';
 import AddressField from './AddressField';
 import MapView from './MapView';
 
@@ -18,21 +17,40 @@ const POTENCIAIS = [
   'Saúde Comunitária', 'Esporte e Lazer', 'Coletivos e Associações', 'Espaços Públicos', 'Outros'
 ];
 const NIVEIS = ['BAIXA', 'MEDIA', 'ALTA'];
+const STEPS = ['Registrar', 'Ancorar', 'Comprovar e salvar'];
 
 interface TypeMeta {
   label: string;
-  titulo: string;
+  title: string;
   endpoint: string;
-  cor: string;
-  categorias: string[];
-  nivelCampo?: 'urgencia' | 'severidade';
-  nivelLabel?: string;
+  categories: string[];
+  levelField?: 'urgencia' | 'severidade';
+  levelLabel?: string;
 }
 
 const TYPES: Record<EntityType, TypeMeta> = {
-  observacao: { label: 'Observação', titulo: 'Nova observação', endpoint: '/api/observacoes', cor: '#2c8fbd', categorias: AMBIENTAIS, nivelCampo: 'urgencia', nivelLabel: 'Urgência' },
-  problema: { label: 'Problema', titulo: 'Novo problema', endpoint: '/api/problemas', cor: '#f97316', categorias: AMBIENTAIS, nivelCampo: 'severidade', nivelLabel: 'Severidade' },
-  potencialidade: { label: 'Potencialidade', titulo: 'Nova potencialidade', endpoint: '/api/potencialidades', cor: '#2aa84a', categorias: POTENCIAIS }
+  observacao: {
+    label: 'Observação',
+    title: 'Nova observação',
+    endpoint: '/api/observacoes',
+    categories: AMBIENTAIS,
+    levelField: 'urgencia',
+    levelLabel: 'Urgência'
+  },
+  problema: {
+    label: 'Problema',
+    title: 'Novo problema',
+    endpoint: '/api/problemas',
+    categories: AMBIENTAIS,
+    levelField: 'severidade',
+    levelLabel: 'Severidade'
+  },
+  potencialidade: {
+    label: 'Potencialidade',
+    title: 'Nova potencialidade',
+    endpoint: '/api/potencialidades',
+    categories: POTENCIAIS
+  }
 };
 
 interface Props {
@@ -45,186 +63,328 @@ interface Props {
   onCreated: () => void;
 }
 
-const overlay: CSSProperties = {
-  position: 'fixed', inset: 0, background: 'rgba(2, 26, 36, 0.55)', backdropFilter: 'blur(3px)',
-  display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2000, padding: 16
-};
-const card: CSSProperties = {
-  background: '#fff', borderRadius: 20, padding: 'clamp(20px, 3vw, 28px)', width: 'min(560px, 100%)',
-  maxHeight: '92vh', overflowY: 'auto', boxShadow: '0 30px 70px rgba(2, 26, 36, 0.32)'
-};
+interface SuccessState {
+  title: string;
+  description: string;
+  tone: 'ok' | 'pending' | 'attention';
+}
 
-// Records the creator with BOTH the readable name and the Angico ID, so the
-// ontology event's actor reads e.g. "Júlia Santos (@julia)".
 function authorRef(): string | undefined {
   const session = getSession();
   if (!session) return undefined;
-  if (session.angicoId) return `${session.nome} (@${session.angicoId})`;
-  return session.nome || undefined;
+  return session.angicoId ? `${session.nome} (@${session.angicoId})` : session.nome || undefined;
 }
 
-export default function NewEntityModal({ workspaceId, initialType = 'observacao', lockType, initialLat, initialLng, onClose, onCreated }: Props) {
+function captureMessage(result: CaptureResult): SuccessState {
+  if (result.status === 'SYNCED') {
+    return {
+      title: 'Registro sincronizado',
+      description: 'A observação já entrou na memória compartilhada do território.',
+      tone: 'ok'
+    };
+  }
+  if (result.status === 'CONFLICT') {
+    return {
+      title: 'Salva, mas precisa de revisão',
+      description: 'O registro permanece neste aparelho. Abra a sincronização para resolver o conflito.',
+      tone: 'attention'
+    };
+  }
+  if (result.status === 'ACTION_REQUIRED' || result.status === 'BLOCKED') {
+    return {
+      title: 'Salva neste aparelho',
+      description: 'O envio precisa de atenção antes de entrar na memória compartilhada.',
+      tone: 'attention'
+    };
+  }
+  return {
+    title: 'Salva neste aparelho',
+    description: 'O Angico enviará esta observação quando houver conexão disponível.',
+    tone: 'pending'
+  };
+}
+
+export default function NewEntityModal({
+  workspaceId,
+  initialType = 'observacao',
+  lockType,
+  initialLat,
+  initialLng,
+  onClose,
+  onCreated
+}: Props) {
   const [type, setType] = useState<EntityType>(initialType);
-  const meta = TYPES[type];
-  const [categoria, setCategoria] = useState(meta.categorias[0]);
-  const [titulo, setTitulo] = useState('');
-  const [descricao, setDescricao] = useState('');
-  const [localizacao, setLocalizacao] = useState('');
-  const [cidade, setCidade] = useState('');
-  const [estado, setEstado] = useState('');
-  const [bairro, setBairro] = useState('');
+  const [step, setStep] = useState(1);
+  const [category, setCategory] = useState(TYPES[initialType].categories[0]);
+  const [title, setTitle] = useState('');
+  const [description, setDescription] = useState('');
+  const [location, setLocation] = useState('');
+  const [city, setCity] = useState('');
+  const [state, setState] = useState('');
+  const [neighborhood, setNeighborhood] = useState('');
   const [coords, setCoords] = useState<[number, number] | null>(
     initialLat != null && initialLng != null ? [initialLat, initialLng] : null
   );
-  const [nivel, setNivel] = useState('MEDIA');
+  const [level, setLevel] = useState('MEDIA');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<SuccessState | null>(null);
+  const meta = TYPES[type];
 
-  function chooseType(t: EntityType) {
-    setType(t);
-    setCategoria(TYPES[t].categorias[0]);
+  function chooseType(next: EntityType) {
+    setType(next);
+    setCategory(TYPES[next].categories[0]);
   }
 
-  // A geocoding suggestion was chosen: take its coords + cidade/UF.
-  async function applyResult(r: GeoResult) {
-    if (r.city) setCidade(r.city);
-    if (r.state) setEstado(r.state);
-    setBairro(r.neighborhood ?? '');
-    const resolved = await resolveCoords(r);
+  async function applyResult(result: GeoResult) {
+    setCity(result.city ?? '');
+    setState(result.state ?? '');
+    setNeighborhood(result.neighborhood ?? '');
+    const resolved = await resolveCoords(result);
     if (resolved) setCoords(resolved);
   }
 
-  // Drag/click on the preview map → update coords + reverse-geocode the address.
   async function handlePick(lat: number, lng: number) {
     setCoords([lat, lng]);
-    const r = await reverseGeocode(lat, lng);
-    if (r) {
-      if (r.displayName) setLocalizacao(r.displayName);
-      if (r.city) setCidade(r.city);
-      if (r.state) setEstado(r.state);
-      setBairro(r.neighborhood ?? '');
+    const result = await reverseGeocode(lat, lng);
+    if (!result) return;
+    setLocation(result.displayName || location);
+    setCity(result.city ?? '');
+    setState(result.state ?? '');
+    setNeighborhood(result.neighborhood ?? '');
+  }
+
+  function advanceFromRecord() {
+    if (!title.trim()) {
+      setError('Dê um título curto ao registro para continuar.');
+      return;
     }
+    setError(null);
+    setStep(2);
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (step !== 3) return;
     setSubmitting(true);
     setError(null);
     const body: Record<string, unknown> = {
       workspaceId,
-      categoria,
-      titulo,
-      descricao: descricao || undefined,
-      localizacao: localizacao || undefined,
+      categoria: category,
+      titulo: title.trim(),
+      descricao: description.trim() || undefined,
+      localizacao: location.trim() || undefined,
       latitude: coords?.[0],
       longitude: coords?.[1],
       autorId: authorRef()
     };
     if (type === 'observacao') {
-      body.bairro = bairro || undefined;
-      body.cidade = cidade || undefined;
-      body.estado = estado || undefined;
-      body.urgencia = nivel;
+      body.bairro = neighborhood || undefined;
+      body.cidade = city || undefined;
+      body.estado = state || undefined;
+      body.urgencia = level;
     } else if (type === 'problema') {
-      body.severidade = nivel;
+      body.severidade = level;
     }
+
     try {
       if (type === 'observacao') {
-        await captureObservation(body as unknown as ObservacaoInput);
+        const result = await captureObservation(body as unknown as ObservacaoInput);
+        setSuccess(captureMessage(result));
       } else {
         await createEntity(meta.endpoint, body);
+        setSuccess({
+          title: `${meta.label} registrada`,
+          description: 'O registro foi confirmado pelo servidor e entrou na memória do território.',
+          tone: 'ok'
+        });
       }
-      onCreated();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erro inesperado');
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Não foi possível salvar o registro.');
+    } finally {
       setSubmitting(false);
     }
   }
 
-  return (
-    <div style={overlay} onClick={onClose}>
-      <div style={card} onClick={(e) => e.stopPropagation()}>
-        <h2 style={{ marginTop: 0, marginBottom: 4 }}>{meta.titulo}</h2>
-        <p style={{ color: '#5b7280', marginTop: 0 }}>
-          Registre o que você observou e marque o local no território.
-        </p>
+  if (success) {
+    return (
+      <div className="modal-overlay" role="presentation">
+        <section className="capture-dialog capture-result" role="dialog" aria-modal="true" aria-labelledby="capture-result-title">
+          <div className={`capture-result-mark ${success.tone}`} aria-hidden="true">✓</div>
+          <div role="status">
+            <h2 id="capture-result-title">{success.title}</h2>
+            <p>{success.description}</p>
+          </div>
+          <button type="button" className="primary-button" onClick={onCreated}>Concluir</button>
+        </section>
+      </div>
+    );
+  }
 
-        {!lockType && (
-          <div className="type-chooser" role="tablist" aria-label="Tipo de registro">
-            {(Object.keys(TYPES) as EntityType[]).map((t) => (
+  return (
+    <div className="modal-overlay" role="presentation" onMouseDown={(event) => {
+      if (event.target === event.currentTarget && !submitting) onClose();
+    }}>
+      <section className="capture-dialog" role="dialog" aria-modal="true" aria-labelledby="capture-title">
+        <header className="capture-head">
+          <div>
+            <span className="overline">Registro de campo</span>
+            <h2 id="capture-title">{meta.title}</h2>
+          </div>
+          <button type="button" className="icon-button" aria-label="Fechar" onClick={onClose}>×</button>
+        </header>
+
+        <ol className="capture-steps" aria-label="Etapas do registro">
+          {STEPS.map((label, index) => {
+            const number = index + 1;
+            return (
+              <li key={label} className={number === step ? 'active' : number < step ? 'done' : ''}>
+                <span>{number}</span><b>{label}</b>
+              </li>
+            );
+          })}
+        </ol>
+
+        {!lockType && step === 1 && (
+          <div className="type-chooser" aria-label="Tipo de registro">
+            {(Object.keys(TYPES) as EntityType[]).map((entry) => (
               <button
                 type="button"
-                key={t}
-                role="tab"
-                aria-selected={t === type}
-                className={`chip ${t === type ? 'on' : ''}`}
-                onClick={() => chooseType(t)}
+                key={entry}
+                aria-pressed={entry === type}
+                className={entry === type ? 'selected' : ''}
+                onClick={() => chooseType(entry)}
               >
-                <span className="legend-dot" style={{ background: TYPES[t].cor }} />{TYPES[t].label}
+                {TYPES[entry].label}
               </button>
             ))}
           </div>
         )}
 
-        <form className="obs-form" onSubmit={handleSubmit}>
-          <div className="field">
-            <label htmlFor="ne-categoria">Categoria</label>
-            <select id="ne-categoria" value={categoria} onChange={(e) => setCategoria(e.target.value)}>
-              {meta.categorias.map((c) => <option key={c} value={c}>{c}</option>)}
-            </select>
-          </div>
-          <div className="field">
-            <label htmlFor="ne-titulo">Título</label>
-            <input id="ne-titulo" required value={titulo} onChange={(e) => setTitulo(e.target.value)} placeholder="Ex: Descarte irregular de lixo" />
-          </div>
-          <div className="field">
-            <label htmlFor="ne-desc">Descrição</label>
-            <input id="ne-desc" value={descricao} onChange={(e) => setDescricao(e.target.value)} placeholder="Detalhes da situação" />
-          </div>
-          <div className="field">
-            <label htmlFor="ne-local">Endereço ou cidade</label>
-            <AddressField
-              id="ne-local"
-              value={localizacao}
-              onChange={setLocalizacao}
-              onSelect={applyResult}
-              placeholder="Ex: Avenida Boa Viagem, Recife"
-            />
-          </div>
-
-          {coords && (
-            <div className="obs-map">
-              <div className="obs-map__frame">
-                <MapView center={coords} zoom={16} height={200} recenter picker={{ position: coords, onPick: handlePick }} />
+        <form className="capture-form" onSubmit={handleSubmit}>
+          {step === 1 && (
+            <section className="capture-panel" aria-labelledby="capture-record-title">
+              <div className="capture-panel-copy">
+                <h3 id="capture-record-title">O que você observou?</h3>
+                <p>Use palavras reconhecíveis por quem vive o território.</p>
               </div>
-              <p className="obs-map__hint">
-                <span className="obs-map__dot" aria-hidden="true" />
-                Arraste o marcador ou toque no mapa para ajustar.
-                {' '}<span className="obs-map__coords">{coords[0].toFixed(5)}, {coords[1].toFixed(5)}</span>
-                {(cidade || estado) && <> · {[cidade, estado].filter(Boolean).join(', ')}</>}
-              </p>
-            </div>
+              <div className="field-row">
+                <div className="field">
+                  <label htmlFor="ne-category">Categoria</label>
+                  <select id="ne-category" value={category} onChange={(event) => setCategory(event.target.value)}>
+                    {meta.categories.map((entry) => <option key={entry}>{entry}</option>)}
+                  </select>
+                </div>
+                {meta.levelField && (
+                  <div className="field">
+                    <label htmlFor="ne-level">{meta.levelLabel}</label>
+                    <select id="ne-level" value={level} onChange={(event) => setLevel(event.target.value)}>
+                      {NIVEIS.map((entry) => <option key={entry}>{entry}</option>)}
+                    </select>
+                  </div>
+                )}
+              </div>
+              <div className="field">
+                <label htmlFor="ne-title">Título</label>
+                <input
+                  id="ne-title"
+                  value={title}
+                  onChange={(event) => setTitle(event.target.value)}
+                  placeholder="Ex.: Nascente com resíduos na margem"
+                  autoFocus
+                />
+              </div>
+              <div className="field">
+                <label htmlFor="ne-description">Relato de campo <span>opcional</span></label>
+                <textarea
+                  id="ne-description"
+                  rows={4}
+                  value={description}
+                  onChange={(event) => setDescription(event.target.value)}
+                  placeholder="Descreva o que viu, sem interpretar além do que pode comprovar."
+                />
+              </div>
+            </section>
           )}
 
-          {meta.nivelCampo && (
-            <div className="field">
-              <label htmlFor="ne-nivel">{meta.nivelLabel}</label>
-              <select id="ne-nivel" value={nivel} onChange={(e) => setNivel(e.target.value)}>
-                {NIVEIS.map((u) => <option key={u} value={u}>{u}</option>)}
-              </select>
-            </div>
+          {step === 2 && (
+            <section className="capture-panel" aria-labelledby="capture-place-title">
+              <div className="capture-panel-copy">
+                <h3 id="capture-place-title">Onde aconteceu?</h3>
+                <p>O local cria contexto. Se não puder informar agora, o registro ainda será preservado.</p>
+              </div>
+              <div className="field">
+                <label htmlFor="ne-location">Endereço, comunidade ou referência</label>
+                <AddressField
+                  id="ne-location"
+                  value={location}
+                  onChange={setLocation}
+                  onSelect={applyResult}
+                  placeholder="Ex.: margem da nascente, Comunidade do Sol"
+                />
+              </div>
+              {coords ? (
+                <div className="capture-map">
+                  <MapView
+                    center={coords}
+                    zoom={16}
+                    height={220}
+                    recenter
+                    picker={{ position: coords, onPick: handlePick }}
+                  />
+                  <p>Toque no mapa ou arraste o marcador para ajustar o local.</p>
+                </div>
+              ) : (
+                <div className="location-empty">
+                  <b>Local ainda não definido</b>
+                  <span>Você pode continuar e completar essa informação depois.</span>
+                </div>
+              )}
+            </section>
+          )}
+
+          {step === 3 && (
+            <section className="capture-panel" aria-labelledby="capture-proof-title">
+              <div className="capture-panel-copy">
+                <h3 id="capture-proof-title">O que será preservado?</h3>
+                <p>Confira o registro antes de colocá-lo na memória do território.</p>
+              </div>
+              <dl className="capture-review">
+                <div><dt>Registro</dt><dd>{title}</dd></div>
+                <div><dt>Contexto</dt><dd>{category} · {meta.levelLabel ? `${meta.levelLabel}: ${level.toLowerCase()}` : meta.label}</dd></div>
+                <div><dt>Território</dt><dd>{location || [neighborhood, city, state].filter(Boolean).join(', ') || 'Local não informado'}</dd></div>
+                <div><dt>Autoria</dt><dd>{authorRef() ?? 'Pessoa da sessão atual'}</dd></div>
+              </dl>
+              <div className="evidence-note">
+                <b>Evidência disponível nesta etapa</b>
+                <p>O relato, a autoria e o momento do registro serão preservados. Fotos e documentos ainda não são enviados por este fluxo.</p>
+              </div>
+              <p className="offline-note">Se a conexão falhar, a observação ficará salva neste aparelho até poder ser sincronizada.</p>
+            </section>
           )}
 
           {error && <div className="form-error" role="alert">{error}</div>}
 
-          <div className="obs-form__actions">
-            <button type="button" className="ghost-button" onClick={onClose} disabled={submitting}>Cancelar</button>
-            <button type="submit" className="primary-button" disabled={submitting}>
-              {submitting ? 'Registrando…' : `Registrar ${meta.label.toLowerCase()}`}
-            </button>
-          </div>
+          <footer className="capture-actions">
+            {step === 1 ? (
+              <button type="button" className="ghost-button" onClick={onClose}>Cancelar</button>
+            ) : (
+              <button type="button" className="ghost-button" onClick={() => { setError(null); setStep(step - 1); }}>Voltar</button>
+            )}
+            {step === 1 && (
+              <button type="button" className="primary-button" onClick={advanceFromRecord}>Continuar para ancorar</button>
+            )}
+            {step === 2 && (
+              <button type="button" className="primary-button" onClick={() => setStep(3)}>Continuar para comprovar</button>
+            )}
+            {step === 3 && (
+              <button type="submit" className="primary-button" disabled={submitting}>
+                {submitting ? 'Salvando…' : `Salvar ${meta.label.toLowerCase()}`}
+              </button>
+            )}
+          </footer>
         </form>
-      </div>
+      </section>
     </div>
   );
 }
