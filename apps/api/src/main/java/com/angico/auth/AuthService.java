@@ -64,7 +64,7 @@ public class AuthService {
                 .filter(candidate -> passwordHasher.matches(request.password(), candidate.getPasswordHash()))
                 .orElseThrow(() -> new UnauthorizedException("Credenciais inválidas."));
 
-        String workspaceId = ensureLegacyMembership(pessoa);
+        String workspaceId = activeWorkspaceId(pessoa);
         pessoa.setLastLoginAt(Instant.now());
         pessoaRepository.save(pessoa);
         return issueSession(pessoa, workspaceId);
@@ -190,8 +190,10 @@ public class AuthService {
         String normalizedEmail = normalizeEmail(email);
         String normalizedAngicoId = AngicoIdNormalizer.normalize(angicoId);
         Instant now = Instant.now();
-        workspaceRepository.findBySlug(workspaceId).orElseGet(() -> workspaceRepository.save(
+        Workspace workspace = workspaceRepository.findBySlug(workspaceId).orElseGet(() -> workspaceRepository.save(
                 new Workspace(workspaceId, "Espaço de " + nome, "@" + normalizedAngicoId, now)));
+        workspace.setStatus("ACTIVE");
+        workspace.setUpdatedAt(now);
         Pessoa pessoa = pessoaRepository.findByEmailIgnoreCase(normalizedEmail)
                 .map(existing -> {
                     if (!workspaceId.equals(existing.getWorkspaceId())) {
@@ -220,7 +222,7 @@ public class AuthService {
                     created.setCreatedAt(now);
                     return pessoaRepository.save(created);
                 });
-        ensureLegacyMembership(pessoa);
+        ensureLocalSeedMembership(pessoa, workspaceId, now);
         return pessoa;
     }
 
@@ -239,20 +241,9 @@ public class AuthService {
         return new IssuedSession(rawToken, toResponse(pessoa, session, csrfToken));
     }
 
-    private String ensureLegacyMembership(Pessoa pessoa) {
+    private String activeWorkspaceId(Pessoa pessoa) {
         String actorId = pessoa.getAngicoId();
         String legacyWorkspaceId = pessoa.getWorkspaceId();
-        if (actorId != null && !actorId.isBlank() && legacyWorkspaceId != null && !legacyWorkspaceId.isBlank()) {
-            memberRepository.findByWorkspaceIdAndActorId(legacyWorkspaceId, actorId)
-                    .orElseGet(() -> memberRepository.save(new WorkspaceMember(
-                            legacyWorkspaceId,
-                            actorId,
-                            pessoa.getNome(),
-                            membershipRole(pessoa.getPapel()),
-                            "ACTIVE",
-                            Instant.now()
-                    )));
-        }
         if (actorId == null || actorId.isBlank()) {
             return null;
         }
@@ -264,6 +255,23 @@ public class AuthService {
                 .or(() -> activeMemberships.stream().findFirst())
                 .map(WorkspaceMember::getWorkspaceId)
                 .orElse(null);
+    }
+
+    private void ensureLocalSeedMembership(Pessoa pessoa, String workspaceId, Instant now) {
+        String actorId = pessoa.getAngicoId();
+        WorkspaceMember membership = memberRepository.findByWorkspaceIdAndActorId(workspaceId, actorId)
+                .orElseGet(() -> new WorkspaceMember(
+                        workspaceId,
+                        actorId,
+                        pessoa.getNome(),
+                        membershipRole(pessoa.getPapel()),
+                        "ACTIVE",
+                        now
+                ));
+        membership.setDisplayName(pessoa.getNome());
+        membership.setRole(membershipRole(pessoa.getPapel()));
+        membership.setStatus("ACTIVE");
+        memberRepository.save(membership);
     }
 
     private String membershipRole(String papel) {

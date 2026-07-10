@@ -106,6 +106,8 @@ class WorkspaceServiceTest {
         WorkspaceResponse created = create("Temporário", null);
         service.remover(created.slug());
         assertFalse(service.listar().stream().anyMatch(w -> created.slug().equals(w.slug())));
+        assertEquals("ARCHIVED", workspaceStore.getFirst().getStatus());
+        assertTrue(memberStore.stream().allMatch(member -> "INACTIVE".equals(member.getStatus())));
     }
 
     @Test
@@ -115,6 +117,16 @@ class WorkspaceServiceTest {
         service.remover(created.slug());
 
         assertTrue(service.listar().isEmpty());
+    }
+
+    @Test
+    void archivedWorkspaceSlugIsNeverReused() {
+        WorkspaceResponse archived = create("Horta Comunitária", null);
+        service.remover(archived.slug());
+
+        WorkspaceResponse replacement = create("Horta Comunitária", null);
+
+        assertEquals("horta-comunitaria-2", replacement.slug());
     }
 
     @Test

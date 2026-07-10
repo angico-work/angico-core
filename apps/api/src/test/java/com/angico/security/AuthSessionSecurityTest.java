@@ -217,31 +217,31 @@ class AuthSessionSecurityTest {
     }
 
     @Test
-    void loginBackfillsOnlyThePersonsOwnLegacyWorkspaceMembership() throws Exception {
+    void loginDoesNotRestoreADeletedLegacyMembership() throws Exception {
         int id = IDS.incrementAndGet();
         String ownWorkspace = "legacy-own-" + id;
-        String unrelatedWorkspace = "legacy-unrelated-" + id;
         String angicoId = "legacy." + id;
         String legacyEmail = "legacy-" + id + "@example.test";
         workspaceRepository.save(new Workspace(ownWorkspace, "Legacy own", null, Instant.now()));
-        workspaceRepository.save(new Workspace(unrelatedWorkspace, "Unrelated", null, Instant.now()));
         Pessoa legacy = new Pessoa(ownWorkspace, "Legacy", "LIDER", Instant.now());
         legacy.setEmail(legacyEmail);
         legacy.setAngicoId(angicoId);
         legacy.setStatus("ATIVA");
         legacy.setPasswordHash(passwordHasher.hash("correct-password"));
         pessoaRepository.save(legacy);
+        WorkspaceMember removed = memberRepository.save(new WorkspaceMember(
+                ownWorkspace, angicoId, "Legacy", "OWNER", "ACTIVE", Instant.now()));
+        memberRepository.delete(removed);
+        memberRepository.flush();
 
         mvc.perform(post("/api/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"email\":\"" + legacyEmail + "\",\"password\":\"correct-password\"}"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.workspaceId").value(ownWorkspace));
+                .andExpect(jsonPath("$.workspaceId").doesNotExist());
 
-        var membership = memberRepository.findByWorkspaceIdAndActorId(ownWorkspace, angicoId).orElseThrow();
-        org.junit.jupiter.api.Assertions.assertEquals("OWNER", membership.getRole());
         org.junit.jupiter.api.Assertions.assertTrue(
-                memberRepository.findByWorkspaceIdAndActorId(unrelatedWorkspace, angicoId).isEmpty());
+                memberRepository.findByWorkspaceIdAndActorId(ownWorkspace, angicoId).isEmpty());
     }
 
     @Test

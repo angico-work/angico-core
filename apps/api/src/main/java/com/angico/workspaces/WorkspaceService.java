@@ -42,6 +42,7 @@ public class WorkspaceService {
         return workspaceRepository.findAllByOrderByCreatedAtAsc()
                 .stream()
                 .filter(workspace -> authorized.contains(workspace.getSlug()))
+                .filter(workspace -> "ACTIVE".equalsIgnoreCase(workspace.getStatus()))
                 .map(WorkspaceResponse::from)
                 .toList();
     }
@@ -105,8 +106,11 @@ public class WorkspaceService {
     public void remover(String slug) {
         accessService.requireManage(slug);
         workspaceRepository.findBySlug(slug).ifPresent(workspace -> {
-            memberRepository.findByWorkspaceIdOrderByJoinedAtAsc(slug).forEach(memberRepository::delete);
-            workspaceRepository.delete(workspace);
+            workspace.setStatus("ARCHIVED");
+            workspace.setUpdatedAt(clock.now());
+            memberRepository.findByWorkspaceIdOrderByJoinedAtAsc(slug)
+                    .forEach(member -> member.setStatus("INACTIVE"));
+            memoryPublisher.publicarAtualizado(workspace, accessService.currentActorId().orElse(null));
         });
     }
 
