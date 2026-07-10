@@ -15,6 +15,7 @@ public class OntologyService {
     public static final String TERRITORIO = "TERRITORIO";
     public static final String PESSOA = "PESSOA";
     public static final String ORGANIZACAO = "ORGANIZACAO";
+    public static final String PARTICIPACAO = "PARTICIPACAO";
     public static final String OBSERVACAO = "OBSERVACAO";
     public static final String EVIDENCIA = "EVIDENCIA";
     public static final String PROBLEMA = "PROBLEMA";
@@ -34,6 +35,7 @@ public class OntologyService {
             TERRITORIO,
             PESSOA,
             ORGANIZACAO,
+            PARTICIPACAO,
             OBSERVACAO,
             EVIDENCIA,
             PROBLEMA,
@@ -59,7 +61,9 @@ public class OntologyService {
             new RelationRule(PROBLEMA, "PRIORIZADO_POR", PESSOA),
             new RelationRule(MISSAO, "ENFRENTA", PROBLEMA),
             new RelationRule(MISSAO, "ATUA_EM", TERRITORIO),
-            new RelationRule(MISSAO, "MOBILIZA", ORGANIZACAO),
+            new RelationRule(PESSOA, "PARTICIPA_DE", ORGANIZACAO),
+            new RelationRule(ORGANIZACAO, "CONDUZ", MISSAO),
+            new RelationRule(ORGANIZACAO, "MOBILIZA", MISSAO),
             new RelationRule(MISSAO, "COMPOSTA_POR", ACAO),
             new RelationRule(PESSOA, "RESPONSAVEL_POR", ACAO),
             new RelationRule(ACAO, "PRODUZ", RESULTADO),
