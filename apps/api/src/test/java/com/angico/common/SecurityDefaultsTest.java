@@ -95,12 +95,13 @@ class SecurityDefaultsTest {
     }
 
     @Test
-    void pomDeclaresJacksonDatabindOnlyOnce() throws IOException {
+    void pomDoesNotReintroduceLegacyJacksonDatabind() throws IOException {
         Path pomPath = Files.exists(Path.of("pom.xml"))
                 ? Path.of("pom.xml")
                 : Path.of("apps/api/pom.xml");
         String pom = Files.readString(pomPath);
-        assertEquals(1, occurrences(pom, "<artifactId>jackson-databind</artifactId>"));
+        assertEquals(0, occurrences(pom, "<groupId>com.fasterxml.jackson"));
+        assertEquals(0, occurrences(pom, "<artifactId>jackson-databind</artifactId>"));
     }
 
     @Test
