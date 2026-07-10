@@ -11,9 +11,6 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class WorkspaceService {
 
-    private static final String DEFAULT_SLUG = "coletivo-jardim-novo";
-    private static final String DEFAULT_NOME = "Coletivo Jardim Novo";
-
     static final Set<String> ROLES = Set.of("OWNER", "ADMIN", "COORDINATOR", "MAPPER", "MEMBER", "VIEWER");
 
     private final WorkspaceRepository workspaceRepository;
@@ -41,7 +38,6 @@ public class WorkspaceService {
 
     @Transactional
     public List<WorkspaceResponse> listar() {
-        ensureDefault();
         Set<String> authorized = Set.copyOf(authorizationService.authorizedWorkspaceIds());
         return workspaceRepository.findAllByOrderByCreatedAtAsc()
                 .stream()
@@ -107,9 +103,6 @@ public class WorkspaceService {
 
     @Transactional
     public void remover(String slug) {
-        if (DEFAULT_SLUG.equals(slug)) {
-            throw new IllegalArgumentException("O workspace inicial não pode ser removido.");
-        }
         accessService.requireManage(slug);
         workspaceRepository.findBySlug(slug).ifPresent(workspace -> {
             memberRepository.findByWorkspaceIdOrderByJoinedAtAsc(slug).forEach(memberRepository::delete);
@@ -171,12 +164,6 @@ public class WorkspaceService {
     private void assertWorkspaceExists(String slug) {
         if (workspaceRepository.findBySlug(slug).isEmpty()) {
             throw new IllegalArgumentException("Workspace não encontrado: " + slug);
-        }
-    }
-
-    private void ensureDefault() {
-        if (!workspaceRepository.existsBySlug(DEFAULT_SLUG)) {
-            workspaceRepository.save(new Workspace(DEFAULT_SLUG, DEFAULT_NOME, null, clock.now()));
         }
     }
 

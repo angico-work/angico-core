@@ -17,12 +17,6 @@ import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-/**
- * Unit tests for the workspace registry that underpins per-workspace data
- * isolation, plus the workspace membership model. The repositories are stateful
- * in-memory fakes and access control is stubbed permissive, so the real
- * slug/seed/guard/member logic runs without a database or request context.
- */
 class WorkspaceServiceTest {
 
     private List<Workspace> workspaceStore;
@@ -63,8 +57,6 @@ class WorkspaceServiceTest {
                         .filter(m -> m.getWorkspaceId().equals(call.getArgument(0)) && m.getActorId().equals(call.getArgument(1)))
                         .findFirst());
 
-        // Permissive access (no request context in a unit test): never blocks,
-        // and no authenticated actor so create() adds no owner.
         WorkspaceAccessService accessService = mock(WorkspaceAccessService.class);
         when(accessService.currentActorId()).thenReturn(Optional.of("test.actor"));
         when(accessService.currentActorName()).thenReturn(Optional.of("Test Actor"));
@@ -74,7 +66,6 @@ class WorkspaceServiceTest {
         when(authorizationService.authorizedWorkspaceIds()).thenAnswer(call ->
                 workspaceStore.stream().map(Workspace::getSlug).toList());
 
-        // Memory wiring is exercised at integration level; here it is a no-op.
         WorkspaceMemoryPublisher memoryPublisher = mock(WorkspaceMemoryPublisher.class);
 
         service = new WorkspaceService(
@@ -91,10 +82,8 @@ class WorkspaceServiceTest {
     }
 
     @Test
-    void listingSeedsTheHomeWorkspace() {
-        List<WorkspaceResponse> list = service.listar();
-        assertTrue(list.stream().anyMatch(w -> "coletivo-jardim-novo".equals(w.slug())),
-                "the home workspace should always be present");
+    void listingDoesNotCreateImplicitWorkspaces() {
+        assertTrue(service.listar().isEmpty());
     }
 
     @Test
@@ -120,8 +109,12 @@ class WorkspaceServiceTest {
     }
 
     @Test
-    void theHomeWorkspaceIsProtectedFromRemoval() {
-        assertThrows(IllegalArgumentException.class, () -> service.remover("coletivo-jardim-novo"));
+    void aWorkspaceNamedLikeTheLocalDemoCanBeRemoved() {
+        WorkspaceResponse created = create("Coletivo Jardim Novo", null);
+
+        service.remover(created.slug());
+
+        assertTrue(service.listar().isEmpty());
     }
 
     @Test

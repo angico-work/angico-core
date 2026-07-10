@@ -10,8 +10,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
-import com.angico.auth.PasswordHasher;
 import com.angico.auth.AuthSessionRepository;
+import com.angico.auth.AuthService;
+import com.angico.auth.PasswordHasher;
 import com.angico.pessoas.Pessoa;
 import com.angico.pessoas.PessoaRepository;
 import com.angico.workspaces.Workspace;
@@ -66,6 +67,9 @@ class AuthSessionSecurityTest {
 
     @Autowired
     private AuthSessionRepository sessionRepository;
+
+    @Autowired
+    private AuthService authService;
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
@@ -186,6 +190,30 @@ class AuthSessionSecurityTest {
                         .content("{\"nome\":\"\"}"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.status").value(400));
+    }
+
+    @Test
+    void dashboardRequiresAnExplicitWorkspace() throws Exception {
+        SessionCredentials credentials = login();
+
+        mvc.perform(get("/api/glimpse/dashboard").cookie(credentials.cookie()))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void explicitLocalSeedCreatesItsWorkspace() {
+        int id = IDS.incrementAndGet();
+        String seedWorkspace = "local-seed-" + id;
+
+        authService.ensureLeader(
+                seedWorkspace,
+                "Lider local",
+                "local-seed-" + id + "@example.test",
+                "local.seed." + id,
+                "LIDER",
+                "local-password-123");
+
+        org.junit.jupiter.api.Assertions.assertTrue(workspaceRepository.existsBySlug(seedWorkspace));
     }
 
     @Test

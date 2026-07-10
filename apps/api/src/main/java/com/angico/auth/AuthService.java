@@ -188,6 +188,10 @@ public class AuthService {
             String rawPassword
     ) {
         String normalizedEmail = normalizeEmail(email);
+        String normalizedAngicoId = AngicoIdNormalizer.normalize(angicoId);
+        Instant now = Instant.now();
+        workspaceRepository.findBySlug(workspaceId).orElseGet(() -> workspaceRepository.save(
+                new Workspace(workspaceId, "Espaço de " + nome, "@" + normalizedAngicoId, now)));
         Pessoa pessoa = pessoaRepository.findByEmailIgnoreCase(normalizedEmail)
                 .map(existing -> {
                     if (!workspaceId.equals(existing.getWorkspaceId())) {
@@ -209,11 +213,11 @@ public class AuthService {
                     created.setWorkspaceId(workspaceId);
                     created.setNome(nome);
                     created.setEmail(normalizedEmail);
-                    created.setAngicoId(AngicoIdNormalizer.normalize(angicoId));
+                    created.setAngicoId(normalizedAngicoId);
                     created.setPapel(papel);
                     created.setStatus("ATIVA");
                     created.setPasswordHash(passwordHasher.hash(rawPassword));
-                    created.setCreatedAt(Instant.now());
+                    created.setCreatedAt(now);
                     return pessoaRepository.save(created);
                 });
         ensureLegacyMembership(pessoa);

@@ -10,8 +10,6 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/glimpse")
 public class GlimpseController {
 
-    private static final String DEFAULT_WORKSPACE = "coletivo-jardim-novo";
-
     private final GlimpseService glimpseService;
 
     public GlimpseController(GlimpseService glimpseService) {
@@ -19,20 +17,17 @@ public class GlimpseController {
     }
 
     @GetMapping("/dashboard")
-    public DashboardResponse dashboard(
-            @RequestParam(name = "workspaceId", defaultValue = DEFAULT_WORKSPACE) String workspaceId) {
+    public DashboardResponse dashboard(@RequestParam String workspaceId) {
         return glimpseService.dashboard(workspaceId);
     }
 
     @GetMapping("/map")
-    public List<MapPoint> map(
-            @RequestParam(name = "workspaceId", defaultValue = DEFAULT_WORKSPACE) String workspaceId) {
+    public List<MapPoint> map(@RequestParam String workspaceId) {
         return glimpseService.mapPoints(workspaceId);
     }
 
     @GetMapping("/memoria")
-    public List<MemoriaEvent> memoria(
-            @RequestParam(name = "workspaceId", defaultValue = DEFAULT_WORKSPACE) String workspaceId) {
+    public List<MemoriaEvent> memoria(@RequestParam String workspaceId) {
         return glimpseService.memoria(workspaceId);
     }
 }
