@@ -38,14 +38,13 @@ public interface MemoryRelationRepository extends JpaRepository<StoredMemoryRela
     @Query("""
             select r from StoredMemoryRelation r
             where r.workspaceId = :workspaceId
-              and r.active = true
               and (
                 (upper(r.originType) = upper(:entityType) and r.originId = :entityId)
                 or
                 (upper(r.destinationType) = upper(:entityType) and r.destinationId = :entityId)
               )
             """)
-    List<StoredMemoryRelation> findActiveRelationsForNode(
+    List<StoredMemoryRelation> findRelationsForNode(
             @Param("workspaceId") String workspaceId,
             @Param("entityType") String entityType,
             @Param("entityId") String entityId);
@@ -64,5 +63,5 @@ public interface MemoryRelationRepository extends JpaRepository<StoredMemoryRela
             @Param("originId") String originId,
             @Param("relationType") String relationType);
 
-    List<StoredMemoryRelation> findByWorkspaceIdAndActiveTrue(String workspaceId);
+    List<StoredMemoryRelation> findByWorkspaceId(String workspaceId);
 }

@@ -56,6 +56,8 @@ public class StoredMemoryEvent {
     private Instant recordedAt;
     private String idempotencyKey;
     private String syncStatus;
+    private String organizationId;
+    private Long entityVersion;
 
     @Lob
     private String payloadJson;
@@ -161,6 +163,22 @@ public class StoredMemoryEvent {
 
     public String getSyncStatus() {
         return syncStatus == null ? MemorySyncStatus.SERVER_RECORDED.name() : syncStatus;
+    }
+
+    public String getOrganizationId() {
+        return organizationId;
+    }
+
+    public Long getEntityVersion() {
+        return entityVersion;
+    }
+
+    public void assignOrganizationId(String organizationId) {
+        this.organizationId = organizationId;
+    }
+
+    public void assignEntityVersion(long entityVersion) {
+        this.entityVersion = entityVersion;
     }
 
     public String getPayloadJson() {

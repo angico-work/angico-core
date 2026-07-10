@@ -17,7 +17,8 @@ public record MemoryEvent(
         Instant occurredAt,
         Map<String, Object> payload,
         String idempotencyKey,
-        MemorySyncStatus syncStatus
+        MemorySyncStatus syncStatus,
+        String organizationId
 ) {
 
     public MemoryEvent(
@@ -48,7 +49,43 @@ public record MemoryEvent(
                 occurredAt,
                 payload,
                 null,
-                MemorySyncStatus.SERVER_RECORDED
+                MemorySyncStatus.SERVER_RECORDED,
+                null
+        );
+    }
+
+    public MemoryEvent(
+            String workspaceId,
+            String entityType,
+            String entityId,
+            String eventType,
+            String source,
+            String actorId,
+            String deviceId,
+            String correlationId,
+            String causationId,
+            int schemaVersion,
+            Instant occurredAt,
+            Map<String, Object> payload,
+            String idempotencyKey,
+            MemorySyncStatus syncStatus
+    ) {
+        this(
+                workspaceId,
+                entityType,
+                entityId,
+                eventType,
+                source,
+                actorId,
+                deviceId,
+                correlationId,
+                causationId,
+                schemaVersion,
+                occurredAt,
+                payload,
+                idempotencyKey,
+                syncStatus,
+                null
         );
     }
 
@@ -80,6 +117,10 @@ public record MemoryEvent(
         syncStatus = syncStatus == null
                 ? MemorySyncStatus.SERVER_RECORDED
                 : syncStatus;
+
+        organizationId = organizationId == null || organizationId.isBlank()
+                ? null
+                : organizationId.strip();
     }
 
     private static void requireText(String value, String fieldName) {

@@ -9,13 +9,10 @@ import org.springframework.stereotype.Repository;
 public interface MemoryEventRepository extends JpaRepository<StoredMemoryEvent, Long>,
         JpaSpecificationExecutor<StoredMemoryEvent> {
 
-    long countByWorkspaceIdAndEntityTypeIgnoreCaseAndEntityId(
-            String workspaceId, String entityType, String entityId);
+    long countByWorkspaceIdAndEntityTypeIgnoreCaseAndEntityIdAndSequenceLessThanEqual(
+            String workspaceId, String entityType, String entityId, Long sequence);
 
     List<StoredMemoryEvent> findByWorkspaceIdOrderBySequenceAsc(String workspaceId);
-
-    List<StoredMemoryEvent> findByWorkspaceIdAndEntityTypeIgnoreCaseAndEntityIdOrderBySequenceAsc(
-            String workspaceId, String entityType, String entityId);
 
     List<StoredMemoryEvent> findTop100ByWorkspaceIdOrderBySequenceDesc(String workspaceId);
 }

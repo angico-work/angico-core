@@ -58,9 +58,12 @@ public class JpaMemoryGateway implements MemoryGateway {
                 event.syncStatus().name(),
                 payload
         );
-        StoredMemoryEvent saved = events.save(stored);
-        long entityVersion = events.countByWorkspaceIdAndEntityTypeIgnoreCaseAndEntityId(
-                event.workspaceId(), entityType, event.entityId());
+        stored.assignOrganizationId(event.organizationId());
+        StoredMemoryEvent saved = events.saveAndFlush(stored);
+        long entityVersion = events
+                .countByWorkspaceIdAndEntityTypeIgnoreCaseAndEntityIdAndSequenceLessThanEqual(
+                        event.workspaceId(), entityType, event.entityId(), saved.getSequence());
+        saved.assignEntityVersion(entityVersion);
         return new MemoryEventResult(eventId, saved.getSequence(), saved.getSequence(), entityVersion);
     }
 
@@ -74,6 +77,8 @@ public class JpaMemoryGateway implements MemoryGateway {
             String status,
             String source
     ) {
+        workspaceId = requireText(workspaceId, "workspaceId");
+        entityId = requireText(entityId, "entityId");
         String canonicalType = ontology.canonicalObjectType(entityType);
         Instant now = clock.now();
         List<StoredMemoryObject> matches = objects
@@ -100,21 +105,38 @@ public class JpaMemoryGateway implements MemoryGateway {
             String destinationType,
             String destinationId,
             String relationType,
-            String source,
-            String notes
+            MemoryRelationMetadata metadata
     ) {
+        workspaceId = requireText(workspaceId, "workspaceId");
+        originId = requireText(originId, "originId");
+        destinationId = requireText(destinationId, "destinationId");
+        if (metadata == null) {
+            throw new IllegalArgumentException("metadata e obrigatorio.");
+        }
         String canonicalOrigin = ontology.canonicalObjectType(originType);
         String canonicalDestination = ontology.canonicalObjectType(destinationType);
         String canonicalRelation = ontology.canonicalRelationType(relationType);
         ontology.requireValidRelation(canonicalOrigin, canonicalRelation, canonicalDestination);
-        boolean exists = !relations.findActiveRelation(
-                workspaceId, canonicalOrigin, originId, canonicalDestination, destinationId, canonicalRelation)
-                .isEmpty();
-        if (!exists) {
-            relations.save(new StoredMemoryRelation(
-                    workspaceId, canonicalOrigin, originId, canonicalDestination, destinationId,
-                    canonicalRelation, source, notes, clock.now()));
+        String activeIdentity = StoredMemoryRelation.activeIdentityFor(
+                workspaceId,
+                canonicalOrigin,
+                originId,
+                canonicalDestination,
+                destinationId,
+                canonicalRelation
+        );
+        List<StoredMemoryRelation> active = relations.findActiveRelation(
+                workspaceId, canonicalOrigin, originId, canonicalDestination, destinationId, canonicalRelation);
+        if (active.size() > 1) {
+            throw new IllegalStateException("Relacoes ativas ambiguas para " + activeIdentity);
         }
+        if (active.size() == 1) {
+            active.getFirst().claimActiveIdentity(activeIdentity);
+            return;
+        }
+        relations.saveAndFlush(new StoredMemoryRelation(
+                workspaceId, canonicalOrigin, originId, canonicalDestination, destinationId,
+                canonicalRelation, metadata, clock.now()));
     }
 
     @Override
@@ -125,17 +147,22 @@ public class JpaMemoryGateway implements MemoryGateway {
             String destinationType,
             String destinationId,
             String relationType,
-            String source,
-            String notes
+            MemoryRelationMetadata metadata
     ) {
+        workspaceId = requireText(workspaceId, "workspaceId");
+        originId = requireText(originId, "originId");
+        destinationId = requireText(destinationId, "destinationId");
+        if (metadata == null) {
+            throw new IllegalArgumentException("metadata e obrigatorio.");
+        }
         String canonicalOrigin = ontology.canonicalObjectType(originType);
         String canonicalDestination = ontology.canonicalObjectType(destinationType);
         String canonicalRelation = ontology.canonicalRelationType(relationType);
         ontology.requireValidRelation(canonicalOrigin, canonicalRelation, canonicalDestination);
         endActiveRelations(workspaceId, canonicalOrigin, originId, canonicalRelation);
-        relations.save(new StoredMemoryRelation(
+        relations.saveAndFlush(new StoredMemoryRelation(
                 workspaceId, canonicalOrigin, originId, canonicalDestination, destinationId,
-                canonicalRelation, source, notes, clock.now()));
+                canonicalRelation, metadata, clock.now()));
     }
 
     @Override
@@ -145,6 +172,8 @@ public class JpaMemoryGateway implements MemoryGateway {
             String originId,
             String relationType
     ) {
+        workspaceId = requireText(workspaceId, "workspaceId");
+        originId = requireText(originId, "originId");
         String canonicalOrigin = ontology.canonicalObjectType(originType);
         String canonicalRelation = ontology.canonicalRelationType(relationType);
         Instant now = clock.now();
@@ -161,5 +190,12 @@ public class JpaMemoryGateway implements MemoryGateway {
         } catch (JsonProcessingException ex) {
             throw new IllegalArgumentException("Payload de memoria invalido.", ex);
         }
+    }
+
+    private String requireText(String value, String field) {
+        if (value == null || value.isBlank()) {
+            throw new IllegalArgumentException(field + " e obrigatorio.");
+        }
+        return value.strip();
     }
 }

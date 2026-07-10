@@ -95,7 +95,7 @@ public class MemoryQueryService {
     public List<Map<String, Object>> timelineForTerritory(String workspaceId, String territorioEntityId) {
         Set<String> keys = new LinkedHashSet<>();
         keys.add(nodeKey(OntologyService.TERRITORIO, territorioEntityId));
-        relationRepository.findActiveRelationsForNode(
+        relationRepository.findRelationsForNode(
                         workspaceId, OntologyService.TERRITORIO, territorioEntityId)
                 .forEach(relation -> {
                     keys.add(nodeKey(relation.getOriginType(), relation.getOriginId()));
@@ -111,13 +111,13 @@ public class MemoryQueryService {
 
     public Map<String, Object> graphForEntity(String workspaceId, String entityType, String entityId) {
         String canonicalType = ontology.canonicalObjectType(entityType);
-        List<StoredMemoryRelation> direct = relationRepository.findActiveRelationsForNode(
+        List<StoredMemoryRelation> direct = relationRepository.findRelationsForNode(
                 workspaceId, canonicalType, entityId);
         return graphFromRelations(workspaceId, direct);
     }
 
     public Map<String, Object> graphForTerritory(String workspaceId, String territorioEntityId) {
-        List<StoredMemoryRelation> direct = relationRepository.findActiveRelationsForNode(
+        List<StoredMemoryRelation> direct = relationRepository.findRelationsForNode(
                 workspaceId, OntologyService.TERRITORIO, territorioEntityId);
         Set<String> nodeKeys = new LinkedHashSet<>();
         direct.forEach(relation -> {
@@ -126,7 +126,7 @@ public class MemoryQueryService {
         });
 
         List<StoredMemoryRelation> expanded = new ArrayList<>(direct);
-        relationRepository.findByWorkspaceIdAndActiveTrue(workspaceId)
+        relationRepository.findByWorkspaceId(workspaceId)
                 .stream()
                 .filter(relation -> nodeKeys.contains(nodeKey(relation.getOriginType(), relation.getOriginId()))
                         || nodeKeys.contains(nodeKey(relation.getDestinationType(), relation.getDestinationId())))
@@ -140,17 +140,33 @@ public class MemoryQueryService {
             String workspaceId,
             List<StoredMemoryRelation> relations
     ) {
-        Map<String, StoredMemoryObject> objects = new HashMap<>();
-        objectRepository.findByWorkspaceId(workspaceId).forEach(object -> {
-            String key = nodeKey(object.getEntityType(), object.getEntityId());
-            if (objects.putIfAbsent(key, object) != null) {
-                throw new IllegalStateException("Objetos de memoria ambiguos para " + key);
+        Map<String, StoredMemoryRelation> uniqueRelations = new LinkedHashMap<>();
+        relations.forEach(relation -> {
+            String key = relationIdentity(relation);
+            if (uniqueRelations.putIfAbsent(key, relation) != null) {
+                throw new IllegalStateException("Relacoes de memoria ambiguas para " + key);
             }
         });
 
+        Set<String> relatedNodeKeys = new LinkedHashSet<>();
+        uniqueRelations.values().forEach(relation -> {
+            relatedNodeKeys.add(nodeKey(relation.getOriginType(), relation.getOriginId()));
+            relatedNodeKeys.add(nodeKey(relation.getDestinationType(), relation.getDestinationId()));
+        });
+        Map<String, StoredMemoryObject> objects = new HashMap<>();
+        objectRepository.findByWorkspaceId(workspaceId).stream()
+                .filter(object -> relatedNodeKeys.contains(
+                        nodeKey(object.getEntityType(), object.getEntityId())))
+                .forEach(object -> {
+                    String key = nodeKey(object.getEntityType(), object.getEntityId());
+                    if (objects.putIfAbsent(key, object) != null) {
+                        throw new IllegalStateException("Objetos de memoria ambiguos para " + key);
+                    }
+                });
+
         Map<String, Map<String, Object>> nodes = new LinkedHashMap<>();
         List<Map<String, Object>> edges = new ArrayList<>();
-        relations.forEach(relation -> {
+        uniqueRelations.values().forEach(relation -> {
             String originKey = nodeKey(relation.getOriginType(), relation.getOriginId());
             String destinationKey = nodeKey(relation.getDestinationType(), relation.getDestinationId());
             nodes.putIfAbsent(originKey, nodeMap(
@@ -198,11 +214,29 @@ public class MemoryQueryService {
                 + ontology.canonicalObjectType(relation.getDestinationType()));
         edge.put("source", relation.getSource());
         edge.put("notes", relation.getNotes());
+        edge.put("context", relation.getNotes());
+        edge.put("actorId", relation.getActorId());
+        edge.put("confidence", relation.getConfidence());
         edge.put("active", relation.isActive());
         edge.put("createdAt", relation.getCreatedAt());
         edge.put("endedAt", relation.getEndedAt());
         edge.put("ontologyValid", isValidRelation(relation));
         return edge;
+    }
+
+    private String relationIdentity(StoredMemoryRelation relation) {
+        String identity = StoredMemoryRelation.activeIdentityFor(
+                relation.getWorkspaceId(),
+                relation.getOriginType(),
+                relation.getOriginId(),
+                relation.getDestinationType(),
+                relation.getDestinationId(),
+                relation.getRelationType()
+        );
+        if (relation.isActive()) {
+            return "ACTIVE:" + identity;
+        }
+        return "HISTORICAL:" + identity + ":" + relation.getCreatedAt() + ":" + relation.getEndedAt();
     }
 
     private boolean isValidRelation(StoredMemoryRelation relation) {
@@ -222,12 +256,14 @@ public class MemoryQueryService {
         result.put("id", event.getEventId());
         result.put("sequence", event.getSequence());
         result.put("workspaceId", event.getWorkspaceId());
-        result.put("organizationId", event.getWorkspaceId());
+        if (event.getOrganizationId() != null) {
+            result.put("organizationId", event.getOrganizationId());
+        }
         result.put("entityType", ontology.canonicalObjectType(event.getEntityType()));
         result.put("entityId", event.getEntityId());
         result.put("eventType", event.getEventType());
-        result.put("actorId", event.getActorId());
-        result.put("deviceId", event.getDeviceId());
+        result.put("actorId", event.getActorId() == null ? "" : event.getActorId());
+        result.put("deviceId", event.getDeviceId() == null ? "" : event.getDeviceId());
         result.put("correlationId", event.getCorrelationId());
         result.put("causationId", event.getCausationId());
         result.put("source", event.getSource());
@@ -238,11 +274,20 @@ public class MemoryQueryService {
         result.put("recordedAt", event.getRecordedAt());
         result.put("idempotencyKey", event.getIdempotencyKey());
         result.put("syncStatus", event.getSyncStatus());
+        result.put("entityVersion", entityVersion(event));
         result.put("commitSequence", event.getSequence());
         copyPayloadField(payload, result, "previousState");
         copyPayloadField(payload, result, "newState");
         copyPayloadField(payload, result, "evidences");
         return result;
+    }
+
+    private long entityVersion(StoredMemoryEvent event) {
+        if (event.getEntityVersion() != null) {
+            return event.getEntityVersion();
+        }
+        return eventRepository.countByWorkspaceIdAndEntityTypeIgnoreCaseAndEntityIdAndSequenceLessThanEqual(
+                event.getWorkspaceId(), event.getEntityType(), event.getEntityId(), event.getSequence());
     }
 
     private void copyPayloadField(

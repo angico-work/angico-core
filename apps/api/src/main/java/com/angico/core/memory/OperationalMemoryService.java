@@ -63,6 +63,27 @@ public class OperationalMemoryService {
     }
 
     @Transactional(propagation = Propagation.MANDATORY)
+    public void registrarRelacaoAtiva(
+            String workspaceId,
+            String originType,
+            String originId,
+            String destinationType,
+            String destinationId,
+            String relationType,
+            MemoryRelationMetadata metadata
+    ) {
+        memoryGateway.ensureActiveRelation(
+                workspaceId,
+                originType,
+                originId,
+                destinationType,
+                destinationId,
+                relationType,
+                metadata
+        );
+    }
+
+    @Transactional(propagation = Propagation.MANDATORY)
     public void substituirRelacaoAtiva(
             String workspaceId,
             String originType,
@@ -82,6 +103,27 @@ public class OperationalMemoryService {
                 relationType,
                 source,
                 notes
+        );
+    }
+
+    @Transactional(propagation = Propagation.MANDATORY)
+    public void substituirRelacaoAtiva(
+            String workspaceId,
+            String originType,
+            String originId,
+            String destinationType,
+            String destinationId,
+            String relationType,
+            MemoryRelationMetadata metadata
+    ) {
+        memoryGateway.replaceActiveRelation(
+                workspaceId,
+                originType,
+                originId,
+                destinationType,
+                destinationId,
+                relationType,
+                metadata
         );
     }
 

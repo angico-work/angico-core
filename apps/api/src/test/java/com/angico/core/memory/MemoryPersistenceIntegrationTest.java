@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.HashMap;
 import java.util.List;
@@ -14,6 +15,7 @@ import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.transaction.annotation.Transactional;
 
 @SpringBootTest(properties = {
@@ -68,7 +70,7 @@ class MemoryPersistenceIntegrationTest {
         assertEquals(true, edge.get("active"));
         assertNotNull(edge.get("createdAt"));
         assertEquals(true, edge.get("ontologyValid"));
-        assertFalse(edge.containsKey("confidence"));
+        assertNull(edge.get("confidence"));
         assertEquals(0, ((List<?>) otherWorkspace.get("relations")).size());
     }
 
@@ -78,6 +80,9 @@ class MemoryPersistenceIntegrationTest {
 
         assertThrows(IllegalArgumentException.class, () -> gateway.ensureActiveRelation(
                 "workspace-a", "ACAO", "acao-1", "PESSOA", "pessoa-1",
+                "OCORRE_EM", "api", null));
+        assertThrows(IllegalArgumentException.class, () -> gateway.ensureActiveRelation(
+                "workspace-a", "OBSERVACAO", " ", "TERRITORIO", "territory",
                 "OCORRE_EM", "api", null));
 
         assertEquals(before, relations.count());
@@ -89,14 +94,29 @@ class MemoryPersistenceIntegrationTest {
 
         Map<String, Object> row = queries.timelineForWorkspace("workspace-a").getFirst();
 
-        assertEquals("workspace-a", row.get("organizationId"));
+        assertFalse(row.containsKey("organizationId"));
         assertEquals("api", row.get("source"));
         assertEquals("device-1", row.get("deviceId"));
         assertEquals("correlation-1", row.get("correlationId"));
         assertEquals("SERVER_RECORDED", row.get("syncStatus"));
+        assertEquals(1L, row.get("entityVersion"));
         assertEquals(Instant.parse("2026-07-10T12:00:00Z"), row.get("occurredAt"));
         assertNotNull(row.get("recordedAt"));
         assertNull(row.get("idempotencyKey"));
+    }
+
+    @Test
+    void eventExposesOnlyAnOrganizationThatWasActuallyRecorded() {
+        gateway.appendEvent(new MemoryEvent(
+                "workspace-a", "ACAO", "acao-1", "acao.iniciada", "api",
+                null, null, null, null, 1, Instant.parse("2026-07-10T12:00:00Z"),
+                Map.of(), null, MemorySyncStatus.SERVER_RECORDED, "organization-9"));
+
+        Map<String, Object> row = queries.timelineForWorkspace("workspace-a").getFirst();
+
+        assertEquals("organization-9", row.get("organizationId"));
+        assertEquals("", row.get("actorId"));
+        assertEquals("", row.get("deviceId"));
     }
 
     @Test
@@ -212,6 +232,64 @@ class MemoryPersistenceIntegrationTest {
 
         assertThrows(IllegalStateException.class, () ->
                 queries.graphForEntity("workspace-a", "OBSERVACAO", "duplicated"));
+    }
+
+    @Test
+    void unrelatedLegacyCollisionDoesNotBreakAnotherSubgraph() {
+        Instant now = Instant.parse("2025-01-10T12:00:00Z");
+        objects.save(new StoredMemoryObject(
+                "workspace-a", "observacao", "unrelated", null,
+                "Lowercase", "ABERTA", "legacy", now));
+        objects.save(new StoredMemoryObject(
+                "workspace-a", "OBSERVACAO", "unrelated", null,
+                "Uppercase", "ABERTA", "api", now));
+        gateway.upsertObject("workspace-a", "OBSERVACAO", "target", null,
+                "Target", "ABERTA", "api");
+        gateway.upsertObject("workspace-a", "TERRITORIO", "territory", null,
+                "Territory", "ATIVO", "api");
+        gateway.ensureActiveRelation("workspace-a", "OBSERVACAO", "target",
+                "TERRITORIO", "territory", "OCORRE_EM", "api", null);
+
+        Map<String, Object> graph = queries.graphForEntity(
+                "workspace-a", "OBSERVACAO", "target");
+
+        assertEquals(1, ((List<?>) graph.get("relations")).size());
+    }
+
+    @Test
+    void relationPreservesRealProvenanceAndRemainsVisibleAfterEnding() {
+        gateway.upsertObject("workspace-a", "OBSERVACAO", "obs-1", null,
+                "Observation", "ABERTA", "api");
+        gateway.upsertObject("workspace-a", "TERRITORIO", "territory", null,
+                "Territory", "ATIVO", "api");
+        gateway.ensureActiveRelation(
+                "workspace-a", "OBSERVACAO", "obs-1", "TERRITORIO", "territory",
+                "OCORRE_EM", new MemoryRelationMetadata(
+                        "api", "Captured in the field", "actor-1", new BigDecimal("0.85")));
+        gateway.endActiveRelations("workspace-a", "OBSERVACAO", "obs-1", "OCORRE_EM");
+
+        Map<String, Object> graph = queries.graphForEntity(
+                "workspace-a", "OBSERVACAO", "obs-1");
+        Map<?, ?> edge = (Map<?, ?>) ((List<?>) graph.get("relations")).getFirst();
+
+        assertEquals(false, edge.get("active"));
+        assertEquals("actor-1", edge.get("actorId"));
+        assertEquals(0, ((BigDecimal) edge.get("confidence")).compareTo(new BigDecimal("0.85")));
+        assertEquals("Captured in the field", edge.get("context"));
+        assertNotNull(edge.get("endedAt"));
+    }
+
+    @Test
+    void canonicalActiveRelationIdentityRejectsConcurrentDuplicates() {
+        Instant now = Instant.parse("2026-07-10T12:00:00Z");
+        relations.saveAndFlush(new StoredMemoryRelation(
+                "workspace-a", "OBSERVACAO", "obs-1", "TERRITORIO", "territory",
+                "OCORRE_EM", "api", null, now));
+
+        assertThrows(DataIntegrityViolationException.class, () -> relations.saveAndFlush(
+                new StoredMemoryRelation(
+                        "workspace-a", "observacao", "obs-1", "territorio", "territory",
+                        "ocorre_em", "api", null, now)));
     }
 
     @Test
