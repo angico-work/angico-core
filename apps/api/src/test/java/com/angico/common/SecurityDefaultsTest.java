@@ -61,8 +61,10 @@ class SecurityDefaultsTest {
         List<ClassPathResource> migrations = List.of(
                 new ClassPathResource("db/migration/postgresql/V1__session_table.sql"),
                 new ClassPathResource("db/migration/postgresql/V2__identity_constraints.sql"),
+                new ClassPathResource("db/migration/postgresql/V6__mission_territory.sql"),
                 new ClassPathResource("db/migration/h2/V1__session_table.sql"),
-                new ClassPathResource("db/migration/h2/V2__identity_constraints.sql")
+                new ClassPathResource("db/migration/h2/V2__identity_constraints.sql"),
+                new ClassPathResource("db/migration/h2/V6__mission_territory.sql")
         );
         assertTrue(migrations.stream().allMatch(ClassPathResource::exists));
         String sql = migrations.stream()
@@ -78,6 +80,8 @@ class SecurityDefaultsTest {
         assertTrue(sql.contains("create unique index"));
         assertTrue(sql.contains("lower("));
         assertTrue(sql.contains("regexp_replace"));
+        assertTrue(sql.contains("alter table if exists missao"));
+        assertTrue(sql.contains("add column if not exists territorio_id"));
         assertFalse(sql.contains("delete from"));
         assertFalse(sql.contains("drop table"));
     }

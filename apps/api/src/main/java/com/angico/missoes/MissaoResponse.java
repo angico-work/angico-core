@@ -9,6 +9,7 @@ public record MissaoResponse(
         String descricao,
         String status,
         int progresso,
+        String territorioId,
         String problemaId,
         String responsavelId,
         Instant createdAt
@@ -22,6 +23,7 @@ public record MissaoResponse(
                 m.getDescricao(),
                 m.getStatus(),
                 m.getProgresso(),
+                m.getTerritorioId(),
                 m.getProblemaId(),
                 m.getResponsavelId(),
                 m.getCreatedAt()

@@ -101,6 +101,7 @@ class ReferenceIntegritySecurityTest {
                 pessoaB.getAngicoId(), Instant.now()));
         missaoB = missaoRepository.save(new Missao(
                 workspaceB, "Missão B", null, "PLANEJADA", 0,
+                String.valueOf(territorioB.getId()),
                 String.valueOf(problemaB.getId()), String.valueOf(pessoaB.getId()), Instant.now()));
         resultadoB = new Resultado();
         resultadoB.setWorkspaceId(workspaceB);

@@ -41,6 +41,7 @@ public class MissaoService {
     @Transactional
     public MissaoResponse registrar(MissaoRequest request) {
         String workspaceId = authorizationService.requireAuthorizedWorkspace(request.workspaceId());
+        referenceValidator.requireTerritorio(request.territorioId(), workspaceId);
         referenceValidator.requireProblema(request.problemaId(), workspaceId);
         referenceValidator.requirePessoa(request.responsavelId(), workspaceId);
         Missao missao = new Missao(
@@ -49,6 +50,7 @@ public class MissaoService {
                 request.descricao(),
                 STATUS_INICIAL,
                 PROGRESSO_INICIAL,
+                request.territorioId(),
                 request.problemaId(),
                 request.responsavelId(),
                 clock.now()

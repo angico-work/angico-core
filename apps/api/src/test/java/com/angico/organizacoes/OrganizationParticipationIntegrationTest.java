@@ -177,7 +177,7 @@ class OrganizationParticipationIntegrationTest {
 
     private Missao mission(String workspaceId, String title) {
         return missaoRepository.save(new Missao(
-                workspaceId, title, null, "ATIVA", 0, null, null, Instant.now()));
+                workspaceId, title, null, "ATIVA", 0, null, null, null, Instant.now()));
     }
 
     private Pessoa createPerson(

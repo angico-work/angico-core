@@ -36,6 +36,12 @@ public class MissaoMemoryPublisher {
                 m.getWorkspaceId(), TIPO, entityId, "missao.criada", SOURCE,
                 actorId, null, null, null, 1, m.getCreatedAt(), payload));
 
+        if (m.getTerritorioId() != null && !m.getTerritorioId().isBlank()) {
+            memory.registrarRelacaoAtiva(
+                    m.getWorkspaceId(), TIPO, entityId,
+                    OntologyService.TERRITORIO, m.getTerritorioId(), "ATUA_EM", metadata);
+        }
+
         if (m.getProblemaId() != null && !m.getProblemaId().isBlank()) {
             memory.registrarRelacaoAtiva(
                     m.getWorkspaceId(), TIPO, entityId,
