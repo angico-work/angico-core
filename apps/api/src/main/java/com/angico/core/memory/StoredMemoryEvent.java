@@ -10,11 +10,6 @@ import jakarta.persistence.Lob;
 import jakarta.persistence.Table;
 import java.time.Instant;
 
-/**
- * Append-only record of something that happened in a território's memory.
- * The {@code sequence} (DB identity) gives a global, monotonic ordering —
- * this is the "memória viva" the manifesto refers to.
- */
 @Entity
 @Table(
         name = "memory_event",
@@ -58,6 +53,10 @@ public class StoredMemoryEvent {
     @Column(nullable = false)
     private Instant occurredAt;
 
+    private Instant recordedAt;
+    private String idempotencyKey;
+    private String syncStatus;
+
     @Lob
     private String payloadJson;
 
@@ -77,6 +76,9 @@ public class StoredMemoryEvent {
             String causationId,
             int schemaVersion,
             Instant occurredAt,
+            Instant recordedAt,
+            String idempotencyKey,
+            String syncStatus,
             String payloadJson
     ) {
         this.eventId = eventId;
@@ -91,6 +93,9 @@ public class StoredMemoryEvent {
         this.causationId = causationId;
         this.schemaVersion = schemaVersion;
         this.occurredAt = occurredAt;
+        this.recordedAt = recordedAt;
+        this.idempotencyKey = idempotencyKey;
+        this.syncStatus = syncStatus;
         this.payloadJson = payloadJson;
     }
 
@@ -144,6 +149,18 @@ public class StoredMemoryEvent {
 
     public Instant getOccurredAt() {
         return occurredAt;
+    }
+
+    public Instant getRecordedAt() {
+        return recordedAt;
+    }
+
+    public String getIdempotencyKey() {
+        return idempotencyKey;
+    }
+
+    public String getSyncStatus() {
+        return syncStatus == null ? MemorySyncStatus.SERVER_RECORDED.name() : syncStatus;
     }
 
     public String getPayloadJson() {

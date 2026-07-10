@@ -9,11 +9,6 @@ import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
 import java.time.Instant;
 
-/**
- * Current snapshot of an objeto in the território graph (Observação, Problema,
- * Missão, Pessoa, ...), identified by (workspaceId, entityType, entityId).
- * Upserted from domain events so the graph always reflects the latest state.
- */
 @Entity
 @Table(
         name = "memory_object",

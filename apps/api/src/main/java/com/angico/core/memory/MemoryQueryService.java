@@ -3,6 +3,7 @@ package com.angico.core.memory;
 import com.angico.core.ontology.OntologyService;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import jakarta.persistence.criteria.Predicate;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -10,6 +11,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -36,10 +38,7 @@ public class MemoryQueryService {
     }
 
     public List<Map<String, Object>> timelineForWorkspace(String workspaceId) {
-        return eventRepository.findByWorkspaceIdOrderBySequenceAsc(workspaceId)
-                .stream()
-                .map(this::eventMap)
-                .toList();
+        return timeline(MemoryQuery.forWorkspace(workspaceId));
     }
 
     public List<Map<String, Object>> timelineForEntity(
@@ -47,13 +46,50 @@ public class MemoryQueryService {
             String entityType,
             String entityId
     ) {
-        String canonicalType = ontology.canonicalObjectType(entityType);
-        return eventRepository
-                .findByWorkspaceIdAndEntityTypeIgnoreCaseAndEntityIdOrderBySequenceAsc(
-                        workspaceId, canonicalType, entityId)
-                .stream()
-                .map(this::eventMap)
-                .toList();
+        return timeline(new MemoryQuery(
+                workspaceId, entityType, entityId, null, null, null, null, null, null));
+    }
+
+    public List<Map<String, Object>> timeline(MemoryQuery memoryQuery) {
+        String canonicalType = memoryQuery.entityType() == null
+                ? null
+                : ontology.canonicalObjectType(memoryQuery.entityType());
+        return eventRepository.findAll((root, query, builder) -> {
+            List<Predicate> predicates = new ArrayList<>();
+            predicates.add(builder.equal(root.get("workspaceId"), memoryQuery.workspaceId()));
+            if (canonicalType != null) {
+                predicates.add(builder.equal(
+                        builder.upper(root.get("entityType")), canonicalType));
+            }
+            if (memoryQuery.entityId() != null) {
+                predicates.add(builder.equal(root.get("entityId"), memoryQuery.entityId()));
+            }
+            if (memoryQuery.from() != null) {
+                predicates.add(builder.greaterThanOrEqualTo(
+                        root.get("occurredAt"), memoryQuery.from()));
+            }
+            if (memoryQuery.to() != null) {
+                predicates.add(builder.lessThanOrEqualTo(
+                        root.get("occurredAt"), memoryQuery.to()));
+            }
+            if (memoryQuery.eventType() != null) {
+                predicates.add(builder.equal(root.get("eventType"), memoryQuery.eventType()));
+            }
+            if (memoryQuery.actorId() != null) {
+                predicates.add(builder.equal(root.get("actorId"), memoryQuery.actorId()));
+            }
+            if (memoryQuery.source() != null) {
+                predicates.add(builder.equal(root.get("source"), memoryQuery.source()));
+            }
+            if (memoryQuery.syncStatus() != null) {
+                Predicate status = builder.equal(root.get("syncStatus"), memoryQuery.syncStatus());
+                if (MemorySyncStatus.SERVER_RECORDED.name().equals(memoryQuery.syncStatus())) {
+                    status = builder.or(status, builder.isNull(root.get("syncStatus")));
+                }
+                predicates.add(status);
+            }
+            return builder.and(predicates.toArray(Predicate[]::new));
+        }, Sort.by(Sort.Direction.ASC, "sequence")).stream().map(this::eventMap).toList();
     }
 
     public List<Map<String, Object>> timelineForTerritory(String workspaceId, String territorioEntityId) {
@@ -165,7 +201,20 @@ public class MemoryQueryService {
         edge.put("active", relation.isActive());
         edge.put("createdAt", relation.getCreatedAt());
         edge.put("endedAt", relation.getEndedAt());
+        edge.put("ontologyValid", isValidRelation(relation));
         return edge;
+    }
+
+    private boolean isValidRelation(StoredMemoryRelation relation) {
+        try {
+            ontology.requireValidRelation(
+                    relation.getOriginType(),
+                    relation.getRelationType(),
+                    relation.getDestinationType());
+            return true;
+        } catch (IllegalArgumentException ex) {
+            return false;
+        }
     }
 
     private Map<String, Object> eventMap(StoredMemoryEvent event) {
@@ -183,10 +232,27 @@ public class MemoryQueryService {
         result.put("causationId", event.getCausationId());
         result.put("source", event.getSource());
         result.put("schemaVersion", event.getSchemaVersion());
-        result.put("payload", parsePayload(event.getPayloadJson()));
+        Map<String, Object> payload = parsePayload(event.getPayloadJson());
+        result.put("payload", payload);
         result.put("occurredAt", event.getOccurredAt());
+        result.put("recordedAt", event.getRecordedAt());
+        result.put("idempotencyKey", event.getIdempotencyKey());
+        result.put("syncStatus", event.getSyncStatus());
         result.put("commitSequence", event.getSequence());
+        copyPayloadField(payload, result, "previousState");
+        copyPayloadField(payload, result, "newState");
+        copyPayloadField(payload, result, "evidences");
         return result;
+    }
+
+    private void copyPayloadField(
+            Map<String, Object> payload,
+            Map<String, Object> result,
+            String field
+    ) {
+        if (payload.containsKey(field)) {
+            result.put(field, payload.get(field));
+        }
     }
 
     private Map<String, Object> parsePayload(String payloadJson) {

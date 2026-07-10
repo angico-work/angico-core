@@ -53,6 +53,9 @@ public class JpaMemoryGateway implements MemoryGateway {
                 event.causationId(),
                 event.schemaVersion(),
                 event.occurredAt(),
+                clock.now(),
+                event.idempotencyKey(),
+                event.syncStatus().name(),
                 payload
         );
         StoredMemoryEvent saved = events.save(stored);
@@ -146,7 +149,7 @@ public class JpaMemoryGateway implements MemoryGateway {
         String canonicalRelation = ontology.canonicalRelationType(relationType);
         Instant now = clock.now();
         List<StoredMemoryRelation> active = relations
-                .findByWorkspaceIdAndOriginTypeAndOriginIdAndRelationTypeAndActiveTrue(
+                .findActiveRelationsFromOrigin(
                         workspaceId, canonicalOrigin, originId, canonicalRelation);
         active.forEach(relation -> relation.end(now));
         return active.size();

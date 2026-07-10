@@ -9,8 +9,6 @@ import org.springframework.stereotype.Repository;
 public interface MemoryEventRepository extends JpaRepository<StoredMemoryEvent, Long>,
         JpaSpecificationExecutor<StoredMemoryEvent> {
 
-    long countByWorkspaceIdAndEntityTypeAndEntityId(String workspaceId, String entityType, String entityId);
-
     long countByWorkspaceIdAndEntityTypeIgnoreCaseAndEntityId(
             String workspaceId, String entityType, String entityId);
 

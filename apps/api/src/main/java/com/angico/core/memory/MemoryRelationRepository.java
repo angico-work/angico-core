@@ -17,20 +17,6 @@ public interface MemoryRelationRepository extends JpaRepository<StoredMemoryRela
             String destinationId,
             String relationType);
 
-    List<StoredMemoryRelation> findByWorkspaceIdAndOriginTypeAndOriginIdAndDestinationTypeAndDestinationIdAndRelationTypeAndActiveTrue(
-            String workspaceId,
-            String originType,
-            String originId,
-            String destinationType,
-            String destinationId,
-            String relationType);
-
-    List<StoredMemoryRelation> findByWorkspaceIdAndOriginTypeAndOriginIdAndRelationTypeAndActiveTrue(
-            String workspaceId,
-            String originType,
-            String originId,
-            String relationType);
-
     @Query("""
             select r from StoredMemoryRelation r
             where r.workspaceId = :workspaceId
@@ -63,6 +49,20 @@ public interface MemoryRelationRepository extends JpaRepository<StoredMemoryRela
             @Param("workspaceId") String workspaceId,
             @Param("entityType") String entityType,
             @Param("entityId") String entityId);
+
+    @Query("""
+            select r from StoredMemoryRelation r
+            where r.workspaceId = :workspaceId
+              and upper(r.originType) = upper(:originType)
+              and r.originId = :originId
+              and upper(r.relationType) = upper(:relationType)
+              and r.active = true
+            """)
+    List<StoredMemoryRelation> findActiveRelationsFromOrigin(
+            @Param("workspaceId") String workspaceId,
+            @Param("originType") String originType,
+            @Param("originId") String originId,
+            @Param("relationType") String relationType);
 
     List<StoredMemoryRelation> findByWorkspaceIdAndActiveTrue(String workspaceId);
 }

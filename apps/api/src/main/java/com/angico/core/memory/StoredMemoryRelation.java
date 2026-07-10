@@ -9,11 +9,6 @@ import jakarta.persistence.Index;
 import jakarta.persistence.Table;
 import java.time.Instant;
 
-/**
- * A directed relação between two objetos (origin -[relationType]-> destination),
- * e.g. observacao -[ocorre_em]-> territorio. Relations are time-bounded: an
- * active relation has {@code endedAt == null}; ending it preserves history.
- */
 @Entity
 @Table(
         name = "memory_relation",

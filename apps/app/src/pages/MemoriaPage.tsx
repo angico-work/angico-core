@@ -5,8 +5,8 @@ import { loadMemoria } from '../lib/api';
 import type { MemoriaEvent } from '../types';
 
 const ENTITY_COLOR: Record<string, string> = {
-  observacao: '#2c8fbd', problema: '#f97316', potencialidade: '#2aa84a',
-  missao: '#7c3aed', acao: '#12a044', pessoa: '#004B6C'
+  OBSERVACAO: '#2c8fbd', PROBLEMA: '#f97316', POTENCIALIDADE: '#2aa84a',
+  MISSAO: '#7c3aed', ACAO: '#12a044', PESSOA: '#004B6C'
 };
 
 function describe(e: MemoriaEvent): string {
@@ -55,7 +55,7 @@ export default function MemoriaPage() {
       ) : (
         <div className="timeline">
           {events.map((e) => {
-            const color = ENTITY_COLOR[e.entityType] ?? '#6b7280';
+            const color = ENTITY_COLOR[e.entityType.toUpperCase()] ?? '#6b7280';
             return (
               <div className="timeline-item" key={e.sequence}>
                 <span className="timeline-dot" style={{ background: color }} />
