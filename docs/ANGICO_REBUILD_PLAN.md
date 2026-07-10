@@ -9,6 +9,16 @@ Transformar o Angico em três produtos implantáveis de forma independente: um s
 
 A reconstrução preserva os fluxos que já funcionam, a identidade visual, os dados locais existentes e o histórico Git. Não serão mantidos dados fictícios, credenciais conhecidas, promessas sem implementação ou camadas duplicadas sem consumidor real.
 
+## Princípios de produto
+
+- O objeto principal não é o formulário, o mapa ou o indicador isolado, mas o percurso verificável entre território, pessoas, organizações, ações, evidências, resultados e decisões.
+- A ontologia deve aparecer na navegação de cada objeto: o usuário precisa ver o que aconteceu, onde, quando, por quem, com qual evidência e qual consequência registrada.
+- O registro de campo deve caber em poucos passos no celular e continuar íntegro sem conexão. Estado local, pendência, conflito e confirmação remota nunca serão apresentados como se fossem equivalentes.
+- Evidência sustenta uma afirmação de impacto; não é apenas um anexo. Resultado sem vínculo, autoria ou prova permanece explicitamente incompleto.
+- Inteligência significa revelar relações e lacunas objetivas para apoiar uma decisão humana. Não haverá pontuação opaca, recomendação sem origem ou automação sem ação explicável.
+- Missão e ação representam, respectivamente, iniciativa e atividade operacional. Novos conceitos só entram no domínio quando possuírem fluxo, persistência e uso visível; a ontologia não será preenchida com entidades decorativas.
+- O Angico é socioambiental e comunitário. Fluxos de materiais são casos possíveis, não a identidade inteira do produto.
+
 ## Linha de base verificada
 
 - Frontend: React 19, TypeScript 6, Vite 8, React Router e React Leaflet.
@@ -179,7 +189,7 @@ flowchart LR
 
 ### Sujeito e público
 
-O site fala com organizações, cooperativas, gestores públicos e parceiros que precisam provar o percurso de materiais e ações no território. O app atende agentes de campo e coordenações operacionais.
+O site fala com organizações, comunidades, cooperativas, gestores públicos e parceiros que precisam demonstrar como ações produzem mudança no território. O app atende agentes de campo e coordenações operacionais.
 
 ### Paleta
 
@@ -198,28 +208,30 @@ O site fala com organizações, cooperativas, gestores públicos e parceiros que
 
 ### Estrutura
 
-O site seguirá uma composição editorial com grandes áreas de respiro, linhas de registro e uma visualização funcional do percurso de um lote. O app será mais denso, com hierarquia de caderno de campo: estado do sistema sempre visível, tabelas e timelines no lugar de conjuntos repetitivos de cards.
+O site seguirá uma composição editorial com grandes áreas de respiro, linhas de registro e uma visualização funcional do percurso de um impacto. O app será mais denso, com hierarquia de caderno de campo: estado do sistema sempre visível, relações, tabelas e timelines no lugar de conjuntos repetitivos de cards.
 
 ### Elemento de assinatura
 
-O “rastro vivo” conecta origem, coleta, pesagem, transferência, destino e evidência em uma linha contínua. No site ele explica o produto; no app ele é a interface real do lote. A animação representa mudança de estado e desaparece com `prefers-reduced-motion`.
+O “rastro vivo” conecta território, observação ou potencialidade, missão, ação, evidência, resultado e indicador em uma linha contínua. Pessoas, organizações e recursos aparecem como participantes do percurso, não como cartões paralelos. No site o rastro explica o produto; no app ele navega dados reais. A animação representa mudança de estado e desaparece com `prefers-reduced-motion`.
 
 ## Funcionalidade diferenciada
 
-O MVP escolhido é o **Rastro Verificável**: uma cadeia de custódia que mostra, sem pontuação arbitrária, quais passagens de um lote estão comprovadas e quais ainda exigem ação.
+O MVP escolhido é o **Rastro Verificável**: uma leitura determinística da memória operacional que mostra quais relações de uma ação socioambiental estão comprovadas e quais ainda exigem registro ou evidência.
 
 O usuário poderá:
 
-- registrar um lote com identificador estável;
-- adicionar coleta, pesagem, transferência e destinação;
-- anexar ou referenciar evidência;
+- iniciar o rastro a partir de um território, missão ou ação já existente;
+- navegar até a observação, problema ou potencialidade que motivou o trabalho;
+- identificar pessoas e organizações participantes;
+- anexar ou referenciar evidências que sustentam resultados;
+- relacionar resultado, indicador e medição sem duplicar essas entidades;
 - visualizar lacunas de comprovação;
 - identificar o próximo passo e o responsável;
-- abrir uma conversa ligada ao lote;
+- abrir uma conversa ligada ao objeto do rastro;
 - registrar eventos offline e sincronizá-los sem duplicação;
-- navegar do lote para território, pessoas, mensagens, eventos e evidências.
+- navegar entre território, pessoas, organizações, mensagens, eventos e evidências.
 
-O cálculo será determinístico e explicável. Cada lacuna corresponde a uma regra objetiva e aponta a informação ou evidência ausente.
+O cálculo será determinístico e explicável. Cada lacuna corresponde a uma relação ou evidência ausente no grafo. O Rastro não cria uma segunda tabela de eventos nem uma nota de impacto: ele compõe os objetos, relações e eventos canônicos já registrados. Um fluxo de resíduos poderá aparecer como um caso especializado de ação, sem reduzir o produto a gestão de materiais.
 
 ## Fluxos de dados
 

@@ -181,32 +181,37 @@ public record MemoryQuery(
 - Modificar: `apps/app/src/lib/api.ts`
 - Criar: `apps/api/src/main/java/com/angico/core/sync/IdempotencyRecord.java`
 - Criar: `apps/api/src/main/java/com/angico/core/sync/IdempotencyService.java`
-- Modificar: endpoints offline de observação, mensagem e rastro
+- Modificar: endpoints offline de observação e evidência; mensagens reutilizam o contrato na Task 5
 
 **Interfaces**
 
 ```ts
 export type SyncStatus =
-  | 'local'
-  | 'queued'
-  | 'syncing'
-  | 'synced'
-  | 'failed'
-  | 'conflict'
-  | 'blocked';
+  | 'QUEUED'
+  | 'SYNCING'
+  | 'SYNCED'
+  | 'RETRYABLE_ERROR'
+  | 'CONFLICT'
+  | 'BLOCKED'
+  | 'ACTION_REQUIRED';
 
 export interface OutboxItem {
   id: string;
+  ownerId: number;
   workspaceId: string;
-  userId: number;
-  kind: 'observation.create' | 'message.send' | 'trace.event.create';
+  kind: 'observation.create' | 'evidence.create' | 'message.send';
+  localEntityId: string;
   payload: unknown;
   idempotencyKey: string;
+  deviceId: string;
+  occurredAt: string;
   dependsOn: string[];
   attempts: number;
   nextAttemptAt: string;
   status: SyncStatus;
-  error: string | null;
+  leaseUntil: string | null;
+  error: SyncError | null;
+  serverResult: { resourceId: string } | null;
 }
 ```
 
@@ -214,7 +219,10 @@ export interface OutboxItem {
 
 - Service worker armazena somente shell e assets públicos.
 - Dados privados ficam em IndexedDB particionado por usuário e workspace.
-- Outbox preserva ordem causal, retry exponencial e erro permanente.
+- Entidade local e item de outbox são persistidos na mesma transação antes de a UI confirmar salvamento local.
+- Outbox usa operações conhecidas, preserva ordem causal, lease, retry exponencial e erro permanente; não armazena URLs arbitrárias.
+- `navigator.onLine` é somente um gatilho. O estado sincronizado exige confirmação e reconciliação persistidas.
+- `401` bloqueia a fila sem apagá-la; `409` preserva o conflito; `400`, `403`, `404`, `413` e `422` exigem ação explícita.
 - Logout apaga cache, outbox, rascunhos e blobs do usuário.
 - `409` permanece visível até resolução explícita.
 
@@ -250,62 +258,67 @@ export interface OutboxItem {
 
 - Participante envia e lê; não participante recebe `403`.
 - Reenvio com o mesmo `clientMessageId` retorna a mensagem original.
-- Mensagem ligada a lote aparece na timeline do lote.
+- Mensagem ligada a um objeto operacional aparece na timeline desse objeto.
 - Rascunho persiste offline e é removido somente após confirmação.
 
 ## Task 6 — Rastro Verificável
 
 **Arquivos**
 
-- Criar: `apps/api/src/main/java/com/angico/rastro/TraceBatch.java`
-- Criar: `apps/api/src/main/java/com/angico/rastro/TraceEvent.java`
-- Criar: `apps/api/src/main/java/com/angico/rastro/TraceGap.java`
-- Criar: repositories, DTOs, service e controller no mesmo pacote
-- Criar: `apps/api/src/test/java/com/angico/rastro/TraceServiceTest.java`
+- Criar: `apps/api/src/main/java/com/angico/rastro/RastroService.java`
+- Criar: `apps/api/src/main/java/com/angico/rastro/RastroController.java`
+- Criar: `apps/api/src/main/java/com/angico/rastro/RastroResponse.java`
+- Criar: `apps/api/src/main/java/com/angico/rastro/RastroLacuna.java`
+- Criar: `apps/api/src/test/java/com/angico/rastro/RastroServiceTest.java`
 - Criar: `apps/app/src/pages/RastroPage.tsx`
-- Criar: `apps/app/src/components/TraceTimeline.tsx`
-- Criar: `apps/app/src/components/TraceEventForm.tsx`
-- Criar: `apps/app/src/domain/traceRules.ts`
+- Criar: `apps/app/src/components/RastroTimeline.tsx`
+- Criar: `apps/app/src/components/RastroLacunas.tsx`
+- Criar: `apps/app/src/domain/rastroRules.ts`
 - Modificar: `apps/app/src/App.tsx`
 - Modificar: `apps/app/src/components/Sidebar.tsx`
 
 **Interfaces**
 
 ```java
-public enum TraceEventType {
-    BATCH_REGISTERED,
-    COLLECTION_RECORDED,
-    WEIGHT_RECORDED,
-    CUSTODY_TRANSFERRED,
-    DESTINATION_CONFIRMED,
-    EVIDENCE_ATTACHED
-}
+public record RastroResponse(
+        String workspaceId,
+        String rootType,
+        String rootId,
+        List<RastroNode> percurso,
+        List<RastroRelation> relacoes,
+        List<RastroLacuna> lacunas
+) {}
 ```
 
 ```ts
-export interface TraceGap {
+export interface RastroLacuna {
   code: string;
   title: string;
-  requiredEvent: TraceEventType;
   reason: string;
   nextAction: string;
+  targetType: string;
 }
 ```
 
 **Regras**
 
 - Não existe nota ou percentual arbitrário.
-- Cada lacuna deriva de evento ou evidência obrigatória ausente.
-- Eventos preservam ordem ocorrida e ordem sincronizada.
-- Um evento offline usa UUID estável e não duplica após retry.
-- Lote, evento, território, ator, conversa e evidência viram objetos ou relações ontológicas.
+- O Rastro é um read model sobre `memory_object`, `memory_relation` e `memory_event`; não duplica eventos ou entidades de domínio.
+- O percurso parte de território, missão ou ação e atravessa somente relações ontológicas válidas.
+- Cada lacuna deriva de relação, autoria, evidência, resultado ou medição ausente.
+- Pessoas, organizações e recursos aparecem no ponto do percurso em que participaram.
+- Eventos preservam ordem ocorrida, ordem gravada e estado de sincronização.
+- Uma mutação offline usa UUID estável e não duplica após retry.
+- Conversas e evidências ligadas ao objeto aparecem no mesmo percurso.
 
 **Testes**
 
-- Lote novo informa coleta, pesagem, transferência, destino e evidência ausentes.
-- Cada evento fecha somente a lacuna correspondente.
-- Destino sem evidência continua explícito.
+- Ação sem território, autoria, evidência ou resultado informa cada lacuna de forma independente.
+- Adicionar uma relação fecha somente a lacuna correspondente.
+- Resultado sem evidência continua explicitamente não comprovado.
+- Medição sem indicador válido não aparece como impacto comprovado.
 - Ordem ocorrida permanece correta após sync fora de ordem.
+- O endpoint não cria nenhum objeto, relação ou evento ao consultar o rastro.
 - Usuário sem acesso ao workspace recebe `403`.
 
 ## Task 7 — Site público e refinamento do app
@@ -320,7 +333,7 @@ export interface TraceGap {
 
 **Direção**
 
-- Site editorial com o rastro vivo como visualização central.
+- Site editorial com o percurso verificável de uma ação real como visualização central.
 - App com densidade de caderno de campo, sem mosaico repetitivo de cards.
 - Outfit, Source Sans 3 e Spline Sans Mono com fallback local seguro.
 - Paleta e contraste definidos no plano de reconstrução.
