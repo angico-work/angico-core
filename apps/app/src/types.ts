@@ -133,7 +133,11 @@ export interface Mensagem {
   localDescricao: string | null;
   linkedEntityType: string | null;
   linkedEntityId: string | null;
+  clientMessageId: string | null;
+  deviceId: string | null;
   status: string;
+  occurredAt: string;
+  recordedAt: string;
   createdAt: string;
   anexos: MensagemAnexo[];
   relacoes: string[];
@@ -143,12 +147,26 @@ export interface Conversa {
   id: number;
   workspaceId: string;
   territorioId: number | null;
+  contextEntityType: string;
+  contextEntityId: string;
   titulo: string;
   createdByPessoaId: number | null;
   status: string;
   createdAt: string;
   updatedAt: string;
+  unreadCount: number;
   mensagens: Mensagem[];
+}
+
+export interface MensagemBusca {
+  conversaId: number;
+  titulo: string;
+  contextEntityType: string;
+  contextEntityId: string;
+  mensagemId: number | null;
+  corpo: string | null;
+  senderNome: string | null;
+  occurredAt: string | null;
 }
 
 export interface Territorio {

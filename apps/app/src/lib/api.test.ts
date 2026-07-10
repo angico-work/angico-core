@@ -8,6 +8,8 @@ import {
   loadDashboard,
   loadMemoria,
   listConversas,
+  markConversaRead,
+  searchMensagens,
   listEntities,
   listWorkspaces,
   login,
@@ -192,5 +194,57 @@ describe('cookie session API', () => {
 
     await expect(sendMensagem(1, '', [first, second])).rejects.toThrow('3,75 MB');
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('sends stable offline metadata in both the multipart body and idempotency header', async () => {
+    localStorage.setItem('angico.session', JSON.stringify(session));
+    const fetchMock = vi.fn().mockResolvedValue(response(201, { id: 81 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await sendMensagem(12, 'Vamos amanhã.', [], {
+      clientMessageId: 'msg-8f9b',
+      deviceId: 'device-campo-2',
+      occurredAt: '2026-07-10T14:20:00.000Z'
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/mensagens/conversas/12/mensagens', expect.objectContaining({
+      method: 'POST',
+      credentials: 'include',
+      headers: expect.objectContaining({
+        'Idempotency-Key': 'msg-8f9b',
+        'X-CSRF-Token': 'csrf-secret'
+      })
+    }));
+    const form = fetchMock.mock.calls[0][1].body as FormData;
+    expect(form.get('corpo')).toBe('Vamos amanhã.');
+    expect(form.get('clientMessageId')).toBe('msg-8f9b');
+    expect(form.get('deviceId')).toBe('device-campo-2');
+    expect(form.get('occurredAt')).toBe('2026-07-10T14:20:00.000Z');
+  });
+
+  it('marks a conversation as read only through the real mutation endpoint', async () => {
+    localStorage.setItem('angico.session', JSON.stringify(session));
+    const fetchMock = vi.fn().mockResolvedValue(response(204, null));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await markConversaRead(12);
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/mensagens/conversas/12/leitura', expect.objectContaining({
+      method: 'POST',
+      credentials: 'include',
+      headers: expect.objectContaining({ 'X-CSRF-Token': 'csrf-secret' })
+    }));
+  });
+
+  it('searches messages inside the authorized workspace with an encoded query', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(response(200, []));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await searchMensagens('jardim-novo', 'nascente sul');
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/mensagens/busca?workspaceId=jardim-novo&q=nascente%20sul',
+      expect.objectContaining({ credentials: 'include' })
+    );
   });
 });

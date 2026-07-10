@@ -1,6 +1,6 @@
 import type {
   DashboardData, ObservacaoInput, Observacao, MapPoint, MemoriaEvent, GeoResult,
-  GeoSearchResponse, PessoaHit, Conversa, Mensagem, Territorio, Workspace, WorkspaceMember
+  GeoSearchResponse, PessoaHit, Conversa, Mensagem, MensagemBusca, Territorio, Workspace, WorkspaceMember
 } from '../types';
 
 export const DEFAULT_WORKSPACE = 'coletivo-jardim-novo';
@@ -387,7 +387,18 @@ export async function listMensagens(conversaId: number): Promise<Mensagem[]> {
   }
 }
 
-export async function sendMensagem(conversaId: number, corpo: string, attachments: File[] = []): Promise<Mensagem> {
+export interface MessageSendMetadata {
+  clientMessageId: string;
+  deviceId: string;
+  occurredAt: string;
+}
+
+export async function sendMensagem(
+  conversaId: number,
+  corpo: string,
+  attachments: File[] = [],
+  metadata?: MessageSendMetadata
+): Promise<Mensagem> {
   const maxFileBytes = 2 * 1024 * 1024;
   const maxAggregateBytes = 3.75 * 1024 * 1024;
   if (attachments.some((file) => file.size > maxFileBytes)) {
@@ -398,9 +409,16 @@ export async function sendMensagem(conversaId: number, corpo: string, attachment
   }
   const form = new FormData();
   if (corpo.trim()) form.append('corpo', corpo.trim());
+  if (metadata) {
+    form.append('clientMessageId', metadata.clientMessageId);
+    form.append('deviceId', metadata.deviceId);
+    form.append('occurredAt', metadata.occurredAt);
+  }
   attachments.forEach((file) => form.append('attachments', file));
   const r = await apiFetch(apiUrl(`/api/mensagens/conversas/${conversaId}/mensagens`), {
-    method: 'POST', headers: requestHeaders(), body: form
+    method: 'POST',
+    headers: requestHeaders(metadata ? { 'Idempotency-Key': metadata.clientMessageId } : {}),
+    body: form
   });
   if (!r.ok) throw new Error(await readError(r, 'Não foi possível enviar a mensagem.'));
   return (await r.json()) as Mensagem;
@@ -409,6 +427,8 @@ export async function sendMensagem(conversaId: number, corpo: string, attachment
 export interface CreateConversaInput {
   workspaceId: string;
   territorioId: number;
+  contextEntityType?: string;
+  contextEntityId?: string;
   titulo: string;
   participanteRefs: string[];
 }
@@ -434,6 +454,28 @@ export async function listTerritorios(workspaceId = DEFAULT_WORKSPACE): Promise<
 
 export function attachmentUrl(anexoId: number): string {
   return apiUrl(`/api/mensagens/anexos/${anexoId}`);
+}
+
+export async function markConversaRead(conversaId: number): Promise<void> {
+  const response = await apiFetch(apiUrl(`/api/mensagens/conversas/${conversaId}/leitura`), {
+    method: 'POST',
+    headers: requestHeaders()
+  });
+  if (!response.ok) {
+    throw new Error(await readError(response, 'Não foi possível marcar a conversa como lida.'));
+  }
+}
+
+export async function searchMensagens(workspaceId: string, query: string): Promise<MensagemBusca[]> {
+  const normalized = query.trim();
+  if (!normalized) return [];
+  const response = await apiFetch(apiUrl(
+    `/api/mensagens/busca?workspaceId=${encodeURIComponent(workspaceId)}&q=${encodeURIComponent(normalized)}`
+  ), { headers: requestHeaders() });
+  if (!response.ok) {
+    throw new Error(await readError(response, 'Não foi possível buscar nas conversas.'));
+  }
+  return (await response.json()) as MensagemBusca[];
 }
 
 export async function ensureTerritorio(workspaceId = DEFAULT_WORKSPACE): Promise<number | null> {
