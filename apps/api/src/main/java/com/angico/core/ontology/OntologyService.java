@@ -2,7 +2,6 @@ package com.angico.core.ontology;
 
 import java.util.ArrayList;
 import java.util.HashSet;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -31,7 +30,7 @@ public class OntologyService {
     public static final String LOCALIZACAO = "LOCALIZACAO";
     public static final String WORKSPACE = "WORKSPACE";
 
-    private final Set<String> objectTypes = new LinkedHashSet<>(List.of(
+    private static final List<String> DEFAULT_OBJECT_TYPES = List.of(
             TERRITORIO,
             PESSOA,
             ORGANIZACAO,
@@ -49,9 +48,9 @@ public class OntologyService {
             ANEXO,
             LOCALIZACAO,
             WORKSPACE
-    ));
+    );
 
-    private final Set<RelationRule> relationRules = new LinkedHashSet<>(List.of(
+    private static final List<RelationRule> DEFAULT_RELATION_RULES = List.of(
             new RelationRule(OBSERVACAO, "OCORRE_EM", TERRITORIO),
             new RelationRule(OBSERVACAO, "REGISTRADA_POR", PESSOA),
             new RelationRule(OBSERVACAO, "COMPROVADA_POR", EVIDENCIA),
@@ -68,6 +67,7 @@ public class OntologyService {
             new RelationRule(MEDICAO, "REFERE_SE_A", INDICADOR),
             new RelationRule(POTENCIALIDADE, "EXISTE_EM", TERRITORIO),
             new RelationRule(POTENCIALIDADE, "APOIA", MISSAO),
+            new RelationRule(PESSOA, "RESPONSAVEL_POR", MISSAO),
             new RelationRule(CONVERSA, "PERTENCE_A", TERRITORIO),
             new RelationRule(CONVERSA, "TEM_PARTICIPANTE", PESSOA),
             new RelationRule(MENSAGEM, "ENVIADA_EM", CONVERSA),
@@ -84,7 +84,19 @@ public class OntologyService {
             new RelationRule(MENSAGEM, "MENCIONA", RESULTADO),
             new RelationRule(MENSAGEM, "MENCIONA", INDICADOR),
             new RelationRule(WORKSPACE, "POSSUI_MEMBRO", PESSOA)
-    ));
+    );
+
+    private final List<String> objectTypes;
+    private final List<RelationRule> relationRules;
+
+    public OntologyService() {
+        this(DEFAULT_OBJECT_TYPES, DEFAULT_RELATION_RULES);
+    }
+
+    OntologyService(List<String> objectTypes, List<RelationRule> relationRules) {
+        this.objectTypes = List.copyOf(objectTypes);
+        this.relationRules = List.copyOf(relationRules);
+    }
 
     public List<String> objectTypes() {
         return List.copyOf(objectTypes);
@@ -139,7 +151,13 @@ public class OntologyService {
         List<String> errors = new ArrayList<>();
         Set<String> seenTypes = new HashSet<>();
         for (String objectType : objectTypes) {
-            String canonical = canonicalToken(objectType, "Tipo ontologico invalido");
+            String canonical;
+            try {
+                canonical = canonicalToken(objectType, "Tipo ontologico invalido");
+            } catch (IllegalArgumentException ex) {
+                errors.add(ex.getMessage());
+                continue;
+            }
             if (!canonical.equals(objectType)) {
                 errors.add("Tipo nao canonico: " + objectType);
             }
@@ -156,8 +174,12 @@ public class OntologyService {
             if (!objectTypes.contains(rule.destinationType())) {
                 errors.add("Destino desconhecido: " + rule.label());
             }
-            if (!canonicalRelationType(rule.relationType()).equals(rule.relationType())) {
-                errors.add("Relacao nao canonica: " + rule.label());
+            try {
+                if (!canonicalRelationType(rule.relationType()).equals(rule.relationType())) {
+                    errors.add("Relacao nao canonica: " + rule.label());
+                }
+            } catch (IllegalArgumentException ex) {
+                errors.add(ex.getMessage());
             }
             if (!seenRelations.add(rule.label())) {
                 errors.add("Relacao duplicada: " + rule.label());
@@ -168,14 +190,7 @@ public class OntologyService {
                 errors.isEmpty(),
                 objectTypes(),
                 relationTypes(),
-                List.of(
-                        "OBSERVACAO -> EVIDENCIA -> PROBLEMA -> MISSAO -> ACAO -> RESULTADO -> MEDICAO",
-                        "POTENCIALIDADE -> MISSAO",
-                        "TERRITORIO -> TIMELINE -> GRAFO",
-                        "CONVERSA -> MENSAGEM -> ANEXO",
-                        "CONVERSA -> MENSAGEM -> LOCALIZACAO -> TERRITORIO",
-                        "MENSAGEM -> MENCIONA -> OBJETO_OPERACIONAL"
-                ),
+                relationTypes(),
                 List.copyOf(errors)
         );
     }

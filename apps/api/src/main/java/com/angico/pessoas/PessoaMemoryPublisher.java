@@ -2,19 +2,16 @@ package com.angico.pessoas;
 
 import com.angico.core.memory.MemoryEvent;
 import com.angico.core.memory.OperationalMemoryService;
+import com.angico.core.ontology.OntologyService;
 import java.util.HashMap;
 import java.util.Map;
 import org.springframework.stereotype.Component;
 
-/**
- * Traduz o engajamento de uma pessoa para a memória operacional do território:
- * registra o objeto e o evento de engajamento.
- */
 @Component
 public class PessoaMemoryPublisher {
 
-    static final String TIPO = "pessoa";
-    private static final String SOURCE = "web";
+    static final String TIPO = OntologyService.PESSOA;
+    private static final String SOURCE = "api";
 
     private final OperationalMemoryService memory;
 

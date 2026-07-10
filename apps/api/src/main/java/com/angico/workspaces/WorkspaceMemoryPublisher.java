@@ -2,22 +2,18 @@ package com.angico.workspaces;
 
 import com.angico.core.memory.MemoryEvent;
 import com.angico.core.memory.OperationalMemoryService;
+import com.angico.core.ontology.OntologyService;
 import java.util.HashMap;
 import java.util.Map;
 import org.springframework.stereotype.Component;
 
-/**
- * Traduz o ciclo de vida de um workspace e de seus membros para a memória
- * operacional, no mesmo padrão dos demais módulos (ver ObservacaoMemoryPublisher):
- * registra o objeto, o evento e — para membros — a relação workspace → pessoa.
- */
 @Component
 public class WorkspaceMemoryPublisher {
 
-    private static final String TIPO_WORKSPACE = "workspace";
-    private static final String TIPO_PESSOA = "pessoa";
-    private static final String RELACAO_MEMBRO = "possui_membro";
-    private static final String SOURCE = "web";
+    private static final String TIPO_WORKSPACE = OntologyService.WORKSPACE;
+    private static final String TIPO_PESSOA = OntologyService.PESSOA;
+    private static final String RELACAO_MEMBRO = "POSSUI_MEMBRO";
+    private static final String SOURCE = "api";
 
     private final OperationalMemoryService memory;
 

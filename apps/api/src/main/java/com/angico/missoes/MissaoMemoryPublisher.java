@@ -2,24 +2,16 @@ package com.angico.missoes;
 
 import com.angico.core.memory.MemoryEvent;
 import com.angico.core.memory.OperationalMemoryService;
+import com.angico.core.ontology.OntologyService;
 import java.util.HashMap;
 import java.util.Map;
 import org.springframework.stereotype.Component;
 
-/**
- * Traduz mudanças em missões para a memória operacional do território:
- * registra o objeto, o evento e as relações com o problema respondido e a
- * pessoa que a lidera.
- */
 @Component
 public class MissaoMemoryPublisher {
 
-    static final String TIPO = "missao";
-    private static final String SOURCE = "web";
-    private static final String TIPO_PROBLEMA = "problema";
-    private static final String TIPO_PESSOA = "pessoa";
-    private static final String RELACAO_PROBLEMA = "responde_a";
-    private static final String RELACAO_RESPONSAVEL = "liderada_por";
+    static final String TIPO = OntologyService.MISSAO;
+    private static final String SOURCE = "api";
 
     private final OperationalMemoryService memory;
 
@@ -45,13 +37,13 @@ public class MissaoMemoryPublisher {
         if (m.getProblemaId() != null && !m.getProblemaId().isBlank()) {
             memory.registrarRelacaoAtiva(
                     m.getWorkspaceId(), TIPO, entityId,
-                    TIPO_PROBLEMA, m.getProblemaId(), RELACAO_PROBLEMA, SOURCE, null);
+                    OntologyService.PROBLEMA, m.getProblemaId(), "ENFRENTA", SOURCE, null);
         }
 
         if (m.getResponsavelId() != null && !m.getResponsavelId().isBlank()) {
             memory.registrarRelacaoAtiva(
-                    m.getWorkspaceId(), TIPO, entityId,
-                    TIPO_PESSOA, m.getResponsavelId(), RELACAO_RESPONSAVEL, SOURCE, null);
+                    m.getWorkspaceId(), OntologyService.PESSOA, m.getResponsavelId(),
+                    TIPO, entityId, "RESPONSAVEL_POR", SOURCE, null);
         }
     }
 }

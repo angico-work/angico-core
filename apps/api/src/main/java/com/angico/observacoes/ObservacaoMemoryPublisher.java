@@ -2,22 +2,16 @@ package com.angico.observacoes;
 
 import com.angico.core.memory.MemoryEvent;
 import com.angico.core.memory.OperationalMemoryService;
+import com.angico.core.ontology.OntologyService;
 import java.util.HashMap;
 import java.util.Map;
 import org.springframework.stereotype.Component;
 
-/**
- * Traduz mudanças em observações para a memória operacional do território:
- * registra o objeto, o evento e a relação com o território. É aqui que
- * "cada registro vira memória viva".
- */
 @Component
 public class ObservacaoMemoryPublisher {
 
-    static final String TIPO = "observacao";
-    private static final String SOURCE = "web";
-    private static final String RELACAO_TERRITORIO = "ocorre_em";
-    private static final String TIPO_TERRITORIO = "territorio";
+    static final String TIPO = OntologyService.OBSERVACAO;
+    private static final String SOURCE = "api";
 
     private final OperationalMemoryService memory;
 
@@ -46,7 +40,7 @@ public class ObservacaoMemoryPublisher {
         if (o.getTerritorioId() != null && !o.getTerritorioId().isBlank()) {
             memory.registrarRelacaoAtiva(
                     o.getWorkspaceId(), TIPO, entityId,
-                    TIPO_TERRITORIO, o.getTerritorioId(), RELACAO_TERRITORIO, SOURCE, null);
+                    OntologyService.TERRITORIO, o.getTerritorioId(), "OCORRE_EM", SOURCE, null);
         }
     }
 }
