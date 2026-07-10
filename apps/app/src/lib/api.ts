@@ -6,9 +6,14 @@ import { emptyDashboard, demoDashboard } from '../data/fallbackDashboard';
 
 export const DEFAULT_WORKSPACE = 'coletivo-jardim-novo';
 
-// Base URL for the API. Empty by default so the Vite dev proxy and same-origin
-// deploys keep working; set VITE_API_BASE_URL for a cross-origin deploy.
-export const API_BASE = (import.meta.env.VITE_API_BASE_URL ?? '').replace(/\/+$/, '');
+// Production is deliberately same-origin: Vercel's /api function forwards to
+// the private upstream so SameSite=Lax session cookies remain first-party.
+// A direct origin override is accepted only by the local development server.
+export function resolveApiBase(isDev: boolean, configured?: string): string {
+  return isDev ? (configured ?? '').replace(/\/+$/, '') : '';
+}
+
+export const API_BASE = resolveApiBase(import.meta.env.DEV, import.meta.env.VITE_API_BASE_URL);
 
 export function apiUrl(path: string): string {
   return `${API_BASE}${path}`;

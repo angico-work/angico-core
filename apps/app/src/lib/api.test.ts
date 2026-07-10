@@ -6,7 +6,8 @@ import {
   listEntities,
   listWorkspaces,
   login,
-  revalidateSession
+  revalidateSession,
+  resolveApiBase
 } from './api';
 
 const session = {
@@ -47,6 +48,11 @@ describe('cookie session API', () => {
     expect(getSession()).toEqual(session);
     expect(JSON.parse(localStorage.getItem('angico.session') ?? '{}')).not.toHaveProperty('token');
     expect(isAuthenticated()).toBe(true);
+  });
+
+  it('forces production browser requests through the same-origin API proxy', () => {
+    expect(resolveApiBase(false, 'https://api.other-site.example')).toBe('');
+    expect(resolveApiBase(true, 'http://localhost:8082/')).toBe('http://localhost:8082');
   });
 
   it('adds credentials and the stored csrf token to mutations', async () => {
