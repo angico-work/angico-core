@@ -42,7 +42,7 @@ import com.angico.workspaces.WorkspaceAuthorizationService;
 import com.angico.workspaces.WorkspaceMemberRepository;
 import com.angico.workspaces.WorkspaceReferenceValidator;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.core.io.PathResource;
+import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.Resource;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
@@ -530,7 +530,7 @@ public class MensagemService {
                     || !Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) {
                 throw new IllegalArgumentException("Arquivo nao encontrado.");
             }
-            return new PathResource(realPath);
+            return new FileSystemResource(realPath);
         } catch (IOException exception) {
             throw new IllegalArgumentException("Arquivo nao encontrado.");
         }
