@@ -1,6 +1,14 @@
-import { useCallback, useEffect, useState } from 'react';
-import { listOutbox, type OutboxEntry, type OutboxStatus } from '../lib/offlineStore';
-import { retryBlockedObservations } from '../lib/offlineSync';
+import { useCallback, useEffect, useState, type FormEvent } from 'react';
+import {
+  discardOutboxEntry,
+  getSyncMetadata,
+  listOutbox,
+  reviseObservation,
+  type OutboxEntry,
+  type OutboxStatus,
+  type SyncMetadata
+} from '../lib/offlineStore';
+import { retryPendingObservations, syncPendingObservations } from '../lib/offlineSync';
 
 interface Props {
   ownerId?: string;
@@ -16,26 +24,48 @@ const STATUS: Record<OutboxStatus, { label: string; detail: string; tone: string
   RETRYABLE_ERROR: { label: 'Tentará novamente', detail: 'O registro continua protegido neste aparelho.', tone: 'pending' },
   CONFLICT: { label: 'Conflito', detail: 'Precisa de revisão antes de seguir.', tone: 'attention' },
   BLOCKED: { label: 'Sessão encerrada', detail: 'Entre novamente para continuar o envio.', tone: 'attention' },
-  ACTION_REQUIRED: { label: 'Correção necessária', detail: 'O servidor recusou algum dado deste registro.', tone: 'attention' }
+  ACTION_REQUIRED: { label: 'Correção necessária', detail: 'O servidor recusou algum dado deste registro.', tone: 'attention' },
+  SUPERSEDED: { label: 'Versão revisada', detail: 'Uma nova cópia substituiu este envio.', tone: 'muted' },
+  DISCARDED: { label: 'Descartado', detail: 'O envio foi interrompido por decisão da pessoa.', tone: 'muted' }
 };
+
+const SENDABLE: OutboxStatus[] = ['QUEUED', 'RETRYABLE_ERROR', 'BLOCKED'];
+const REVIEWABLE: OutboxStatus[] = ['CONFLICT', 'ACTION_REQUIRED'];
 
 function when(value: string): string {
   return new Date(value).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
 }
 
+interface RevisionDraft {
+  titulo: string;
+  categoria: string;
+  descricao: string;
+  localizacao: string;
+}
+
 export default function SyncCenter({ ownerId, workspaceId, online, onClose }: Props) {
   const [entries, setEntries] = useState<OutboxEntry[]>([]);
+  const [metadata, setMetadata] = useState<SyncMetadata>();
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
+  const [workingId, setWorkingId] = useState<string>();
+  const [reviewingId, setReviewingId] = useState<string>();
+  const [revision, setRevision] = useState<RevisionDraft>();
   const [error, setError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     if (!ownerId) {
       setEntries([]);
+      setMetadata(undefined);
       setLoading(false);
       return;
     }
-    setEntries((await listOutbox(ownerId, workspaceId)).reverse());
+    const [nextEntries, nextMetadata] = await Promise.all([
+      listOutbox(ownerId, workspaceId),
+      getSyncMetadata(ownerId, workspaceId)
+    ]);
+    setEntries(nextEntries.reverse());
+    setMetadata(nextMetadata);
     setLoading(false);
   }, [ownerId, workspaceId]);
 
@@ -50,7 +80,7 @@ export default function SyncCenter({ ownerId, workspaceId, online, onClose }: Pr
     setSyncing(true);
     setError(null);
     try {
-      await retryBlockedObservations(ownerId, workspaceId);
+      await retryPendingObservations(ownerId, workspaceId);
       await refresh();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Não foi possível iniciar a sincronização.');
@@ -59,7 +89,64 @@ export default function SyncCenter({ ownerId, workspaceId, online, onClose }: Pr
     }
   }
 
-  const pending = entries.filter((entry) => entry.status !== 'SYNCED').length;
+  function openReview(entry: OutboxEntry) {
+    setReviewingId(entry.id);
+    setRevision({
+      titulo: entry.body.titulo,
+      categoria: entry.body.categoria,
+      descricao: entry.body.descricao ?? '',
+      localizacao: entry.body.localizacao ?? ''
+    });
+    setError(null);
+  }
+
+  async function saveRevision(event: FormEvent) {
+    event.preventDefault();
+    if (!ownerId || !reviewingId || !revision) return;
+    setWorkingId(reviewingId);
+    setError(null);
+    try {
+      const revised = await reviseObservation(reviewingId, ownerId, workspaceId, {
+        titulo: revision.titulo,
+        categoria: revision.categoria,
+        descricao: revision.descricao.trim() || undefined,
+        localizacao: revision.localizacao.trim() || undefined
+      });
+      setReviewingId(undefined);
+      setRevision(undefined);
+      if (online) {
+        await syncPendingObservations({ ownerId, workspaceId, entryId: revised.clientMutationId });
+      }
+      await refresh();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Não foi possível salvar a revisão.');
+    } finally {
+      setWorkingId(undefined);
+    }
+  }
+
+  async function discard(entry: OutboxEntry) {
+    if (!ownerId) return;
+    const confirmed = window.confirm(
+      'Descartar interrompe este envio. A cópia original continuará no histórico local como descartada. Deseja continuar?'
+    );
+    if (!confirmed) return;
+    setWorkingId(entry.id);
+    setError(null);
+    try {
+      await discardOutboxEntry(entry.id, ownerId, workspaceId);
+      setReviewingId(undefined);
+      setRevision(undefined);
+      await refresh();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Não foi possível descartar o registro.');
+    } finally {
+      setWorkingId(undefined);
+    }
+  }
+
+  const sendable = entries.filter((entry) => SENDABLE.includes(entry.status)).length;
+  const reviewable = entries.filter((entry) => REVIEWABLE.includes(entry.status)).length;
 
   return (
     <div className="modal-overlay" role="presentation" onMouseDown={(event) => {
@@ -70,7 +157,7 @@ export default function SyncCenter({ ownerId, workspaceId, online, onClose }: Pr
           <div>
             <span className="overline">Dados deste aparelho</span>
             <h2 id="sync-title">Sincronização</h2>
-            <p>{online ? 'Conexão disponível' : 'Sem conexão'} · {pending} aguardando atenção</p>
+            <p>{sendable} aguardando envio · {reviewable} para revisar</p>
           </div>
           <button type="button" className="icon-button" aria-label="Fechar sincronização" onClick={onClose}>×</button>
         </header>
@@ -79,7 +166,15 @@ export default function SyncCenter({ ownerId, workspaceId, online, onClose }: Pr
           <span aria-hidden="true" />
           <div>
             <b>{online ? 'Este aparelho está conectado' : 'Trabalho offline ativo'}</b>
-            <p>{online ? 'Registros pendentes podem ser enviados agora.' : 'Novos registros continuam salvos localmente.'}</p>
+            <p>Dados locais de @{ownerId ?? 'pessoa não identificada'} neste território.</p>
+            <p>
+              {metadata?.lastSuccessAt
+                ? `Último envio concluído: ${when(metadata.lastSuccessAt)}.`
+                : 'Nenhum envio concluído neste território.'}
+              {metadata?.lastAttemptAt && metadata.lastAttemptAt !== metadata.lastSuccessAt
+                ? ` Última tentativa: ${when(metadata.lastAttemptAt)}.`
+                : ''}
+            </p>
           </div>
         </div>
 
@@ -93,21 +188,87 @@ export default function SyncCenter({ ownerId, workspaceId, online, onClose }: Pr
           )}
           {entries.map((entry) => {
             const status = STATUS[entry.status];
+            const isReviewing = reviewingId === entry.id && revision;
             return (
-              <article className="sync-entry" key={entry.id}>
-                <div className="sync-entry-copy">
-                  <span className={`status-dot ${status.tone}`} aria-hidden="true" />
-                  <div>
-                    <b>{entry.body.titulo}</b>
-                    <p>{entry.body.localizacao || entry.body.categoria}</p>
-                    {entry.lastError && <small>{entry.lastError}</small>}
+              <article className={`sync-entry ${isReviewing ? 'reviewing' : ''}`} key={entry.id}>
+                <div className="sync-entry-summary">
+                  <div className="sync-entry-copy">
+                    <span className={`status-dot ${status.tone}`} aria-hidden="true" />
+                    <div>
+                      <b>{entry.body.titulo}</b>
+                      <p>{entry.body.localizacao || entry.body.categoria}</p>
+                      {entry.lastError && <small>{entry.lastError}</small>}
+                    </div>
+                  </div>
+                  <div className="sync-entry-state">
+                    <strong className={status.tone}>{status.label}</strong>
+                    <span>{status.detail}</span>
+                    <time dateTime={entry.updatedAt}>{when(entry.updatedAt)}</time>
+                    {REVIEWABLE.includes(entry.status) && !isReviewing && (
+                      <button
+                        type="button"
+                        className="secondary-button compact-button"
+                        aria-label={`Revisar ${entry.body.titulo}`}
+                        onClick={() => openReview(entry)}
+                      >
+                        Revisar
+                      </button>
+                    )}
                   </div>
                 </div>
-                <div className="sync-entry-state">
-                  <strong className={status.tone}>{status.label}</strong>
-                  <span>{status.detail}</span>
-                  <time dateTime={entry.updatedAt}>{when(entry.updatedAt)}</time>
-                </div>
+                {isReviewing && (
+                  <form className="sync-review-form" onSubmit={saveRevision}>
+                    <p>Uma nova versão será criada. O conteúdo original continuará no histórico local.</p>
+                    <div className="field-row">
+                      <div className="field">
+                        <label htmlFor={`sync-title-${entry.id}`}>Título revisado</label>
+                        <input
+                          id={`sync-title-${entry.id}`}
+                          value={revision.titulo}
+                          required
+                          onChange={(event) => setRevision({ ...revision, titulo: event.target.value })}
+                        />
+                      </div>
+                      <div className="field">
+                        <label htmlFor={`sync-category-${entry.id}`}>Categoria revisada</label>
+                        <input
+                          id={`sync-category-${entry.id}`}
+                          value={revision.categoria}
+                          required
+                          onChange={(event) => setRevision({ ...revision, categoria: event.target.value })}
+                        />
+                      </div>
+                    </div>
+                    <div className="field">
+                      <label htmlFor={`sync-description-${entry.id}`}>Descrição revisada</label>
+                      <textarea
+                        id={`sync-description-${entry.id}`}
+                        rows={3}
+                        value={revision.descricao}
+                        onChange={(event) => setRevision({ ...revision, descricao: event.target.value })}
+                      />
+                    </div>
+                    <div className="field">
+                      <label htmlFor={`sync-location-${entry.id}`}>Local revisado</label>
+                      <input
+                        id={`sync-location-${entry.id}`}
+                        value={revision.localizacao}
+                        onChange={(event) => setRevision({ ...revision, localizacao: event.target.value })}
+                      />
+                    </div>
+                    <div className="sync-review-actions">
+                      <button type="button" className="danger-text-button" disabled={workingId === entry.id} onClick={() => void discard(entry)}>
+                        Descartar registro
+                      </button>
+                      <button type="button" className="ghost-button" onClick={() => { setReviewingId(undefined); setRevision(undefined); }}>
+                        Cancelar
+                      </button>
+                      <button type="submit" className="primary-button" disabled={workingId === entry.id}>
+                        {workingId === entry.id ? 'Salvando…' : online ? 'Salvar correção e reenviar' : 'Salvar correção'}
+                      </button>
+                    </div>
+                  </form>
+                )}
               </article>
             );
           })}
@@ -118,7 +279,7 @@ export default function SyncCenter({ ownerId, workspaceId, online, onClose }: Pr
           <button
             type="button"
             className="primary-button"
-            disabled={!ownerId || !online || syncing || pending === 0}
+            disabled={!ownerId || !online || syncing || sendable === 0}
             onClick={synchronize}
           >
             {syncing ? 'Sincronizando…' : 'Sincronizar agora'}

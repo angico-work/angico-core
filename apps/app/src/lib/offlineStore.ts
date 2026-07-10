@@ -12,7 +12,9 @@ export type OutboxStatus =
   | 'RETRYABLE_ERROR'
   | 'CONFLICT'
   | 'BLOCKED'
-  | 'ACTION_REQUIRED';
+  | 'ACTION_REQUIRED'
+  | 'SUPERSEDED'
+  | 'DISCARDED';
 
 export interface OfflineObservationInput extends ObservacaoInput {
   clientMutationId: string;
@@ -65,7 +67,7 @@ interface BlobRecord {
   type: string;
 }
 
-interface SyncMetadata {
+export interface SyncMetadata {
   key: string;
   ownerId: string;
   workspaceId: string;
@@ -156,6 +158,10 @@ export function getDeviceId(): string {
 
 function entityKey(ownerId: string, workspaceId: string, clientMutationId: string): string {
   return JSON.stringify([ownerId, workspaceId, clientMutationId]);
+}
+
+function syncMetadataKey(ownerId: string, workspaceId: string): string {
+  return JSON.stringify([ownerId, workspaceId]);
 }
 
 function requirePartition(ownerId: string, workspaceId: string): void {
@@ -255,7 +261,7 @@ export async function getOfflineOwnerState(ownerId: string): Promise<OfflineOwne
   const entries = await listOutbox(ownerId);
   return entries.reduce<OfflineOwnerState>((state, entry) => {
     state.total += 1;
-    if (entry.status !== 'SYNCED') state.unsynced += 1;
+    if (!['SYNCED', 'SUPERSEDED', 'DISCARDED'].includes(entry.status)) state.unsynced += 1;
     if (entry.status === 'CONFLICT') state.conflicts += 1;
     if (entry.status === 'BLOCKED') state.blocked += 1;
     if (entry.status === 'ACTION_REQUIRED') state.actionRequired += 1;
@@ -358,11 +364,145 @@ export async function markOutboxStatus(
   announceChange();
 }
 
-export async function requeueBlockedOutbox(ownerId: string, workspaceId: string): Promise<number> {
-  const blocked = (await listOutbox(ownerId, workspaceId)).filter((entry) => entry.status === 'BLOCKED');
+export async function requeueManualOutbox(ownerId: string, workspaceId: string): Promise<number> {
+  const blocked = (await listOutbox(ownerId, workspaceId))
+    .filter((entry) => entry.status === 'BLOCKED' || entry.status === 'RETRYABLE_ERROR');
   const now = new Date().toISOString();
   await Promise.all(blocked.map((entry) => markOutboxStatus(entry.id, 'QUEUED', { nextAttemptAt: now })));
   return blocked.length;
+}
+
+type ObservationRevision = Partial<Pick<ObservacaoInput,
+  | 'territorioId'
+  | 'categoria'
+  | 'titulo'
+  | 'descricao'
+  | 'localizacao'
+  | 'bairro'
+  | 'cidade'
+  | 'estado'
+  | 'urgencia'
+  | 'autorId'
+  | 'latitude'
+  | 'longitude'
+>>;
+
+const REVIEWABLE_STATUSES: OutboxStatus[] = ['CONFLICT', 'ACTION_REQUIRED'];
+
+export async function reviseObservation(
+  id: string,
+  ownerId: string,
+  workspaceId: string,
+  changes: ObservationRevision
+): Promise<OfflineObservationInput> {
+  requirePartition(ownerId, workspaceId);
+  const db = await database();
+  const tx = db.transaction(['outbox', 'entities'], 'readwrite');
+  const outbox = tx.objectStore('outbox');
+  const entities = tx.objectStore('entities');
+  const original = await outbox.get(id);
+  if (!original || original.ownerId !== ownerId || original.workspaceId !== workspaceId) {
+    tx.abort();
+    throw new Error('O registro não pertence a esta pessoa e a este território.');
+  }
+  if (!REVIEWABLE_STATUSES.includes(original.status)) {
+    tx.abort();
+    throw new Error('Somente registros que precisam de revisão podem ser corrigidos.');
+  }
+
+  const clientMutationId = randomId();
+  const now = new Date().toISOString();
+  const body: OfflineObservationInput = {
+    ...original.body,
+    ...changes,
+    workspaceId,
+    categoria: (changes.categoria ?? original.body.categoria).trim(),
+    titulo: (changes.titulo ?? original.body.titulo).trim(),
+    clientMutationId,
+    occurredAt: original.body.occurredAt,
+    deviceId: original.body.deviceId
+  };
+  if (!body.titulo || !body.categoria) {
+    tx.abort();
+    throw new Error('Título e categoria são obrigatórios para reenviar o registro.');
+  }
+
+  const key = entityKey(ownerId, workspaceId, clientMutationId);
+  const replacement: OutboxEntry = {
+    id: clientMutationId,
+    operation: 'CREATE_OBSERVATION',
+    ownerId,
+    workspaceId,
+    localEntityKey: key,
+    body,
+    status: 'QUEUED',
+    attemptCount: 0,
+    createdAt: now,
+    updatedAt: now,
+    nextAttemptAt: now
+  };
+  const originalLocal = await entities.get(original.localEntityKey);
+  await outbox.put({ ...original, status: 'SUPERSEDED', updatedAt: now, leaseUntil: undefined });
+  if (originalLocal) {
+    await entities.put({ ...originalLocal, syncStatus: 'SUPERSEDED', updatedAt: now });
+  }
+  await outbox.add(replacement);
+  await entities.add({
+    key,
+    ownerId,
+    workspaceId,
+    clientMutationId,
+    data: body,
+    syncStatus: 'QUEUED',
+    updatedAt: now
+  });
+  await tx.done;
+  announceChange();
+  return body;
+}
+
+export async function discardOutboxEntry(
+  id: string,
+  ownerId: string,
+  workspaceId: string
+): Promise<void> {
+  requirePartition(ownerId, workspaceId);
+  const entry = (await listOutbox(ownerId, workspaceId)).find((candidate) => candidate.id === id);
+  if (!entry) throw new Error('O registro não pertence a esta pessoa e a este território.');
+  if (!REVIEWABLE_STATUSES.includes(entry.status)) {
+    throw new Error('Somente registros que precisam de revisão podem ser descartados.');
+  }
+  await markOutboxStatus(id, 'DISCARDED', { message: entry.lastError });
+}
+
+export async function recordSyncAttempt(
+  ownerId: string,
+  workspaceId: string,
+  success: boolean,
+  at = new Date()
+): Promise<void> {
+  requirePartition(ownerId, workspaceId);
+  const db = await database();
+  const key = syncMetadataKey(ownerId, workspaceId);
+  const existing = await db.get('syncMeta', key);
+  const timestamp = at.toISOString();
+  await db.put('syncMeta', {
+    key,
+    ownerId,
+    workspaceId,
+    lastAttemptAt: timestamp,
+    lastSuccessAt: success ? timestamp : existing?.lastSuccessAt
+  });
+  announceChange();
+}
+
+export async function getSyncMetadata(
+  ownerId: string,
+  workspaceId: string
+): Promise<SyncMetadata | undefined> {
+  requirePartition(ownerId, workspaceId);
+  const db = await database();
+  return db.get('syncMeta', syncMetadataKey(ownerId, workspaceId));
 }
 
 export async function resetOfflineDatabase(): Promise<void> {

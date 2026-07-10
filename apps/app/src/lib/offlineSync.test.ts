@@ -8,7 +8,7 @@ import {
   listOutbox,
   resetOfflineDatabase
 } from './offlineStore';
-import { retryBlockedObservations, syncPendingObservations } from './offlineSync';
+import { retryPendingObservations, syncPendingObservations } from './offlineSync';
 
 const session = {
   pessoaId: 7,
@@ -133,17 +133,42 @@ describe('offline synchronization', () => {
     expect((await listOutbox('ana.sp'))[0].status).toBe('BLOCKED');
     expect(getSession()).toBeNull();
 
-    await expect(retryBlockedObservations('ana.sp', 'territorio-a')).rejects.toThrow('Entre novamente');
+    await expect(retryPendingObservations('ana.sp', 'territorio-a')).rejects.toThrow('Entre novamente');
     expect(fetchMock).toHaveBeenCalledTimes(1);
 
     localStorage.setItem('angico.session', JSON.stringify(session));
-    await expect(retryBlockedObservations('ana.sp', 'territorio-a')).rejects.toThrow('validada');
+    await expect(retryPendingObservations('ana.sp', 'territorio-a')).rejects.toThrow('validada');
     expect(fetchMock).toHaveBeenCalledTimes(1);
 
     localStorage.setItem('angico.session.validatedAt', new Date().toISOString());
-    await retryBlockedObservations('ana.sp', 'territorio-a');
+    await retryPendingObservations('ana.sp', 'territorio-a');
 
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect((await listOutbox('ana.sp'))[0].status).toBe('SYNCED');
+  });
+
+  it('lets an explicit retry bypass transient backoff without touching review states', async () => {
+    await enqueueObservation(observation, 'ana.sp');
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(response(503, { detail: 'unavailable' }))
+      .mockResolvedValueOnce(response(201, { id: 51, status: 'ABERTA', createdAt: new Date().toISOString() }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await syncPendingObservations({ ownerId: 'ana.sp', workspaceId: 'territorio-a' });
+    expect((await listOutbox('ana.sp'))[0].status).toBe('RETRYABLE_ERROR');
+
+    localStorage.setItem('angico.session.validatedAt', new Date().toISOString());
+    await retryPendingObservations('ana.sp', 'territorio-a');
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect((await listOutbox('ana.sp'))[0].status).toBe('SYNCED');
+  });
+
+  it('refuses a manual retry for a different authenticated owner', async () => {
+    await enqueueObservation(observation, 'ana.sp');
+    localStorage.setItem('angico.session.validatedAt', new Date().toISOString());
+    localStorage.setItem('angico.session', JSON.stringify({ ...session, angicoId: 'bia.sp', pessoaId: 8 }));
+
+    await expect(retryPendingObservations('ana.sp', 'territorio-a')).rejects.toThrow('outra pessoa');
   });
 });

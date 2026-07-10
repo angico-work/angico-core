@@ -43,8 +43,10 @@
 .connection-strip.offline > span { background: var(--clay); }
 .connection-strip p { margin: .15rem 0 0; color: var(--muted); }
 .sync-list { max-height: 430px; overflow-y: auto; border: 1px solid var(--line); background: #fff; }
-.sync-entry { padding: 1rem; display: grid; grid-template-columns: 1fr minmax(150px, .36fr); gap: 1rem; border-bottom: 1px solid var(--line); }
+.sync-entry { padding: 1rem; border-bottom: 1px solid var(--line); }
 .sync-entry:last-child { border-bottom: 0; }
+.sync-entry.reviewing { background: #f8f8f3; }
+.sync-entry-summary { display: grid; grid-template-columns: 1fr minmax(150px, .36fr); gap: 1rem; }
 .sync-entry-copy { display: flex; gap: .7rem; }
 .sync-entry-copy p { margin: .15rem 0; color: var(--muted); }
 .sync-entry-copy small { color: var(--clay); }
@@ -55,6 +57,12 @@
 .sync-entry-state strong.ok { color: #227847; }
 .sync-entry-state strong.attention { color: var(--clay); }
 .sync-entry-state span, .sync-entry-state time { color: var(--muted); font-size: .76rem; }
+.compact-button { min-height: 36px; margin-top: .55rem; padding: .35rem .65rem; }
+.sync-review-form { margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--line); }
+.sync-review-form > p { margin: 0 0 1rem; color: var(--muted); font-size: .86rem; }
+.sync-review-actions { display: flex; align-items: center; justify-content: flex-end; gap: .6rem; }
+.danger-text-button { min-height: 44px; margin-right: auto; padding: .45rem .2rem; color: #873b24; background: transparent; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
+.danger-text-button:disabled { opacity: .55; cursor: wait; }
 
 .workspace-switcher { position: relative; padding: .75rem; border-bottom: 1px solid var(--line-dark); }
 .workspace-trigger { width: 100%; min-height: 58px; padding: .55rem .65rem; border: 1px solid rgba(255,255,255,.12); border-radius: 5px; display: flex; align-items: center; justify-content: space-between; color: #fff; background: rgba(255,255,255,.04); cursor: pointer; text-align: left; }
@@ -115,6 +123,9 @@
   .capture-steps li { display: grid; gap: .3rem; font-size: .7rem; }
   .capture-review > div { grid-template-columns: 90px 1fr; }
   .capture-actions, .dialog-actions { display: grid; grid-template-columns: 1fr 1.4fr; }
-  .sync-entry { grid-template-columns: 1fr; }
+  .sync-entry-summary { grid-template-columns: 1fr; }
   .sync-entry-state { align-items: flex-start; text-align: left; }
+  .sync-review-actions { display: grid; grid-template-columns: 1fr 1fr; }
+  .sync-review-actions .danger-text-button { grid-column: 1 / -1; margin: 0; justify-self: start; }
+  .sync-review-actions .primary-button { grid-column: 2; }
 }

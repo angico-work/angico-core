@@ -6,7 +6,8 @@ import {
   getLocalObservation,
   listOutbox,
   markOutboxStatus,
-  requeueBlockedOutbox,
+  recordSyncAttempt,
+  requeueManualOutbox,
   type OutboxEntry,
   type OutboxStatus
 } from './offlineStore';
@@ -84,11 +85,13 @@ async function sendObservation(entry: OutboxEntry): Promise<Response> {
 
 async function synchronizeEntry(entry: OutboxEntry, summary: SyncSummary): Promise<boolean> {
   summary.attempted += 1;
+  await recordSyncAttempt(entry.ownerId, entry.workspaceId, false);
   try {
     const response = await sendObservation(entry);
     if (response.ok) {
       const remote = await response.json() as Observacao;
       await markOutboxStatus(entry.id, 'SYNCED', { remote });
+      await recordSyncAttempt(entry.ownerId, entry.workspaceId, true);
       summary.synced += 1;
       return true;
     }
@@ -143,11 +146,14 @@ export async function syncPendingObservations(filter: SyncFilter = {}): Promise<
   return summary;
 }
 
-export async function retryBlockedObservations(ownerId: string, workspaceId: string): Promise<SyncSummary> {
+export async function retryPendingObservations(ownerId: string, workspaceId: string): Promise<SyncSummary> {
   if (!isAuthenticated() || !hasFreshOfflineSession()) {
     throw new Error('Entre novamente com uma sessão validada antes de tentar enviar registros bloqueados.');
   }
-  await requeueBlockedOutbox(ownerId, workspaceId);
+  if (ownerFromSession() !== ownerId) {
+    throw new Error('Os dados locais pertencem a outra pessoa neste aparelho.');
+  }
+  await requeueManualOutbox(ownerId, workspaceId);
   return syncPendingObservations({ ownerId, workspaceId });
 }
 
