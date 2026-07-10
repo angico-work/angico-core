@@ -117,7 +117,7 @@ fi
 run_app "$ROOT_DIR/target/angico-api-0.0.1-SNAPSHOT.jar" "Current production profile"
 
 VERSIONS="$(flyway_versions)"
-if [[ "$VERSIONS" != "0,1,2" ]]; then
+if [[ "$VERSIONS" != "0,1,2,3" ]]; then
   echo "Unexpected Flyway history: $VERSIONS" >&2
   exit 1
 fi
