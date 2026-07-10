@@ -449,6 +449,13 @@ public class RastroService {
     }
 
     private void actionGaps(String workspaceId, NodeKey subject, List<Gap> result) {
+        if (!actionHasTerritory(workspaceId, subject)) {
+            result.add(gap(
+                    "ACAO_SEM_TERRITORIO", subject,
+                    "A ação não está ligada a uma missão com território explícito.",
+                    "Vincular a missão da ação ao território em que o trabalho acontece.",
+                    expected("MISSAO", "ATUA_EM", "TERRITORIO")));
+        }
         if (!existsTo(workspaceId, subject, "MISSAO", "COMPOSTA_POR")) {
             result.add(gap(
                     "ACAO_SEM_MISSAO", subject,
@@ -479,6 +486,21 @@ public class RastroService {
                     "Identificar a pessoa responsável pela ação.",
                     expected("PESSOA", "RESPONSAVEL_POR", "ACAO")));
         }
+    }
+
+    private boolean actionHasTerritory(String workspaceId, NodeKey action) {
+        return relations.findRelationsForNode(workspaceId, action.type, action.id).stream()
+                .filter(StoredMemoryRelation::isActive)
+                .filter(relation -> "COMPOSTA_POR".equals(relation.getRelationType()))
+                .filter(relation -> "MISSAO".equals(relation.getOriginType()))
+                .filter(relation -> action.id.equals(relation.getDestinationId()))
+                .anyMatch(relation -> relations.existsActiveFrom(
+                        workspaceId,
+                        "MISSAO",
+                        relation.getOriginId(),
+                        "TERRITORIO",
+                        "ATUA_EM"
+                ));
     }
 
     private void resultGaps(String workspaceId, NodeKey subject, List<Gap> result) {

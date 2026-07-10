@@ -90,7 +90,8 @@ class RastroIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(header().string("Cache-Control", "no-store"))
                 .andExpect(jsonPath("$.gaps[*].code", hasItems(
-                        "ACAO_SEM_MISSAO", "ACAO_SEM_EVIDENCIA", "ACAO_SEM_RESULTADO")));
+                        "ACAO_SEM_TERRITORIO", "ACAO_SEM_MISSAO",
+                        "ACAO_SEM_EVIDENCIA", "ACAO_SEM_RESULTADO")));
 
         object(workspaceA, "MISSAO", "mission-linked", "Cuidar da nascente");
         relation(workspaceA, "MISSAO", "mission-linked", "ACAO", "action-independent", "COMPOSTA_POR");
@@ -99,7 +100,14 @@ class RastroIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.gaps[*].code", not(hasItem("ACAO_SEM_MISSAO"))))
                 .andExpect(jsonPath("$.gaps[*].code", hasItems(
-                        "ACAO_SEM_EVIDENCIA", "ACAO_SEM_RESULTADO")));
+                        "ACAO_SEM_TERRITORIO", "ACAO_SEM_EVIDENCIA", "ACAO_SEM_RESULTADO")));
+
+        object(workspaceA, "TERRITORIO", "territory-linked", "Margem da nascente");
+        relation(workspaceA, "MISSAO", "mission-linked", "TERRITORIO", "territory-linked", "ATUA_EM");
+
+        mvc.perform(trace(workspaceA, "ACAO", "action-independent"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.gaps[*].code", not(hasItem("ACAO_SEM_TERRITORIO"))));
     }
 
     @Test
