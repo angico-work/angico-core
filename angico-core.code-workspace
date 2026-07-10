@@ -1,0 +1,20 @@
+{
+  "folders": [
+    {
+      "name": "Angico",
+      "path": "."
+    }
+  ],
+  "settings": {
+    "files.exclude": {
+      "**/.DS_Store": true,
+      "**/dist": true,
+      "**/target": true
+    },
+    "search.exclude": {
+      "**/node_modules": true,
+      "**/dist": true,
+      "**/target": true
+    }
+  }
+}
