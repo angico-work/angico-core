@@ -4,17 +4,8 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 
-import com.angico.acoes.AcaoRepository;
 import com.angico.core.memory.MemoryEvent;
-import com.angico.core.memory.MemoryQueryService;
 import com.angico.core.memory.OperationalMemoryService;
-import com.angico.impacto.IndicadorRepository;
-import com.angico.impacto.MedicaoRepository;
-import com.angico.mensagens.MensagemRepository;
-import com.angico.missoes.MissaoRepository;
-import com.angico.observacoes.ObservacaoRepository;
-import com.angico.potencialidades.PotencialidadeRepository;
-import com.angico.problemas.ProblemaRepository;
 import com.angico.workspaces.WorkspaceAuthorizationService;
 import tools.jackson.core.JacksonException;
 import tools.jackson.core.type.TypeReference;
@@ -25,48 +16,19 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class TerritorioService {
 
-    public static final String DEFAULT_WORKSPACE_ID = "angico-publico";
-
     private final TerritorioRepository territorioRepository;
-    private final ObservacaoRepository observacaoRepository;
-    private final ProblemaRepository problemaRepository;
-    private final PotencialidadeRepository potencialidadeRepository;
-    private final MissaoRepository missaoRepository;
-    private final AcaoRepository acaoRepository;
-    private final IndicadorRepository indicadorRepository;
-    private final MedicaoRepository medicaoRepository;
-    private final MensagemRepository mensagemRepository;
     private final OperationalMemoryService memoryService;
-    private final MemoryQueryService memoryQueryService;
     private final WorkspaceAuthorizationService authorizationService;
     private final ObjectMapper objectMapper;
 
     public TerritorioService(
             TerritorioRepository territorioRepository,
-            ObservacaoRepository observacaoRepository,
-            ProblemaRepository problemaRepository,
-            PotencialidadeRepository potencialidadeRepository,
-            MissaoRepository missaoRepository,
-            AcaoRepository acaoRepository,
-            IndicadorRepository indicadorRepository,
-            MedicaoRepository medicaoRepository,
-            MensagemRepository mensagemRepository,
             OperationalMemoryService memoryService,
-            MemoryQueryService memoryQueryService,
             WorkspaceAuthorizationService authorizationService,
             ObjectMapper objectMapper
     ) {
         this.territorioRepository = territorioRepository;
-        this.observacaoRepository = observacaoRepository;
-        this.problemaRepository = problemaRepository;
-        this.potencialidadeRepository = potencialidadeRepository;
-        this.missaoRepository = missaoRepository;
-        this.acaoRepository = acaoRepository;
-        this.indicadorRepository = indicadorRepository;
-        this.medicaoRepository = medicaoRepository;
-        this.mensagemRepository = mensagemRepository;
         this.memoryService = memoryService;
-        this.memoryQueryService = memoryQueryService;
         this.authorizationService = authorizationService;
         this.objectMapper = objectMapper;
     }
@@ -87,14 +49,6 @@ public class TerritorioService {
     public Territorio requireTerritorio(Long id) {
         Territorio territorio = territorioRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Territorio nao encontrado: " + id));
-        authorizationService.requireMember(territorio.getWorkspaceId());
-        return territorio;
-    }
-
-    public Territorio defaultTerritory() {
-        Territorio territorio = territorioRepository.findFirstByWorkspaceIdOrderByIdAsc(DEFAULT_WORKSPACE_ID)
-                .orElseGet(() -> territorioRepository.findAll().stream().findFirst()
-                        .orElseThrow(() -> new IllegalStateException("Nenhum territorio cadastrado.")));
         authorizationService.requireMember(territorio.getWorkspaceId());
         return territorio;
     }
@@ -163,10 +117,6 @@ public class TerritorioService {
                 territorio.getStatus(),
                 territorio.getUpdatedAt()
         );
-    }
-
-    public static String workspace(String value) {
-        return value == null || value.isBlank() ? DEFAULT_WORKSPACE_ID : value.trim();
     }
 
     public static String defaultText(String value, String defaultValue) {
