@@ -1,6 +1,7 @@
 package com.angico.core.memory;
 
 import com.angico.core.ontology.OntologyService;
+import com.angico.mensagens.ConversationAccessPolicy;
 import tools.jackson.core.type.TypeReference;
 import tools.jackson.databind.ObjectMapper;
 import jakarta.persistence.criteria.Predicate;
@@ -22,19 +23,22 @@ public class MemoryQueryService {
     private final MemoryEventRepository eventRepository;
     private final OntologyService ontology;
     private final ObjectMapper objectMapper;
+    private final ConversationAccessPolicy conversationAccess;
 
     public MemoryQueryService(
             MemoryObjectRepository objectRepository,
             MemoryRelationRepository relationRepository,
             MemoryEventRepository eventRepository,
             OntologyService ontology,
-            ObjectMapper objectMapper
+            ObjectMapper objectMapper,
+            ConversationAccessPolicy conversationAccess
     ) {
         this.objectRepository = objectRepository;
         this.relationRepository = relationRepository;
         this.eventRepository = eventRepository;
         this.ontology = ontology;
         this.objectMapper = objectMapper;
+        this.conversationAccess = conversationAccess;
     }
 
     public List<Map<String, Object>> timelineForWorkspace(String workspaceId) {
@@ -90,7 +94,9 @@ public class MemoryQueryService {
             }
             return builder.and(predicates.toArray(Predicate[]::new));
         }, Sort.by(Sort.Direction.ASC, "sequence"));
-        return eventMaps(events, null);
+        return eventMaps(events.stream()
+                .filter(this::canView)
+                .toList(), null);
     }
 
     public List<Map<String, Object>> timelineForTerritory(String workspaceId, String territorioEntityId) {
@@ -98,6 +104,8 @@ public class MemoryQueryService {
         keys.add(nodeKey(OntologyService.TERRITORIO, territorioEntityId));
         relationRepository.findRelationsForNode(
                         workspaceId, OntologyService.TERRITORIO, territorioEntityId)
+                .stream()
+                .filter(this::canView)
                 .forEach(relation -> {
                     keys.add(nodeKey(relation.getOriginType(), relation.getOriginId()));
                     keys.add(nodeKey(relation.getDestinationType(), relation.getDestinationId()));
@@ -107,6 +115,7 @@ public class MemoryQueryService {
                 eventRepository.findByWorkspaceIdOrderBySequenceAsc(workspaceId);
         List<StoredMemoryEvent> territoryEvents = workspaceEvents.stream()
                 .filter(event -> keys.contains(nodeKey(event.getEntityType(), event.getEntityId())))
+                .filter(this::canView)
                 .toList();
         return eventMaps(territoryEvents, workspaceEvents);
     }
@@ -114,13 +123,19 @@ public class MemoryQueryService {
     public Map<String, Object> graphForEntity(String workspaceId, String entityType, String entityId) {
         String canonicalType = ontology.canonicalObjectType(entityType);
         List<StoredMemoryRelation> direct = relationRepository.findRelationsForNode(
-                workspaceId, canonicalType, entityId);
+                        workspaceId, canonicalType, entityId)
+                .stream()
+                .filter(this::canView)
+                .toList();
         return graphFromRelations(workspaceId, direct);
     }
 
     public Map<String, Object> graphForTerritory(String workspaceId, String territorioEntityId) {
         List<StoredMemoryRelation> direct = relationRepository.findRelationsForNode(
-                workspaceId, OntologyService.TERRITORIO, territorioEntityId);
+                        workspaceId, OntologyService.TERRITORIO, territorioEntityId)
+                .stream()
+                .filter(this::canView)
+                .toList();
         Set<String> nodeKeys = new LinkedHashSet<>();
         direct.forEach(relation -> {
             nodeKeys.add(nodeKey(relation.getOriginType(), relation.getOriginId()));
@@ -130,6 +145,7 @@ public class MemoryQueryService {
         List<StoredMemoryRelation> expanded = new ArrayList<>(direct);
         relationRepository.findByWorkspaceId(workspaceId)
                 .stream()
+                .filter(this::canView)
                 .filter(relation -> nodeKeys.contains(nodeKey(relation.getOriginType(), relation.getOriginId()))
                         || nodeKeys.contains(nodeKey(relation.getDestinationType(), relation.getDestinationId())))
                 .filter(relation -> !expanded.contains(relation))
@@ -143,7 +159,7 @@ public class MemoryQueryService {
             List<StoredMemoryRelation> relations
     ) {
         Map<String, StoredMemoryRelation> uniqueRelations = new LinkedHashMap<>();
-        relations.forEach(relation -> {
+        relations.stream().filter(this::canView).forEach(relation -> {
             String key = relationIdentity(relation);
             if (uniqueRelations.putIfAbsent(key, relation) != null) {
                 throw new IllegalStateException("Relacoes de memoria ambiguas para " + key);
@@ -341,6 +357,18 @@ public class MemoryQueryService {
         } catch (Exception ex) {
             throw new IllegalStateException("Payload de memoria persistido e invalido.", ex);
         }
+    }
+
+    private boolean canView(StoredMemoryEvent event) {
+        return conversationAccess.canAccessMemoryNode(
+                event.getWorkspaceId(), event.getEntityType(), event.getEntityId());
+    }
+
+    private boolean canView(StoredMemoryRelation relation) {
+        return conversationAccess.canAccessMemoryNode(
+                        relation.getWorkspaceId(), relation.getOriginType(), relation.getOriginId())
+                && conversationAccess.canAccessMemoryNode(
+                        relation.getWorkspaceId(), relation.getDestinationType(), relation.getDestinationId());
     }
 
     private String nodeKey(String type, String id) {

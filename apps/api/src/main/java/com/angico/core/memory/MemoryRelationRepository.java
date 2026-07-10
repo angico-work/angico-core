@@ -1,7 +1,6 @@
 package com.angico.core.memory;
 
 import java.util.List;
-import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -49,23 +48,6 @@ public interface MemoryRelationRepository extends JpaRepository<StoredMemoryRela
             @Param("workspaceId") String workspaceId,
             @Param("entityType") String entityType,
             @Param("entityId") String entityId);
-
-    @Query("""
-            select r from StoredMemoryRelation r
-            where r.workspaceId = :workspaceId
-              and r.active = true
-              and (
-                (upper(r.originType) = upper(:entityType) and r.originId = :entityId)
-                or
-                (upper(r.destinationType) = upper(:entityType) and r.destinationId = :entityId)
-              )
-            order by r.createdAt asc, r.id asc
-            """)
-    List<StoredMemoryRelation> findActiveRelationsForNode(
-            @Param("workspaceId") String workspaceId,
-            @Param("entityType") String entityType,
-            @Param("entityId") String entityId,
-            Pageable pageable);
 
     @Query("""
             select (count(r) > 0) from StoredMemoryRelation r

@@ -245,6 +245,27 @@ class RastroIntegrationTest {
                 .andExpect(jsonPath("$.stages[*].reference.id", not(hasItem("action-sibling"))));
     }
 
+    @Test
+    void nonTraceRelationsCannotCrowdAValidRelationOutOfTheRequestedLimit() throws Exception {
+        object(workspaceA, "ACAO", "action-crowded", "Ação com memória extensa");
+        for (int index = 0; index < 8; index++) {
+            String messageId = "message-noise-" + index;
+            object(workspaceA, "MENSAGEM", messageId, "Ruído " + index);
+            relation(workspaceA, "MENSAGEM", messageId,
+                    "ACAO", "action-crowded", "MENCIONA");
+        }
+        object(workspaceA, "RESULTADO", "result-after-noise", "Resultado verificável");
+        relation(workspaceA, "ACAO", "action-crowded",
+                "RESULTADO", "result-after-noise", "PRODUZ");
+
+        mvc.perform(trace(workspaceA, "ACAO", "action-crowded")
+                        .param("maxRelations", "1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.relations", hasSize(1)))
+                .andExpect(jsonPath("$.relations[0].type").value("PRODUZ"))
+                .andExpect(jsonPath("$.stages[*].reference.id", hasItem("result-after-noise")));
+    }
+
     private org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder trace(
             String workspaceId,
             String rootType,

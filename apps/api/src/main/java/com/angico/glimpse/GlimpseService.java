@@ -12,6 +12,7 @@ import com.angico.impacto.MedicaoRepository;
 import com.angico.impacto.ResultadoRepository;
 import com.angico.missoes.Missao;
 import com.angico.missoes.MissaoRepository;
+import com.angico.mensagens.ConversationAccessPolicy;
 import com.angico.observacoes.ObservacaoRepository;
 import com.angico.observacoes.ObservacaoTerritorial;
 import com.angico.potencialidades.PotencialidadeRepository;
@@ -26,10 +27,11 @@ import java.time.Instant;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.HashSet;
 import java.util.Set;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -63,6 +65,7 @@ public class GlimpseService {
     private final WorkspaceRepository workspaces;
     private final ClockProvider clock;
     private final WorkspaceAuthorizationService authorizationService;
+    private final ConversationAccessPolicy conversationAccess;
 
     public GlimpseService(
             MemoryObjectRepository objects,
@@ -77,7 +80,8 @@ public class GlimpseService {
             MedicaoRepository medicoes,
             WorkspaceRepository workspaces,
             ClockProvider clock,
-            WorkspaceAuthorizationService authorizationService
+            WorkspaceAuthorizationService authorizationService,
+            ConversationAccessPolicy conversationAccess
     ) {
         this.objects = objects;
         this.events = events;
@@ -92,6 +96,7 @@ public class GlimpseService {
         this.workspaces = workspaces;
         this.clock = clock;
         this.authorizationService = authorizationService;
+        this.conversationAccess = conversationAccess;
     }
 
     @Transactional(readOnly = true)
@@ -160,7 +165,11 @@ public class GlimpseService {
     @Transactional(readOnly = true)
     public List<MemoriaEvent> memoria(String workspaceId) {
         workspaceId = authorizationService.requireAuthorizedWorkspace(workspaceId);
-        return events.findTop100ByWorkspaceIdOrderBySequenceDesc(workspaceId).stream()
+        return events.findByWorkspaceIdOrderBySequenceAsc(workspaceId).stream()
+                .filter(event -> conversationAccess.canAccessMemoryNode(
+                        event.getWorkspaceId(), event.getEntityType(), event.getEntityId()))
+                .sorted(Comparator.comparing(StoredMemoryEvent::getSequence).reversed())
+                .limit(100)
                 .map(this::toMemoriaEvent)
                 .toList();
     }

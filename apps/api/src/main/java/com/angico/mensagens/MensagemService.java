@@ -29,7 +29,6 @@ import com.angico.common.upload.SafeUploadValidator;
 import com.angico.common.upload.SafeUploadValidator.PreparedUpload;
 import com.angico.core.memory.MemoryEvent;
 import com.angico.core.memory.MemoryRelationMetadata;
-import com.angico.core.memory.MemoryRelationRepository;
 import com.angico.core.memory.MemorySyncStatus;
 import com.angico.core.memory.OperationalMemoryService;
 import com.angico.core.ontology.OntologyService;
@@ -67,8 +66,6 @@ public class MensagemService {
             OntologyService.RESULTADO,
             OntologyService.INDICADOR
     );
-    private static final Set<String> ADMIN_ROLES = Set.of("OWNER", "ADMIN");
-
     private final ConversaRepository conversaRepository;
     private final MensagemRepository mensagemRepository;
     private final MensagemAnexoRepository anexoRepository;
@@ -76,7 +73,7 @@ public class MensagemService {
     private final PessoaRepository pessoaRepository;
     private final TerritorioRepository territorioRepository;
     private final WorkspaceAuthorizationService authorizationService;
-    private final MemoryRelationRepository relationRepository;
+    private final ConversationAccessPolicy conversationAccess;
     private final WorkspaceMemberRepository memberRepository;
     private final OperationalMemoryService memoryService;
     private final OntologyService ontologyService;
@@ -95,7 +92,7 @@ public class MensagemService {
             PessoaRepository pessoaRepository,
             TerritorioRepository territorioRepository,
             WorkspaceAuthorizationService authorizationService,
-            MemoryRelationRepository relationRepository,
+            ConversationAccessPolicy conversationAccess,
             WorkspaceMemberRepository memberRepository,
             OperationalMemoryService memoryService,
             OntologyService ontologyService,
@@ -113,7 +110,7 @@ public class MensagemService {
         this.pessoaRepository = pessoaRepository;
         this.territorioRepository = territorioRepository;
         this.authorizationService = authorizationService;
-        this.relationRepository = relationRepository;
+        this.conversationAccess = conversationAccess;
         this.memberRepository = memberRepository;
         this.memoryService = memoryService;
         this.ontologyService = ontologyService;
@@ -129,7 +126,7 @@ public class MensagemService {
         String allowedWorkspace = authorizationService.requireAuthorizedWorkspace(workspaceId);
         return conversaRepository.findByWorkspaceIdOrderByUpdatedAtDesc(allowedWorkspace)
                 .stream()
-                .filter(this::canAccessConversation)
+                .filter(conversationAccess::canAccess)
                 .map(conversa -> toResponse(conversa, List.of()))
                 .toList();
     }
@@ -152,7 +149,7 @@ public class MensagemService {
         List<Mensagem> visible = mensagemRepository.findTop8ByWorkspaceIdOrderByCreatedAtDesc(allowedWorkspace)
                 .stream()
                 .filter(message -> conversaRepository.findById(message.getConversaId())
-                        .map(this::canAccessConversation)
+                        .map(conversationAccess::canAccess)
                         .orElse(false))
                 .toList();
         return toMessageResponses(visible);
@@ -163,7 +160,7 @@ public class MensagemService {
         String query = normalizeSearchQuery(rawQuery);
         List<MensagemBuscaResponse> results = new ArrayList<>();
         for (Conversa conversa : conversaRepository.findByWorkspaceIdOrderByUpdatedAtDesc(allowedWorkspace)) {
-            if (!canAccessConversation(conversa)) {
+            if (!conversationAccess.canAccess(conversa)) {
                 continue;
             }
             boolean conversationMatch = searchable(conversa.getTitulo(), conversa.getContextEntityType(),
@@ -549,26 +546,7 @@ public class MensagemService {
     }
 
     private void requireConversationAccess(Conversa conversa) {
-        authorizationService.requireMember(conversa.getWorkspaceId());
-        if (!canAccessConversation(conversa)) {
-            throw new ForbiddenException("Apenas participantes podem acessar esta conversa.");
-        }
-    }
-
-    private boolean canAccessConversation(Conversa conversa) {
-        if (authorizationService.hasRole(conversa.getWorkspaceId(), ADMIN_ROLES)) {
-            return true;
-        }
-        Pessoa actor = currentPessoa();
-        return relationRepository
-                .existsByWorkspaceIdAndOriginTypeAndOriginIdAndDestinationTypeAndDestinationIdAndRelationTypeAndActiveTrue(
-                        conversa.getWorkspaceId(),
-                        OntologyService.CONVERSA,
-                        String.valueOf(conversa.getId()),
-                        OntologyService.PESSOA,
-                        String.valueOf(actor.getId()),
-                        "TEM_PARTICIPANTE"
-                );
+        conversationAccess.requireAccess(conversa);
     }
 
     private Pessoa resolveParticipant(String rawReference) {

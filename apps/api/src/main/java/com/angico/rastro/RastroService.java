@@ -7,6 +7,7 @@ import com.angico.core.memory.StoredMemoryEvent;
 import com.angico.core.memory.StoredMemoryObject;
 import com.angico.core.memory.StoredMemoryRelation;
 import com.angico.core.ontology.OntologyService;
+import com.angico.mensagens.ConversationAccessPolicy;
 import com.angico.rastro.RastroResponse.Event;
 import com.angico.rastro.RastroResponse.ExpectedRelation;
 import com.angico.rastro.RastroResponse.Gap;
@@ -62,7 +63,27 @@ public class RastroService {
             signature("ACAO", "UTILIZA", "RECURSO"),
             signature("EVIDENCIA", "SUSTENTA", "RESULTADO"),
             signature("INDICADOR", "MEDE", "RESULTADO"),
-            signature("MEDICAO", "REFERE_SE_A", "INDICADOR")
+            signature("MEDICAO", "REFERE_SE_A", "INDICADOR"),
+            signature("CONVERSA", "PERTENCE_A", "TERRITORIO"),
+            signature("CONVERSA", "REFERE_SE_A", "OBSERVACAO"),
+            signature("CONVERSA", "REFERE_SE_A", "PROBLEMA"),
+            signature("CONVERSA", "REFERE_SE_A", "POTENCIALIDADE"),
+            signature("CONVERSA", "REFERE_SE_A", "MISSAO"),
+            signature("CONVERSA", "REFERE_SE_A", "ACAO"),
+            signature("CONVERSA", "REFERE_SE_A", "RESULTADO"),
+            signature("CONVERSA", "REFERE_SE_A", "INDICADOR"),
+            signature("CONVERSA", "TEM_PARTICIPANTE", "PESSOA"),
+            signature("MENSAGEM", "ENVIADA_EM", "CONVERSA"),
+            signature("MENSAGEM", "ENVIADA_POR", "PESSOA"),
+            signature("MENSAGEM", "ANEXA", "ANEXO"),
+            signature("MENSAGEM", "MENCIONA", "TERRITORIO"),
+            signature("MENSAGEM", "MENCIONA", "OBSERVACAO"),
+            signature("MENSAGEM", "MENCIONA", "PROBLEMA"),
+            signature("MENSAGEM", "MENCIONA", "POTENCIALIDADE"),
+            signature("MENSAGEM", "MENCIONA", "MISSAO"),
+            signature("MENSAGEM", "MENCIONA", "ACAO"),
+            signature("MENSAGEM", "MENCIONA", "RESULTADO"),
+            signature("MENSAGEM", "MENCIONA", "INDICADOR")
     );
     private static final Map<String, String> RESOURCES = Map.ofEntries(
             Map.entry("TERRITORIO", "territorios"),
@@ -77,7 +98,10 @@ public class RastroService {
             Map.entry("MEDICAO", "medicoes"),
             Map.entry("PESSOA", "pessoas"),
             Map.entry("ORGANIZACAO", "organizacoes"),
-            Map.entry("RECURSO", "recursos")
+            Map.entry("RECURSO", "recursos"),
+            Map.entry("CONVERSA", "conversas"),
+            Map.entry("MENSAGEM", "mensagens"),
+            Map.entry("ANEXO", "anexos")
     );
     private static final Map<String, Integer> STAGE_ORDER = Map.ofEntries(
             Map.entry("TERRITORIO", 10),
@@ -86,6 +110,9 @@ public class RastroService {
             Map.entry("PROBLEMA", 22),
             Map.entry("MISSAO", 30),
             Map.entry("ACAO", 40),
+            Map.entry("CONVERSA", 41),
+            Map.entry("MENSAGEM", 42),
+            Map.entry("ANEXO", 43),
             Map.entry("RECURSO", 45),
             Map.entry("EVIDENCIA", 50),
             Map.entry("RESULTADO", 60),
@@ -98,19 +125,22 @@ public class RastroService {
     private final MemoryEventRepository events;
     private final OntologyService ontology;
     private final WorkspaceAuthorizationService authorization;
+    private final ConversationAccessPolicy conversationAccess;
 
     public RastroService(
             MemoryObjectRepository objects,
             MemoryRelationRepository relations,
             MemoryEventRepository events,
             OntologyService ontology,
-            WorkspaceAuthorizationService authorization
+            WorkspaceAuthorizationService authorization,
+            ConversationAccessPolicy conversationAccess
     ) {
         this.objects = objects;
         this.relations = relations;
         this.events = events;
         this.ontology = ontology;
         this.authorization = authorization;
+        this.conversationAccess = conversationAccess;
     }
 
     @Transactional(readOnly = true)
@@ -172,22 +202,21 @@ public class RastroService {
 
         while (!pending.isEmpty() && graphRelations.size() < maxRelations) {
             NodeKey current = pending.removeFirst();
-            int remaining = maxRelations - graphRelations.size();
-            List<StoredMemoryRelation> candidates = relations.findActiveRelationsForNode(
-                    workspaceId,
-                    current.type,
-                    current.id,
-                    PageRequest.of(0, Math.min(remaining + 1, MAX_RELATIONS + 1))
-            );
-            if (candidates.size() > remaining) {
-                truncated = true;
-            }
+            List<StoredMemoryRelation> candidates = relations.findRelationsForNode(
+                            workspaceId, current.type, current.id)
+                    .stream()
+                    .filter(StoredMemoryRelation::isActive)
+                    .filter(this::isTraceRelation)
+                    .filter(this::canView)
+                    .sorted(Comparator.comparing(StoredMemoryRelation::getCreatedAt)
+                            .thenComparing(StoredMemoryRelation::getId))
+                    .toList();
             for (StoredMemoryRelation relation : candidates) {
                 if (graphRelations.size() >= maxRelations) {
                     truncated = true;
                     break;
                 }
-                if (!seenRelations.add(relation.getId()) || !isTraceRelation(relation)) {
+                if (!seenRelations.add(relation.getId())) {
                     continue;
                 }
                 NodeKey origin = key(relation.getOriginType(), relation.getOriginId());
@@ -285,7 +314,7 @@ public class RastroService {
         StoredMemoryEvent first = nodeEvents.isEmpty() ? null : nodeEvents.getFirst();
         return new Stage(
                 reference(object.getEntityType(), object.getEntityId()),
-                object.getName(),
+                stageName(object),
                 object.getStatus(),
                 first == null ? null : first.getOccurredAt(),
                 first == null ? null : first.getRecordedAt(),
@@ -573,6 +602,22 @@ public class RastroService {
             return false;
         }
         return TRACE_RELATIONS.contains(signature(origin, type, destination));
+    }
+
+    private boolean canView(StoredMemoryRelation relation) {
+        return conversationAccess.canAccessMemoryNode(
+                        relation.getWorkspaceId(), relation.getOriginType(), relation.getOriginId())
+                && conversationAccess.canAccessMemoryNode(
+                        relation.getWorkspaceId(), relation.getDestinationType(), relation.getDestinationId());
+    }
+
+    private String stageName(StoredMemoryObject object) {
+        return switch (ontology.canonicalObjectType(object.getEntityType())) {
+            case OntologyService.CONVERSA -> "Conversa vinculada";
+            case OntologyService.MENSAGEM -> "Mensagem registrada";
+            case OntologyService.ANEXO -> "Anexo registrado";
+            default -> object.getName();
+        };
     }
 
     private String requireRootType(String value) {

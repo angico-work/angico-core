@@ -14,6 +14,7 @@ import com.angico.impacto.Medicao;
 import com.angico.impacto.MedicaoRepository;
 import com.angico.impacto.ResultadoRepository;
 import com.angico.missoes.MissaoRepository;
+import com.angico.mensagens.ConversationAccessPolicy;
 import com.angico.observacoes.ObservacaoRepository;
 import com.angico.potencialidades.PotencialidadeRepository;
 import com.angico.problemas.ProblemaRepository;
@@ -45,6 +46,7 @@ class GlimpseServiceTest {
     @Mock private WorkspaceRepository workspaces;
     @Mock private ClockProvider clock;
     @Mock private WorkspaceAuthorizationService authorization;
+    @Mock private ConversationAccessPolicy conversationAccess;
 
     private GlimpseService service;
 
@@ -63,7 +65,8 @@ class GlimpseServiceTest {
                 medicoes,
                 workspaces,
                 clock,
-                authorization
+                authorization,
+                conversationAccess
         );
     }
 
