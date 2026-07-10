@@ -247,4 +247,12 @@ describe('cookie session API', () => {
       expect.objectContaining({ credentials: 'include' })
     );
   });
+
+  it('refuses to build a message endpoint from an invalid conversation identifier', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(sendMensagem(Number.NaN, 'texto')).rejects.toThrow('Conversa inválida');
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
 });

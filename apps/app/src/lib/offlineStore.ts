@@ -421,7 +421,7 @@ export async function loadMessageDraft(
   const value = record.value as MessageDraftValue;
   const attachments = (await Promise.all(value.attachments.map(async (attachment) => {
     const stored = await db.get('blobs', attachment.blobKey);
-    return stored
+    return stored && stored.ownerId === ownerId && stored.workspaceId === workspaceId
       ? new File([stored.bytes], stored.name, { type: stored.type, lastModified: Date.parse(stored.updatedAt) })
       : undefined;
   }))).filter((file): file is File => Boolean(file));
@@ -498,11 +498,18 @@ export async function enqueueMessage(
     nextAttemptAt: now
   };
   const db = await database();
-  const tx = db.transaction(['messages', 'outbox', 'blobs'], 'readwrite');
+  const tx = db.transaction(['messages', 'outbox', 'drafts', 'blobs'], 'readwrite');
+  const draftKey = messageDraftKey(ownerId, input.workspaceId, input.conversationId);
+  const draftRecord = await tx.objectStore('drafts').get(draftKey);
+  const draftValue = draftRecord?.kind === 'MESSAGE'
+    ? draftRecord.value as MessageDraftValue
+    : undefined;
   await Promise.all([
     tx.objectStore('messages').add(local),
     tx.objectStore('outbox').add(operation),
-    ...storedAttachments.records.map((record) => tx.objectStore('blobs').add(record))
+    tx.objectStore('drafts').delete(draftKey),
+    ...storedAttachments.records.map((record) => tx.objectStore('blobs').add(record)),
+    ...(draftValue?.attachments ?? []).map((attachment) => tx.objectStore('blobs').delete(attachment.blobKey))
   ]);
   await tx.done;
   announceChange();
@@ -532,9 +539,17 @@ export async function listLocalMessages(
   return messages.sort((a, b) => a.occurredAt.localeCompare(b.occurredAt));
 }
 
-export async function getMessageAttachmentFile(blobKey: string): Promise<File | undefined> {
+export async function getMessageAttachmentFile(
+  blobKey: string,
+  ownerId?: string,
+  workspaceId?: string
+): Promise<File | undefined> {
   const db = await database();
   const stored = await db.get('blobs', blobKey);
+  if (stored && ownerId && workspaceId
+    && (stored.ownerId !== ownerId || stored.workspaceId !== workspaceId)) {
+    return undefined;
+  }
   return stored
     ? new File([stored.bytes], stored.name, { type: stored.type, lastModified: Date.parse(stored.updatedAt) })
     : undefined;

@@ -138,6 +138,7 @@
 .message-provenance.pending span { color: var(--water); }
 .attachment-list { margin-top: .6rem; display: grid; gap: .35rem; }
 .attachment-list a, .local-attachment { min-height: 44px; padding: .5rem .65rem; border: 1px solid var(--line); display: flex; align-items: center; justify-content: space-between; gap: .5rem; background: var(--surface); }
+.local-attachment.missing { border-color: rgba(198, 93, 54, .45); color: var(--clay); background: rgba(198, 93, 54, .06); }
 .attachment-list small { color: var(--muted); }
 .message-composer { padding: .8rem 1rem 1rem; border-top: 1px solid var(--line); background: #fff; }
 .message-composer > label { display: block; margin-bottom: .35rem; font-weight: 600; }

@@ -15,11 +15,13 @@ import {
   cacheConversations,
   cacheRemoteMessages,
   clearMessageDraft,
+  getMessageAttachmentFile,
   listLocalMessages,
   loadCachedConversations,
   loadMessageDraft
 } from '../lib/offlineStore';
 import { captureMessage } from '../lib/offlineSync';
+import { startOnlinePolling } from '../lib/messagePolling';
 
 vi.mock('../lib/api', async (importOriginal) => {
   const original = await importOriginal<typeof import('../lib/api')>();
@@ -102,6 +104,12 @@ const remoteMessage = {
   relacoes: []
 };
 
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((done) => { resolve = done; });
+  return { promise, resolve };
+}
+
 function renderPage() {
   return render(
     <MemoryRouter initialEntries={['/']}>
@@ -127,6 +135,7 @@ describe('MensagensPage', () => {
     vi.mocked(cacheConversations).mockResolvedValue(undefined);
     vi.mocked(cacheRemoteMessages).mockResolvedValue(undefined);
     vi.mocked(clearMessageDraft).mockResolvedValue(undefined);
+    vi.mocked(getMessageAttachmentFile).mockResolvedValue(undefined);
     vi.mocked(searchMensagens).mockResolvedValue([]);
     vi.mocked(createConversa).mockResolvedValue(conversation);
   });
@@ -160,7 +169,7 @@ describe('MensagensPage', () => {
     expect(screen.getByText('Rascunho salvo neste aparelho')).toBeInTheDocument();
   });
 
-  it('keeps an offline send visible in the queue and clears the draft only after persistence', async () => {
+  it('keeps an offline send visible in the queue after the atomic capture succeeds', async () => {
     Object.defineProperty(navigator, 'onLine', { configurable: true, value: false });
     vi.mocked(loadCachedConversations).mockResolvedValue([conversation]);
     const local = {
@@ -190,7 +199,7 @@ describe('MensagensPage', () => {
       body: 'Mensagem registrada offline.',
       attachments: []
     }));
-    expect(clearMessageDraft).toHaveBeenCalledWith('ana.sp', 'territorio-a', 12);
+    expect(editor).toHaveValue('');
     expect(await screen.findByText('Mensagem registrada offline.')).toBeInTheDocument();
     expect(screen.getByText('Na fila')).toBeInTheDocument();
   });
@@ -227,5 +236,86 @@ describe('MensagensPage', () => {
     expect((await screen.findAllByText('Cuidado da nascente')).length).toBeGreaterThan(0);
     expect(screen.getByText('Dados salvos neste aparelho')).toBeInTheDocument();
     expect(cacheConversations).not.toHaveBeenCalled();
+  });
+
+  it('does not let a late response from the previous conversation replace the active timeline', async () => {
+    const secondConversation = { ...conversation, id: 13, titulo: 'Segunda conversa', unreadCount: 0 };
+    const firstResponse = deferred<typeof remoteMessage[]>();
+    const secondResponse = deferred<typeof remoteMessage[]>();
+    vi.mocked(listConversas).mockResolvedValue([conversation, secondConversation]);
+    vi.mocked(listMensagens).mockImplementation((id) => id === 12 ? firstResponse.promise : secondResponse.promise);
+    renderPage();
+
+    fireEvent.click(await screen.findByRole('button', { name: /Segunda conversa/ }));
+    secondResponse.resolve([{ ...remoteMessage, id: 92, conversaId: 13, corpo: 'Resposta da conversa ativa.' }]);
+    expect(await screen.findByText('Resposta da conversa ativa.')).toBeInTheDocument();
+
+    firstResponse.resolve([{ ...remoteMessage, corpo: 'Resposta atrasada.' }]);
+    await waitFor(() => expect(screen.queryByText('Resposta atrasada.')).not.toBeInTheDocument());
+    expect(screen.getByText('Resposta da conversa ativa.')).toBeInTheDocument();
+  });
+
+  it('does not offer a queued message for duplicate submission if draft cleanup fails', async () => {
+    Object.defineProperty(navigator, 'onLine', { configurable: true, value: false });
+    vi.mocked(loadCachedConversations).mockResolvedValue([conversation]);
+    const local = {
+      key: 'local-queued',
+      ownerId: 'ana.sp',
+      workspaceId: 'territorio-a',
+      conversationId: 12,
+      clientMessageId: 'msg-local-2',
+      body: 'Já entrou na fila.',
+      occurredAt: '2026-07-10T14:10:00Z',
+      deviceId: 'device-1',
+      attachments: [],
+      syncStatus: 'QUEUED' as const,
+      updatedAt: '2026-07-10T14:10:00Z'
+    };
+    vi.mocked(listLocalMessages).mockResolvedValueOnce([]).mockResolvedValue([local]);
+    vi.mocked(captureMessage).mockResolvedValue({ clientMessageId: 'msg-local-2', status: 'QUEUED' });
+    vi.mocked(clearMessageDraft).mockRejectedValue(new Error('falha ao limpar'));
+    renderPage();
+
+    const editor = await screen.findByLabelText('Mensagem');
+    fireEvent.change(editor, { target: { value: 'Já entrou na fila.' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar na fila' }));
+
+    expect(await screen.findByText('Já entrou na fila.')).toBeInTheDocument();
+    expect(editor).toHaveValue('');
+    expect(screen.getByRole('button', { name: 'Guardar na fila' })).toBeDisabled();
+  });
+
+  it('does not describe a missing local attachment as safely stored', async () => {
+    Object.defineProperty(navigator, 'onLine', { configurable: true, value: false });
+    vi.mocked(loadCachedConversations).mockResolvedValue([conversation]);
+    vi.mocked(listLocalMessages).mockResolvedValue([{
+      key: 'local-missing',
+      ownerId: 'ana.sp',
+      workspaceId: 'territorio-a',
+      conversationId: 12,
+      clientMessageId: 'msg-local-3',
+      body: '',
+      occurredAt: '2026-07-10T14:10:00Z',
+      deviceId: 'device-1',
+      attachments: [{ blobKey: 'missing', name: 'foto.png', type: 'image/png', size: 120 }],
+      syncStatus: 'ACTION_REQUIRED',
+      lastError: 'O anexo não está mais neste aparelho.',
+      updatedAt: '2026-07-10T14:10:00Z'
+    }]);
+
+    renderPage();
+
+    expect(await screen.findByText('foto.png')).toBeInTheDocument();
+    expect(await screen.findByText(/arquivo indisponível/)).toBeInTheDocument();
+    expect(screen.queryByText(/salvo localmente/)).not.toBeInTheDocument();
+  });
+
+  it('lets polling failures reach the backoff controller', async () => {
+    vi.mocked(listMensagens).mockRejectedValue(new TypeError('sem rede'));
+    renderPage();
+    await screen.findByRole('heading', { name: 'Cuidado da nascente' });
+    const poll = vi.mocked(startOnlinePolling).mock.calls[0][0];
+
+    await expect(poll()).rejects.toThrow('sem rede');
   });
 });

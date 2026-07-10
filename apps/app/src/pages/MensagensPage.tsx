@@ -1,7 +1,6 @@
 import {
   useCallback,
   useEffect,
-  useMemo,
   useRef,
   useState,
   type FormEvent
@@ -10,8 +9,6 @@ import { useOutletContext } from 'react-router-dom';
 import type { AppContext } from '../components/AppShell';
 import { EmptyState, ErrorState, LoadingState } from '../components/PageFeedback';
 import {
-  attachmentUrl,
-  createConversa,
   getSession,
   listConversas,
   listMensagens,
@@ -25,213 +22,29 @@ import {
   cacheConversations,
   cacheRemoteMessages,
   clearMessageDraft,
-  getMessageAttachmentFile,
   listLocalMessages,
   loadCachedConversations,
   loadMessageDraft,
-  saveMessageDraft,
-  type LocalMessage,
-  type LocalMessageAttachment,
-  type OutboxStatus
+  saveMessageDraft
 } from '../lib/offlineStore';
 import { captureMessage, retryPendingMessages } from '../lib/offlineSync';
-import type {
-  Conversa,
-  Mensagem,
-  MensagemAnexo,
-  MensagemBusca,
-  Territorio
-} from '../types';
+import type { Conversa, Mensagem, MensagemBusca, Territorio } from '../types';
+import { LocalMessageAttachment } from './messages/LocalMessageAttachment';
+import { NewConversationDialog } from './messages/NewConversationDialog';
+import { RemoteMessageAttachments } from './messages/RemoteMessageAttachments';
+import { SelectedMessageFile } from './messages/SelectedMessageFile';
+import {
+  contextLabel,
+  fileSignature,
+  LOCAL_MESSAGE_STATUS,
+  mergeTimeline,
+  when,
+  type TimelineItem
+} from './messages/messageView';
 
 function ownerFromSession(): string | undefined {
   const session = getSession();
   return session?.angicoId || (session ? `pessoa-${session.pessoaId}` : undefined);
-}
-
-function when(value: string): string {
-  return new Date(value).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
-}
-
-function contextLabel(type: string): string {
-  const labels: Record<string, string> = {
-    TERRITORIO: 'Território',
-    OBSERVACAO: 'Observação',
-    PROBLEMA: 'Problema',
-    POTENCIALIDADE: 'Potencialidade',
-    MISSAO: 'Missão',
-    ACAO: 'Ação',
-    RESULTADO: 'Resultado',
-    INDICADOR: 'Indicador'
-  };
-  return labels[type] ?? 'Contexto territorial';
-}
-
-function fileSignature(files: File[]): string {
-  return files.map((file) => `${file.name}:${file.size}:${file.type}:${file.lastModified}`).join('|');
-}
-
-const LOCAL_STATUS: Partial<Record<OutboxStatus, { label: string; tone: string }>> = {
-  QUEUED: { label: 'Na fila', tone: 'pending' },
-  SYNCING: { label: 'Enviando', tone: 'active' },
-  SYNCED: { label: 'Enviada', tone: 'ok' },
-  RETRYABLE_ERROR: { label: 'Falha temporária', tone: 'attention' },
-  CONFLICT: { label: 'Conflito', tone: 'attention' },
-  BLOCKED: { label: 'Sessão encerrada', tone: 'attention' },
-  ACTION_REQUIRED: { label: 'Revisão necessária', tone: 'attention' }
-};
-
-interface RemoteTimelineItem {
-  key: string;
-  kind: 'remote';
-  message: Mensagem;
-}
-
-interface LocalTimelineItem {
-  key: string;
-  kind: 'local';
-  message: LocalMessage;
-}
-
-type TimelineItem = RemoteTimelineItem | LocalTimelineItem;
-
-function mergeTimeline(remote: Mensagem[], local: LocalMessage[]): TimelineItem[] {
-  const items: TimelineItem[] = [];
-  const remoteClientIds = new Set(remote.map((message) => message.clientMessageId).filter(Boolean));
-  const remoteIds = new Set(remote.map((message) => message.id));
-  remote.forEach((message) => items.push({ key: `remote-${message.id}`, kind: 'remote', message }));
-  local.forEach((message) => {
-    if (message.remote) {
-      if (!remoteIds.has(message.remote.id)) {
-        items.push({ key: `remote-${message.remote.id}`, kind: 'remote', message: message.remote });
-      }
-      return;
-    }
-    if (!remoteClientIds.has(message.clientMessageId)) {
-      items.push({ key: `local-${message.clientMessageId}`, kind: 'local', message });
-    }
-  });
-  return items.sort((left, right) => {
-    const leftAt = left.kind === 'remote' ? left.message.occurredAt : left.message.occurredAt;
-    const rightAt = right.kind === 'remote' ? right.message.occurredAt : right.message.occurredAt;
-    return leftAt.localeCompare(rightAt);
-  });
-}
-
-function NewConversationDialog({ workspaceId, territories, onClose, onCreated }: {
-  workspaceId: string;
-  territories: Territorio[];
-  onClose: () => void;
-  onCreated: (conversation: Conversa) => void;
-}) {
-  const [title, setTitle] = useState('');
-  const [territoryId, setTerritoryId] = useState(() => territories[0]?.id ?? 0);
-  const [participants, setParticipants] = useState('');
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  async function submit(event: FormEvent) {
-    event.preventDefault();
-    if (!territoryId) return;
-    setSubmitting(true);
-    setError(null);
-    const refs = participants
-      .split(/[,;\s]+/)
-      .map((value) => value.trim().replace(/^@/, ''))
-      .filter(Boolean);
-    try {
-      onCreated(await createConversa({
-        workspaceId,
-        territorioId: territoryId,
-        contextEntityType: 'TERRITORIO',
-        contextEntityId: String(territoryId),
-        titulo: title.trim(),
-        participanteRefs: refs
-      }));
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Não foi possível criar a conversa.');
-      setSubmitting(false);
-    }
-  }
-
-  return (
-    <div className="modal-overlay" role="presentation" onMouseDown={(event) => {
-      if (event.target === event.currentTarget) onClose();
-    }}>
-      <section className="modal-card" role="dialog" aria-modal="true" aria-labelledby="conversation-title">
-        <header className="dialog-head">
-          <div><span className="overline">Coordenação no território</span><h2 id="conversation-title">Nova conversa</h2></div>
-          <button type="button" className="icon-button" aria-label="Fechar" onClick={onClose}>×</button>
-        </header>
-        <form onSubmit={submit}>
-          <div className="field">
-            <label htmlFor="conversation-name">Assunto</label>
-            <input id="conversation-name" required value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Ex.: Organização do mutirão" />
-          </div>
-          <div className="field">
-            <label htmlFor="conversation-territory">Território relacionado</label>
-            <select id="conversation-territory" value={territoryId} onChange={(event) => setTerritoryId(Number(event.target.value))}>
-              {territories.map((territory) => (
-                <option key={territory.id} value={territory.id}>{territory.nome}{territory.cidade ? ` · ${territory.cidade}` : ''}</option>
-              ))}
-            </select>
-          </div>
-          <div className="field">
-            <label htmlFor="conversation-participants">Participantes <span>opcional</span></label>
-            <input id="conversation-participants" value={participants} onChange={(event) => setParticipants(event.target.value)} placeholder="@maria, @cooperativa" />
-            <small>Use identidades Angico separadas por vírgula.</small>
-          </div>
-          {error && <div className="form-error" role="alert">{error}</div>}
-          <footer className="dialog-actions">
-            <button type="button" className="ghost-button" onClick={onClose}>Cancelar</button>
-            <button type="submit" className="primary-button" disabled={submitting || !territoryId}>{submitting ? 'Criando…' : 'Criar conversa'}</button>
-          </footer>
-        </form>
-      </section>
-    </div>
-  );
-}
-
-function LocalAttachmentLink({ attachment }: { attachment: LocalMessageAttachment }) {
-  const [url, setUrl] = useState<string>();
-  useEffect(() => {
-    let objectUrl: string | undefined;
-    void getMessageAttachmentFile(attachment.blobKey).then((file) => {
-      if (file && typeof URL.createObjectURL === 'function') {
-        objectUrl = URL.createObjectURL(file);
-        setUrl(objectUrl);
-      }
-    });
-    return () => {
-      if (objectUrl && typeof URL.revokeObjectURL === 'function') URL.revokeObjectURL(objectUrl);
-    };
-  }, [attachment.blobKey]);
-
-  return url ? (
-    <a href={url} download={attachment.name}>
-      {attachment.name}<small>{Math.ceil(attachment.size / 1024)} KB · salvo localmente</small>
-    </a>
-  ) : (
-    <span className="local-attachment">
-      {attachment.name}<small>{Math.ceil(attachment.size / 1024)} KB · salvo localmente</small>
-    </span>
-  );
-}
-
-function SelectedFile({ file, onRemove }: { file: File; onRemove: () => void }) {
-  const [preview, setPreview] = useState<string>();
-  useEffect(() => {
-    if (!file.type.startsWith('image/') || typeof URL.createObjectURL !== 'function') return;
-    const url = URL.createObjectURL(file);
-    setPreview(url);
-    return () => URL.revokeObjectURL(url);
-  }, [file]);
-  return (
-    <article className="selected-file">
-      {preview && <img src={preview} alt="" />}
-      <div><b>{file.name}</b><small>{Math.ceil(file.size / 1024)} KB · salvo localmente</small></div>
-      <button type="button" aria-label={`Remover ${file.name}`} onClick={onRemove}>×</button>
-    </article>
-  );
 }
 
 export default function MensagensPage() {
@@ -259,11 +72,10 @@ export default function MensagensPage() {
   const [searchError, setSearchError] = useState<string | null>(null);
   const streamRef = useRef<HTMLDivElement>(null);
   const savedFilesSignature = useRef('');
+  const activeConversationRef = useRef<number | null>(activeId);
+  activeConversationRef.current = activeId;
 
-  const active = useMemo(
-    () => conversations.find((conversation) => conversation.id === activeId) ?? null,
-    [activeId, conversations]
-  );
+  const active = conversations.find((conversation) => conversation.id === activeId) ?? null;
 
   const refreshConversations = useCallback(async (background = false) => {
     if (!ownerId) {
@@ -312,11 +124,16 @@ export default function MensagensPage() {
     }
   }, [ownerId, workspaceId]);
 
-  const refreshMessages = useCallback(async (conversationId: number, markRead: boolean) => {
+  const refreshMessages = useCallback(async (
+    conversationId: number,
+    markRead: boolean,
+    propagateNetworkError = false
+  ) => {
     if (!ownerId) return;
     const local = await listLocalMessages(ownerId, workspaceId, conversationId);
     let remote: Mensagem[] = [];
     let readFailed = false;
+    let networkError: unknown;
     if (navigator.onLine) {
       try {
         remote = await listMensagens(conversationId);
@@ -332,14 +149,22 @@ export default function MensagensPage() {
           }
         }
       } catch (caught) {
-        setMessageError(caught instanceof Error ? caught.message : 'Não foi possível atualizar as mensagens.');
+        networkError = caught;
+        if (activeConversationRef.current === conversationId) {
+          setMessageError(caught instanceof Error ? caught.message : 'Não foi possível atualizar as mensagens.');
+        }
       }
     }
     const refreshedLocal = remote.length > 0
       ? await listLocalMessages(ownerId, workspaceId, conversationId)
       : local;
+    if (activeConversationRef.current !== conversationId) {
+      if (networkError && propagateNetworkError) throw networkError;
+      return;
+    }
     setTimeline(mergeTimeline(remote, refreshedLocal));
     if (!readFailed && remote.length > 0) setMessageError(null);
+    if (networkError && propagateNetworkError) throw networkError;
   }, [ownerId, workspaceId]);
 
   useEffect(() => {
@@ -358,14 +183,13 @@ export default function MensagensPage() {
       if (activeEffect) setMessageLoading(false);
     });
     const stop = startOnlinePolling(async () => {
-      await refreshMessages(activeId, false);
-      await refreshConversations(true);
+      await refreshMessages(activeId, false, true);
     });
     return () => {
       activeEffect = false;
       stop();
     };
-  }, [activeId, ownerId, refreshConversations, refreshMessages]);
+  }, [activeId, ownerId, refreshMessages]);
 
   useEffect(() => {
     if (activeId == null || !ownerId) return;
@@ -391,7 +215,9 @@ export default function MensagensPage() {
     if (activeId == null || !ownerId || draftKey !== `${ownerId}:${workspaceId}:${activeId}`) return;
     const timer = window.setTimeout(() => {
       if (!draft.trim() && files.length === 0) {
-        void clearMessageDraft(ownerId, workspaceId, activeId).then(() => setDraftState('idle'));
+        void clearMessageDraft(ownerId, workspaceId, activeId)
+          .then(() => setDraftState('idle'))
+          .catch(() => setDraftState('error'));
         return;
       }
       setDraftState('saving');
@@ -424,7 +250,6 @@ export default function MensagensPage() {
     setMessageError(null);
     try {
       await captureMessage({ workspaceId, conversationId: activeId, body: draft, attachments: files });
-      await clearMessageDraft(ownerId, workspaceId, activeId);
       setDraft('');
       setFiles([]);
       savedFilesSignature.current = '';
@@ -561,18 +386,25 @@ export default function MensagensPage() {
                         <article key={item.key} className={`message-bubble ${mine ? 'mine' : ''}`}>
                           <header><b>{mine ? 'Você' : message.senderNome ?? 'Participante'}</b><time dateTime={message.occurredAt}>{when(message.occurredAt)}</time></header>
                           {message.corpo && <p>{message.corpo}</p>}
-                          {message.anexos.length > 0 && <RemoteAttachments attachments={message.anexos} />}
+                          {message.anexos.length > 0 && <RemoteMessageAttachments attachments={message.anexos} />}
                           <footer className="message-provenance"><span>Enviada</span><time dateTime={message.recordedAt}>registrada {when(message.recordedAt)}</time></footer>
                         </article>
                       );
                     }
                     const message = item.message;
-                    const status = LOCAL_STATUS[message.syncStatus] ?? { label: 'Salva localmente', tone: 'pending' };
+                    const status = LOCAL_MESSAGE_STATUS[message.syncStatus] ?? { label: 'Salva localmente', tone: 'pending' };
                     return (
                       <article key={item.key} className="message-bubble mine local-message">
                         <header><b>Você</b><time dateTime={message.occurredAt}>{when(message.occurredAt)}</time></header>
                         {message.body && <p>{message.body}</p>}
-                        {message.attachments.length > 0 && <div className="attachment-list">{message.attachments.map((attachment) => <LocalAttachmentLink key={attachment.blobKey} attachment={attachment} />)}</div>}
+                        {message.attachments.length > 0 && <div className="attachment-list">{message.attachments.map((attachment) => (
+                          <LocalMessageAttachment
+                            key={attachment.blobKey}
+                            attachment={attachment}
+                            ownerId={message.ownerId}
+                            workspaceId={message.workspaceId}
+                          />
+                        ))}</div>}
                         <footer className={`message-provenance ${status.tone}`}><span>{status.label}</span><small>{message.lastError}</small></footer>
                       </article>
                     );
@@ -580,7 +412,7 @@ export default function MensagensPage() {
                 </div>
                 <form className="message-composer" onSubmit={handleSend}>
                   {files.length > 0 && <div className="selected-files">{files.map((file, index) => (
-                    <SelectedFile key={`${file.name}-${file.size}-${index}`} file={file} onRemove={() => setFiles((current) => current.filter((_, fileIndex) => fileIndex !== index))} />
+                    <SelectedMessageFile key={`${file.name}-${file.size}-${index}`} file={file} onRemove={() => setFiles((current) => current.filter((_, fileIndex) => fileIndex !== index))} />
                   ))}</div>}
                   {messageError && <div className="form-error" role="alert">{messageError}</div>}
                   <div className="draft-state" role="status">
@@ -612,18 +444,6 @@ export default function MensagensPage() {
           setActiveId(conversation.id);
         }}
       />}
-    </div>
-  );
-}
-
-function RemoteAttachments({ attachments }: { attachments: MensagemAnexo[] }) {
-  return (
-    <div className="attachment-list">
-      {attachments.map((attachment) => (
-        <a key={attachment.id} href={attachmentUrl(attachment.id)} target="_blank" rel="noreferrer">
-          {attachment.originalFilename}<small>{Math.ceil(attachment.sizeBytes / 1024)} KB</small>
-        </a>
-      ))}
     </div>
   );
 }

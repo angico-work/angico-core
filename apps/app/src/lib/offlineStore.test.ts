@@ -229,6 +229,27 @@ describe('offline observation store', () => {
     const stored = await getMessageAttachmentFile(local!.attachments[0].blobKey);
     expect(stored).toMatchObject({ name: 'nascente.png', type: 'image/png', size: 6 });
     expect(await stored?.text()).toBe('imagem');
+    expect(await getMessageAttachmentFile(local!.attachments[0].blobKey, 'bia.sp', 'territorio-a')).toBeUndefined();
+    expect(await getMessageAttachmentFile(local!.attachments[0].blobKey, 'ana.sp', 'territorio-b')).toBeUndefined();
+  });
+
+  it('replaces the matching draft with the queued operation in the same local transaction', async () => {
+    const file = new File(['campo'], 'campo.txt', { type: 'text/plain' });
+    await saveMessageDraft('ana.sp', 'territorio-a', 12, 'Conteúdo pronto.', [file]);
+
+    const queued = await enqueueMessage({
+      workspaceId: 'territorio-a',
+      conversationId: 12,
+      body: 'Conteúdo pronto.',
+      attachments: [file]
+    }, 'ana.sp');
+
+    expect(await loadMessageDraft('ana.sp', 'territorio-a', 12)).toBeUndefined();
+    expect(await getLocalMessage('ana.sp', 'territorio-a', queued.clientMessageId)).toMatchObject({
+      body: 'Conteúdo pronto.',
+      syncStatus: 'QUEUED'
+    });
+    expect(await listOutbox('ana.sp', 'territorio-a')).toHaveLength(1);
   });
 
   it('keeps local message timelines isolated by owner, workspace and conversation', async () => {

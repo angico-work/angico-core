@@ -94,18 +94,21 @@ async function sendObservation(entry: ObservationOutboxEntry): Promise<Response>
   });
 }
 
-class MissingMessageAttachmentError extends Error {}
+class PermanentMessageOperationError extends Error {}
 
 async function sendMessage(entry: MessageOutboxEntry): Promise<Response> {
+  if (!Number.isSafeInteger(entry.body.conversationId) || entry.body.conversationId <= 0) {
+    throw new PermanentMessageOperationError('A conversa desta mensagem não é válida.');
+  }
   const form = new FormData();
   if (entry.body.body) form.append('corpo', entry.body.body);
   form.append('clientMessageId', entry.body.clientMessageId);
   form.append('deviceId', entry.body.deviceId);
   form.append('occurredAt', entry.body.occurredAt);
   for (const attachment of entry.body.attachments) {
-    const file = await getMessageAttachmentFile(attachment.blobKey);
+    const file = await getMessageAttachmentFile(attachment.blobKey, entry.ownerId, entry.workspaceId);
     if (!file) {
-      throw new MissingMessageAttachmentError(`O anexo “${attachment.name}” não está mais neste aparelho.`);
+      throw new PermanentMessageOperationError(`O anexo “${attachment.name}” não está mais neste aparelho.`);
     }
     form.append('attachments', file, file.name);
   }
@@ -156,7 +159,7 @@ async function synchronizeEntry(entry: OutboxEntry, summary: SyncSummary): Promi
     return true;
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Sem conexão com o servidor.';
-    if (error instanceof MissingMessageAttachmentError) {
+    if (error instanceof PermanentMessageOperationError) {
       await markOutboxStatus(entry.id, 'ACTION_REQUIRED', { message });
       summary.actionRequired += 1;
       return true;

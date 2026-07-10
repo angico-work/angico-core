@@ -377,7 +377,14 @@ export async function listConversas(workspaceId = DEFAULT_WORKSPACE): Promise<Co
   }
 }
 
+function requireConversationId(conversaId: number): void {
+  if (!Number.isSafeInteger(conversaId) || conversaId <= 0) {
+    throw new Error('Conversa inválida.');
+  }
+}
+
 export async function listMensagens(conversaId: number): Promise<Mensagem[]> {
+  requireConversationId(conversaId);
   try {
     const r = await apiFetch(apiUrl(`/api/mensagens/conversas/${conversaId}/mensagens`), { headers: requestHeaders() });
     if (!r.ok) throw new Error(await readError(r, 'Não foi possível carregar as mensagens.'));
@@ -400,6 +407,7 @@ export async function sendMensagem(
   attachments: File[] = [],
   metadata?: MessageSendMetadata
 ): Promise<Mensagem> {
+  requireConversationId(conversaId);
   validateMessageFiles(attachments);
   const form = new FormData();
   if (corpo.trim()) form.append('corpo', corpo.trim());
@@ -451,6 +459,7 @@ export function attachmentUrl(anexoId: number): string {
 }
 
 export async function markConversaRead(conversaId: number): Promise<void> {
+  requireConversationId(conversaId);
   const response = await apiFetch(apiUrl(`/api/mensagens/conversas/${conversaId}/leitura`), {
     method: 'POST',
     headers: requestHeaders()
