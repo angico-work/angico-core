@@ -1,13 +1,18 @@
-import type { Observacao, ObservacaoInput } from '../types';
+import type { Mensagem, Observacao, ObservacaoInput } from '../types';
 import { apiFetch, apiUrl, getSession, hasFreshOfflineSession, isAuthenticated } from './api';
 import {
   claimOutboxEntry,
+  enqueueMessage,
   enqueueObservation,
+  getLocalMessage,
   getLocalObservation,
+  getMessageAttachmentFile,
   listOutbox,
   markOutboxStatus,
   recordSyncAttempt,
   requeueManualOutbox,
+  type MessageOutboxEntry,
+  type ObservationOutboxEntry,
   type OutboxEntry,
   type OutboxStatus
 } from './offlineStore';
@@ -33,6 +38,12 @@ export interface CaptureResult {
   clientMutationId: string;
   status: OutboxStatus;
   remote?: Observacao;
+}
+
+export interface CaptureMessageResult {
+  clientMessageId: string;
+  status: OutboxStatus;
+  remote?: Mensagem;
 }
 
 interface SyncFilter {
@@ -72,7 +83,7 @@ function emptySummary(): SyncSummary {
   };
 }
 
-async function sendObservation(entry: OutboxEntry): Promise<Response> {
+async function sendObservation(entry: ObservationOutboxEntry): Promise<Response> {
   return apiFetch(apiUrl('/api/observacoes'), {
     method: 'POST',
     headers: {
@@ -83,13 +94,37 @@ async function sendObservation(entry: OutboxEntry): Promise<Response> {
   });
 }
 
+class MissingMessageAttachmentError extends Error {}
+
+async function sendMessage(entry: MessageOutboxEntry): Promise<Response> {
+  const form = new FormData();
+  if (entry.body.body) form.append('corpo', entry.body.body);
+  form.append('clientMessageId', entry.body.clientMessageId);
+  form.append('deviceId', entry.body.deviceId);
+  form.append('occurredAt', entry.body.occurredAt);
+  for (const attachment of entry.body.attachments) {
+    const file = await getMessageAttachmentFile(attachment.blobKey);
+    if (!file) {
+      throw new MissingMessageAttachmentError(`O anexo “${attachment.name}” não está mais neste aparelho.`);
+    }
+    form.append('attachments', file, file.name);
+  }
+  return apiFetch(apiUrl(`/api/mensagens/conversas/${entry.body.conversationId}/mensagens`), {
+    method: 'POST',
+    headers: { 'Idempotency-Key': entry.id },
+    body: form
+  });
+}
+
 async function synchronizeEntry(entry: OutboxEntry, summary: SyncSummary): Promise<boolean> {
   summary.attempted += 1;
   await recordSyncAttempt(entry.ownerId, entry.workspaceId, false);
   try {
-    const response = await sendObservation(entry);
+    const response = entry.operation === 'CREATE_OBSERVATION'
+      ? await sendObservation(entry)
+      : await sendMessage(entry);
     if (response.ok) {
-      const remote = await response.json() as Observacao;
+      const remote = await response.json() as Observacao | Mensagem;
       await markOutboxStatus(entry.id, 'SYNCED', { remote });
       await recordSyncAttempt(entry.ownerId, entry.workspaceId, true);
       summary.synced += 1;
@@ -121,6 +156,11 @@ async function synchronizeEntry(entry: OutboxEntry, summary: SyncSummary): Promi
     return true;
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Sem conexão com o servidor.';
+    if (error instanceof MissingMessageAttachmentError) {
+      await markOutboxStatus(entry.id, 'ACTION_REQUIRED', { message });
+      summary.actionRequired += 1;
+      return true;
+    }
     await markOutboxStatus(entry.id, 'RETRYABLE_ERROR', {
       message,
       nextAttemptAt: retryAt(entry.attemptCount)
@@ -131,12 +171,28 @@ async function synchronizeEntry(entry: OutboxEntry, summary: SyncSummary): Promi
 }
 
 export async function syncPendingObservations(filter: SyncFilter = {}): Promise<SyncSummary> {
+  return syncPendingByOperation('CREATE_OBSERVATION', filter);
+}
+
+export async function syncPendingMessages(filter: SyncFilter = {}): Promise<SyncSummary> {
+  return syncPendingByOperation('MESSAGE_SEND', filter);
+}
+
+export async function syncPendingOperations(filter: SyncFilter = {}): Promise<SyncSummary> {
+  return syncPendingByOperation(undefined, filter);
+}
+
+async function syncPendingByOperation(
+  operation: OutboxEntry['operation'] | undefined,
+  filter: SyncFilter
+): Promise<SyncSummary> {
   const ownerId = filter.ownerId ?? ownerFromSession();
   const summary = emptySummary();
   if (!ownerId) return summary;
 
   const entries = (await listOutbox(ownerId, filter.workspaceId))
-    .filter((entry) => !filter.entryId || entry.id === filter.entryId);
+    .filter((entry) => (!operation || entry.operation === operation)
+      && (!filter.entryId || entry.id === filter.entryId));
   for (const entry of entries) {
     const claimed = await claimOutboxEntry(entry.id);
     if (!claimed) continue;
@@ -147,14 +203,30 @@ export async function syncPendingObservations(filter: SyncFilter = {}): Promise<
 }
 
 export async function retryPendingObservations(ownerId: string, workspaceId: string): Promise<SyncSummary> {
+  requireManualRetry(ownerId);
+  await requeueManualOutbox(ownerId, workspaceId, 'CREATE_OBSERVATION');
+  return syncPendingObservations({ ownerId, workspaceId });
+}
+
+export async function retryPendingMessages(ownerId: string, workspaceId: string): Promise<SyncSummary> {
+  requireManualRetry(ownerId);
+  await requeueManualOutbox(ownerId, workspaceId, 'MESSAGE_SEND');
+  return syncPendingMessages({ ownerId, workspaceId });
+}
+
+export async function retryPendingOperations(ownerId: string, workspaceId: string): Promise<SyncSummary> {
+  requireManualRetry(ownerId);
+  await requeueManualOutbox(ownerId, workspaceId);
+  return syncPendingOperations({ ownerId, workspaceId });
+}
+
+function requireManualRetry(ownerId: string): void {
   if (!isAuthenticated() || !hasFreshOfflineSession()) {
     throw new Error('Entre novamente com uma sessão validada antes de tentar enviar registros bloqueados.');
   }
   if (ownerFromSession() !== ownerId) {
     throw new Error('Os dados locais pertencem a outra pessoa neste aparelho.');
   }
-  await requeueManualOutbox(ownerId, workspaceId);
-  return syncPendingObservations({ ownerId, workspaceId });
 }
 
 export async function captureObservation(input: ObservacaoInput): Promise<CaptureResult> {
@@ -176,6 +248,30 @@ export async function captureObservation(input: ObservacaoInput): Promise<Captur
   };
 }
 
+export async function captureMessage(input: {
+  workspaceId: string;
+  conversationId: number;
+  body: string;
+  attachments: File[];
+}): Promise<CaptureMessageResult> {
+  const ownerId = ownerFromSession();
+  if (!ownerId) throw new Error('Entre novamente para identificar o autor da mensagem.');
+  const queued = await enqueueMessage(input, ownerId);
+  if (typeof navigator === 'undefined' || navigator.onLine !== false) {
+    await syncPendingMessages({
+      ownerId,
+      workspaceId: input.workspaceId,
+      entryId: queued.clientMessageId
+    });
+  }
+  const local = await getLocalMessage(ownerId, input.workspaceId, queued.clientMessageId);
+  return {
+    clientMessageId: queued.clientMessageId,
+    status: local?.syncStatus ?? 'QUEUED',
+    remote: local?.remote
+  };
+}
+
 export async function getSyncState(ownerId: string, workspaceId?: string): Promise<SyncState> {
   const entries = await listOutbox(ownerId, workspaceId);
   return entries.reduce<SyncState>((state, entry) => {
@@ -190,7 +286,7 @@ export async function getSyncState(ownerId: string, workspaceId?: string): Promi
 
 export function startSyncEngine(): () => void {
   const synchronize = () => {
-    if (navigator.onLine) void syncPendingObservations();
+    if (navigator.onLine) void syncPendingOperations();
   };
   window.addEventListener('online', synchronize);
   const interval = window.setInterval(synchronize, 30_000);

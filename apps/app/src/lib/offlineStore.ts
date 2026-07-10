@@ -1,9 +1,9 @@
 import { deleteDB, openDB, type DBSchema, type IDBPDatabase } from 'idb';
-import type { Mensagem, Observacao, ObservacaoInput } from '../types';
+import type { Conversa, Mensagem, Observacao, ObservacaoInput } from '../types';
 import { validateMessageFiles } from './messageFiles';
 
 const DATABASE_NAME = 'angico-operational-data';
-const DATABASE_VERSION = 2;
+const DATABASE_VERSION = 3;
 const DEVICE_KEY = 'angico.deviceId';
 
 export type OutboxStatus =
@@ -124,6 +124,14 @@ export interface MessageDraft {
   updatedAt: string;
 }
 
+interface ConversationCache {
+  key: string;
+  ownerId: string;
+  workspaceId: string;
+  conversations: Conversa[];
+  updatedAt: string;
+}
+
 export interface SyncMetadata {
   key: string;
   ownerId: string;
@@ -154,6 +162,13 @@ interface OfflineSchema extends DBSchema {
     indexes: {
       'by-owner-workspace': [string, string];
       'by-owner-workspace-conversation': [string, string, number];
+    };
+  };
+  conversations: {
+    key: string;
+    value: ConversationCache;
+    indexes: {
+      'by-owner-workspace': [string, string];
     };
   };
   drafts: {
@@ -211,6 +226,10 @@ function database(): Promise<IDBPDatabase<OfflineSchema>> {
           messages.createIndex('by-owner-workspace', ['ownerId', 'workspaceId']);
           messages.createIndex('by-owner-workspace-conversation', ['ownerId', 'workspaceId', 'conversationId']);
         }
+        if (!db.objectStoreNames.contains('conversations')) {
+          const conversations = db.createObjectStore('conversations', { keyPath: 'key' });
+          conversations.createIndex('by-owner-workspace', ['ownerId', 'workspaceId']);
+        }
       }
     });
   }
@@ -246,6 +265,14 @@ function messageDraftKey(ownerId: string, workspaceId: string, conversationId: n
 
 function messageBlobKey(ownerId: string, workspaceId: string, id = randomId()): string {
   return JSON.stringify(['message-blob', ownerId, workspaceId, id]);
+}
+
+function conversationCacheKey(ownerId: string, workspaceId: string): string {
+  return JSON.stringify(['message-conversations', ownerId, workspaceId]);
+}
+
+function remoteMessageKey(ownerId: string, workspaceId: string, messageId: number): string {
+  return JSON.stringify(['message-remote', ownerId, workspaceId, messageId]);
 }
 
 function syncMetadataKey(ownerId: string, workspaceId: string): string {
@@ -513,6 +540,80 @@ export async function getMessageAttachmentFile(blobKey: string): Promise<File | 
     : undefined;
 }
 
+export async function cacheConversations(
+  ownerId: string,
+  workspaceId: string,
+  conversations: Conversa[]
+): Promise<void> {
+  requirePartition(ownerId, workspaceId);
+  const db = await database();
+  await db.put('conversations', {
+    key: conversationCacheKey(ownerId, workspaceId),
+    ownerId,
+    workspaceId,
+    conversations,
+    updatedAt: new Date().toISOString()
+  });
+}
+
+export async function loadCachedConversations(
+  ownerId: string,
+  workspaceId: string
+): Promise<Conversa[]> {
+  requirePartition(ownerId, workspaceId);
+  const db = await database();
+  return (await db.get('conversations', conversationCacheKey(ownerId, workspaceId)))?.conversations ?? [];
+}
+
+export async function cacheRemoteMessages(
+  ownerId: string,
+  workspaceId: string,
+  conversationId: number,
+  messages: Mensagem[]
+): Promise<void> {
+  requirePartition(ownerId, workspaceId);
+  const db = await database();
+  const tx = db.transaction(['messages', 'blobs'], 'readwrite');
+  const store = tx.objectStore('messages');
+  for (const message of messages) {
+    if (message.workspaceId !== workspaceId || message.conversaId !== conversationId) continue;
+    const clientMessageId = message.clientMessageId || `remote-${message.id}`;
+    const localKey = message.clientMessageId
+      ? localMessageKey(ownerId, workspaceId, message.clientMessageId)
+      : remoteMessageKey(ownerId, workspaceId, message.id);
+    const existing = await store.get(localKey);
+    if (existing) {
+      await store.put({
+        ...existing,
+        syncStatus: 'SYNCED',
+        lastError: undefined,
+        remote: message,
+        updatedAt: message.recordedAt || message.createdAt
+      });
+      await Promise.all(existing.attachments.map((attachment) => (
+        tx.objectStore('blobs').delete(attachment.blobKey)
+      )));
+    } else {
+      await store.put({
+        key: localKey,
+        ownerId,
+        workspaceId,
+        conversationId,
+        clientMessageId,
+        body: message.corpo,
+        occurredAt: message.occurredAt || message.createdAt,
+        deviceId: message.deviceId || '',
+        attachments: [],
+        syncStatus: 'SYNCED',
+        remote: message,
+        updatedAt: message.recordedAt || message.createdAt
+      });
+    }
+  }
+  await tx.done;
+  announceChange();
+}
+
 export async function listOutbox(ownerId: string, workspaceId?: string): Promise<OutboxEntry[]> {
   const db = await database();
   const entries = workspaceId
@@ -569,11 +670,12 @@ export async function clearOfflineOwner(
   }
 
   const db = await database();
-  const tx = db.transaction(['outbox', 'entities', 'messages', 'drafts', 'blobs', 'syncMeta'], 'readwrite');
-  const [outbox, entities, messages, drafts, blobs, syncMeta] = await Promise.all([
+  const tx = db.transaction(['outbox', 'entities', 'messages', 'conversations', 'drafts', 'blobs', 'syncMeta'], 'readwrite');
+  const [outbox, entities, messages, conversations, drafts, blobs, syncMeta] = await Promise.all([
     tx.objectStore('outbox').getAll(),
     tx.objectStore('entities').getAll(),
     tx.objectStore('messages').getAll(),
+    tx.objectStore('conversations').getAll(),
     tx.objectStore('drafts').getAll(),
     tx.objectStore('blobs').getAll(),
     tx.objectStore('syncMeta').getAll()
@@ -582,6 +684,7 @@ export async function clearOfflineOwner(
     ...outbox.filter((entry) => entry.ownerId === ownerId).map((entry) => tx.objectStore('outbox').delete(entry.id)),
     ...entities.filter((entry) => entry.ownerId === ownerId).map((entry) => tx.objectStore('entities').delete(entry.key)),
     ...messages.filter((entry) => entry.ownerId === ownerId).map((entry) => tx.objectStore('messages').delete(entry.key)),
+    ...conversations.filter((entry) => entry.ownerId === ownerId).map((entry) => tx.objectStore('conversations').delete(entry.key)),
     ...drafts.filter((entry) => entry.ownerId === ownerId).map((entry) => tx.objectStore('drafts').delete(entry.key)),
     ...blobs.filter((entry) => entry.ownerId === ownerId).map((entry) => tx.objectStore('blobs').delete(entry.key)),
     ...syncMeta.filter((entry) => entry.ownerId === ownerId).map((entry) => tx.objectStore('syncMeta').delete(entry.key))
@@ -675,9 +778,14 @@ export async function markOutboxStatus(
   announceChange();
 }
 
-export async function requeueManualOutbox(ownerId: string, workspaceId: string): Promise<number> {
+export async function requeueManualOutbox(
+  ownerId: string,
+  workspaceId: string,
+  operation?: OutboxEntry['operation']
+): Promise<number> {
   const blocked = (await listOutbox(ownerId, workspaceId))
-    .filter((entry) => entry.status === 'BLOCKED' || entry.status === 'RETRYABLE_ERROR');
+    .filter((entry) => (!operation || entry.operation === operation)
+      && (entry.status === 'BLOCKED' || entry.status === 'RETRYABLE_ERROR'));
   const now = new Date().toISOString();
   await Promise.all(blocked.map((entry) => markOutboxStatus(entry.id, 'QUEUED', { nextAttemptAt: now })));
   return blocked.length;

@@ -5,6 +5,8 @@ import {
   clearOfflineOwner,
   discardOutboxEntry,
   clearMessageDraft,
+  cacheConversations,
+  cacheRemoteMessages,
   enqueueMessage,
   enqueueObservation,
   getLocalMessage,
@@ -13,6 +15,7 @@ import {
   getSyncMetadata,
   getOfflineOwnerState,
   listLocalMessages,
+  loadCachedConversations,
   loadMessageDraft,
   listOutbox,
   markOutboxStatus,
@@ -256,5 +259,65 @@ describe('offline observation store', () => {
     expect(await listLocalMessages('ana.sp', 'territorio-a', 12)).toEqual([]);
     expect(await loadMessageDraft('ana.sp', 'territorio-a', 12)).toBeUndefined();
     expect(await getMessageAttachmentFile(blobKey)).toBeUndefined();
+  });
+
+  it('keeps the last confirmed conversation list available only to its owner and workspace', async () => {
+    const conversation = {
+      id: 12,
+      workspaceId: 'territorio-a',
+      territorioId: 4,
+      contextEntityType: 'TERRITORIO',
+      contextEntityId: '4',
+      titulo: 'Cuidado da nascente',
+      createdByPessoaId: 7,
+      status: 'ATIVA',
+      createdAt: '2026-07-10T12:00:00Z',
+      updatedAt: '2026-07-10T12:00:00Z',
+      unreadCount: 2,
+      mensagens: []
+    };
+
+    await cacheConversations('ana.sp', 'territorio-a', [conversation]);
+
+    expect(await loadCachedConversations('ana.sp', 'territorio-a')).toEqual([conversation]);
+    expect(await loadCachedConversations('bia.sp', 'territorio-a')).toEqual([]);
+    expect(await loadCachedConversations('ana.sp', 'territorio-b')).toEqual([]);
+  });
+
+  it('caches confirmed remote messages without duplicating the matching local operation', async () => {
+    const queued = await enqueueMessage({
+      workspaceId: 'territorio-a', conversationId: 12, body: 'Confirmada.', attachments: []
+    }, 'ana.sp');
+    const remote = {
+      id: 92,
+      workspaceId: 'territorio-a',
+      conversaId: 12,
+      senderPessoaId: 7,
+      senderNome: 'Ana',
+      corpo: 'Confirmada.',
+      latitude: null,
+      longitude: null,
+      localDescricao: null,
+      linkedEntityType: null,
+      linkedEntityId: null,
+      clientMessageId: queued.clientMessageId,
+      deviceId: queued.deviceId,
+      status: 'ENVIADA',
+      occurredAt: queued.occurredAt,
+      recordedAt: '2026-07-10T12:01:00Z',
+      createdAt: '2026-07-10T12:01:00Z',
+      anexos: [],
+      relacoes: []
+    };
+
+    await cacheRemoteMessages('ana.sp', 'territorio-a', 12, [remote]);
+
+    const cached = await listLocalMessages('ana.sp', 'territorio-a', 12);
+    expect(cached).toHaveLength(1);
+    expect(cached[0]).toMatchObject({
+      clientMessageId: queued.clientMessageId,
+      syncStatus: 'SYNCED',
+      remote: { id: 92 }
+    });
   });
 });

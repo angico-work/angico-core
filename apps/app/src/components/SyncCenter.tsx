@@ -9,7 +9,7 @@ import {
   type OutboxStatus,
   type SyncMetadata
 } from '../lib/offlineStore';
-import { retryPendingObservations, syncPendingObservations } from '../lib/offlineSync';
+import { retryPendingOperations, syncPendingObservations } from '../lib/offlineSync';
 
 interface Props {
   ownerId?: string;
@@ -96,7 +96,7 @@ export default function SyncCenter({ ownerId, workspaceId, online, onClose }: Pr
     setSyncing(true);
     setError(null);
     try {
-      await retryPendingObservations(ownerId, workspaceId);
+      await retryPendingOperations(ownerId, workspaceId);
       await refresh();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Não foi possível iniciar a sincronização.');

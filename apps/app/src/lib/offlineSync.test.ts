@@ -4,11 +4,19 @@ import type { ObservacaoInput } from '../types';
 import { getSession } from './api';
 import {
   enqueueObservation,
+  enqueueMessage,
+  getLocalMessage,
+  getMessageAttachmentFile,
   getLocalObservation,
   listOutbox,
   resetOfflineDatabase
 } from './offlineStore';
-import { retryPendingObservations, syncPendingObservations } from './offlineSync';
+import {
+  captureMessage,
+  retryPendingObservations,
+  syncPendingMessages,
+  syncPendingObservations
+} from './offlineSync';
 
 const session = {
   pessoaId: 7,
@@ -170,5 +178,121 @@ describe('offline synchronization', () => {
     localStorage.setItem('angico.session', JSON.stringify({ ...session, angicoId: 'bia.sp', pessoaId: 8 }));
 
     await expect(retryPendingObservations('ana.sp', 'territorio-a')).rejects.toThrow('outra pessoa');
+  });
+
+  it('sends a queued message with the same idempotency metadata and confirms it locally', async () => {
+    const queued = await enqueueMessage({
+      workspaceId: 'territorio-a',
+      conversationId: 12,
+      body: 'Registro da visita.',
+      attachments: [new File(['relato'], 'relato.txt', { type: 'text/plain' })]
+    }, 'ana.sp');
+    const remote = {
+      id: 91,
+      workspaceId: 'territorio-a',
+      conversaId: 12,
+      senderPessoaId: 7,
+      senderNome: 'Ana',
+      corpo: queued.body,
+      latitude: null,
+      longitude: null,
+      localDescricao: null,
+      linkedEntityType: null,
+      linkedEntityId: null,
+      clientMessageId: queued.clientMessageId,
+      deviceId: queued.deviceId,
+      status: 'ENVIADA',
+      occurredAt: queued.occurredAt,
+      recordedAt: '2026-07-10T14:25:00.000Z',
+      createdAt: '2026-07-10T14:25:00.000Z',
+      anexos: [{
+        id: 4,
+        originalFilename: 'relato.txt',
+        contentType: 'text/plain',
+        sizeBytes: 6,
+        attachmentType: 'ARQUIVO',
+        createdAt: '2026-07-10T14:25:00.000Z'
+      }],
+      relacoes: []
+    };
+    const fetchMock = vi.fn().mockResolvedValue(response(201, remote));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const summary = await syncPendingMessages({ ownerId: 'ana.sp', workspaceId: 'territorio-a' });
+
+    expect(summary).toMatchObject({ attempted: 1, synced: 1 });
+    expect(fetchMock).toHaveBeenCalledWith('/api/mensagens/conversas/12/mensagens', expect.objectContaining({
+      method: 'POST',
+      credentials: 'include',
+      headers: expect.objectContaining({
+        'Idempotency-Key': queued.clientMessageId,
+        'X-CSRF-Token': 'csrf-secret'
+      })
+    }));
+    const form = fetchMock.mock.calls[0][1].body as FormData;
+    expect(form.get('corpo')).toBe('Registro da visita.');
+    expect(form.get('clientMessageId')).toBe(queued.clientMessageId);
+    expect(form.get('deviceId')).toBe(queued.deviceId);
+    expect(form.get('occurredAt')).toBe(queued.occurredAt);
+    expect((form.get('attachments') as File).name).toBe('relato.txt');
+    expect(await getLocalMessage('ana.sp', 'territorio-a', queued.clientMessageId)).toMatchObject({
+      syncStatus: 'SYNCED',
+      remote: { id: 91 }
+    });
+  });
+
+  it('keeps a message and its blob after a transient failure for an idempotent retry', async () => {
+    const queued = await enqueueMessage({
+      workspaceId: 'territorio-a',
+      conversationId: 12,
+      body: 'Ainda no aparelho.',
+      attachments: [new File(['prova'], 'prova.txt', { type: 'text/plain' })]
+    }, 'ana.sp');
+    const localBefore = await getLocalMessage('ana.sp', 'territorio-a', queued.clientMessageId);
+    const fetchMock = vi.fn().mockResolvedValue(response(503, { detail: 'indisponível' }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await syncPendingMessages({ ownerId: 'ana.sp', workspaceId: 'territorio-a' });
+
+    const local = await getLocalMessage('ana.sp', 'territorio-a', queued.clientMessageId);
+    expect(local).toMatchObject({ syncStatus: 'RETRYABLE_ERROR', body: 'Ainda no aparelho.' });
+    expect(await getMessageAttachmentFile(localBefore!.attachments[0].blobKey)).toMatchObject({ name: 'prova.txt' });
+    expect((await listOutbox('ana.sp', 'territorio-a'))[0]).toMatchObject({
+      id: queued.clientMessageId,
+      operation: 'MESSAGE_SEND',
+      status: 'RETRYABLE_ERROR'
+    });
+  });
+
+  it('marks a message conflict without changing its client identity', async () => {
+    const queued = await enqueueMessage({
+      workspaceId: 'territorio-a', conversationId: 12, body: 'Conteúdo local.', attachments: []
+    }, 'ana.sp');
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response(409, { detail: 'chave usada com outro conteúdo' })));
+
+    await syncPendingMessages({ ownerId: 'ana.sp' });
+
+    expect(await getLocalMessage('ana.sp', 'territorio-a', queued.clientMessageId)).toMatchObject({
+      clientMessageId: queued.clientMessageId,
+      syncStatus: 'CONFLICT',
+      lastError: 'chave usada com outro conteúdo'
+    });
+  });
+
+  it('queues a text message while offline without attempting the network', async () => {
+    Object.defineProperty(navigator, 'onLine', { configurable: true, value: false });
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await captureMessage({
+      workspaceId: 'territorio-a', conversationId: 12, body: 'Anotação offline.', attachments: []
+    });
+
+    expect(result.status).toBe('QUEUED');
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(await getLocalMessage('ana.sp', 'territorio-a', result.clientMessageId)).toMatchObject({
+      body: 'Anotação offline.',
+      syncStatus: 'QUEUED'
+    });
   });
 });
