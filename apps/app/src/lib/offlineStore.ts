@@ -243,6 +243,56 @@ export async function listLocalObservations(
   return db.getAllFromIndex('entities', 'by-owner-workspace', [ownerId, workspaceId]);
 }
 
+export interface OfflineOwnerState {
+  total: number;
+  unsynced: number;
+  conflicts: number;
+  blocked: number;
+  actionRequired: number;
+}
+
+export async function getOfflineOwnerState(ownerId: string): Promise<OfflineOwnerState> {
+  const entries = await listOutbox(ownerId);
+  return entries.reduce<OfflineOwnerState>((state, entry) => {
+    state.total += 1;
+    if (entry.status !== 'SYNCED') state.unsynced += 1;
+    if (entry.status === 'CONFLICT') state.conflicts += 1;
+    if (entry.status === 'BLOCKED') state.blocked += 1;
+    if (entry.status === 'ACTION_REQUIRED') state.actionRequired += 1;
+    return state;
+  }, { total: 0, unsynced: 0, conflicts: 0, blocked: 0, actionRequired: 0 });
+}
+
+export async function clearOfflineOwner(
+  ownerId: string,
+  options: { discardPending?: boolean } = {}
+): Promise<void> {
+  const state = await getOfflineOwnerState(ownerId);
+  if (state.unsynced > 0 && !options.discardPending) {
+    const noun = state.unsynced === 1 ? 'registro ainda não sincronizado' : 'registros ainda não sincronizados';
+    throw new Error(`${state.unsynced} ${noun}. Confirme o descarte antes de limpar os dados locais.`);
+  }
+
+  const db = await database();
+  const tx = db.transaction(['outbox', 'entities', 'drafts', 'blobs', 'syncMeta'], 'readwrite');
+  const [outbox, entities, drafts, blobs, syncMeta] = await Promise.all([
+    tx.objectStore('outbox').getAll(),
+    tx.objectStore('entities').getAll(),
+    tx.objectStore('drafts').getAll(),
+    tx.objectStore('blobs').getAll(),
+    tx.objectStore('syncMeta').getAll()
+  ]);
+  await Promise.all([
+    ...outbox.filter((entry) => entry.ownerId === ownerId).map((entry) => tx.objectStore('outbox').delete(entry.id)),
+    ...entities.filter((entry) => entry.ownerId === ownerId).map((entry) => tx.objectStore('entities').delete(entry.key)),
+    ...drafts.filter((entry) => entry.ownerId === ownerId).map((entry) => tx.objectStore('drafts').delete(entry.key)),
+    ...blobs.filter((entry) => entry.ownerId === ownerId).map((entry) => tx.objectStore('blobs').delete(entry.key)),
+    ...syncMeta.filter((entry) => entry.ownerId === ownerId).map((entry) => tx.objectStore('syncMeta').delete(entry.key))
+  ]);
+  await tx.done;
+  announceChange();
+}
+
 export async function claimOutboxEntry(id: string, now = new Date()): Promise<OutboxEntry | undefined> {
   const db = await database();
   const tx = db.transaction('outbox', 'readwrite');

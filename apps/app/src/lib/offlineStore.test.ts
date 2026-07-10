@@ -2,6 +2,7 @@ import 'fake-indexeddb/auto';
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { ObservacaoInput } from '../types';
 import {
+  clearOfflineOwner,
   enqueueObservation,
   getLocalObservation,
   listOutbox,
@@ -72,5 +73,22 @@ describe('offline observation store', () => {
     expect(entry.status).toBe('CONFLICT');
     expect(entry.lastError).toContain('conteúdo diferente');
     expect(local?.syncStatus).toBe('CONFLICT');
+  });
+
+  it('refuses to erase an owner partition while unsynchronized work exists', async () => {
+    await enqueueObservation(observation, 'ana.sp');
+
+    await expect(clearOfflineOwner('ana.sp')).rejects.toThrow('1 registro');
+    expect(await listOutbox('ana.sp')).toHaveLength(1);
+  });
+
+  it('clears only the confirmed owner partition', async () => {
+    await enqueueObservation(observation, 'ana.sp');
+    await enqueueObservation(observation, 'bia.sp');
+
+    await clearOfflineOwner('ana.sp', { discardPending: true });
+
+    expect(await listOutbox('ana.sp')).toEqual([]);
+    expect(await listOutbox('bia.sp')).toHaveLength(1);
   });
 });

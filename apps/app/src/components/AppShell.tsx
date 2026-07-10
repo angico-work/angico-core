@@ -9,6 +9,7 @@ import {
   setSessionWorkspace
 } from '../lib/api';
 import { startSyncEngine } from '../lib/offlineSync';
+import { clearOfflineOwner, getOfflineOwnerState } from '../lib/offlineStore';
 import type { PessoaHit, Workspace } from '../types';
 
 export interface AppContext {
@@ -98,6 +99,19 @@ export default function AppShell() {
   }
 
   async function handleLogout() {
+    const current = getSession();
+    const ownerId = current?.angicoId || (current ? `pessoa-${current.pessoaId}` : undefined);
+    if (ownerId) {
+      const offline = await getOfflineOwnerState(ownerId);
+      if (offline.unsynced > 0) {
+        const noun = offline.unsynced === 1 ? 'registro ainda não foi compartilhado' : 'registros ainda não foram compartilhados';
+        const confirmed = window.confirm(
+          `${offline.unsynced} ${noun}. Sair agora apagará esses dados deste aparelho e eles não poderão ser recuperados. Deseja continuar?`
+        );
+        if (!confirmed) return;
+      }
+      await clearOfflineOwner(ownerId, { discardPending: offline.unsynced > 0 });
+    }
     await logout();
     setAuthStatus('anonymous');
     navigate('/login', { replace: true });
