@@ -13,7 +13,8 @@ interface Props {
 
 function initials(label: string): string {
   const parts = label.trim().split(/\s+/).filter(Boolean);
-  return parts.length === 0 ? '?' : (parts[0][0] + (parts.at(-1)?.[0] ?? '')).toUpperCase();
+  if (parts.length === 0) return '?';
+  return (parts[0][0] + (parts.length > 1 ? parts.at(-1)?.[0] ?? '' : '')).toUpperCase();
 }
 
 function useOnline(): boolean {

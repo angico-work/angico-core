@@ -49,7 +49,7 @@ export function RelatoriosPage() {
       {loading ? <LoadingState /> : error ? <ErrorState message={error} onRetry={() => void refresh()} /> : !data ? null : (
         <section className="summary-document">
           <header><span>Território</span><h2>{data.territory.name}</h2><p>{data.territory.subtitle}</p></header>
-          <div className="summary-ledger">{data.stats.map((stat) => <div key={stat.label}><dt>{stat.label}</dt><dd>{stat.value}</dd></div>)}</div>
+          <dl className="summary-ledger">{data.stats.map((stat) => <div key={stat.label}><dt>{stat.label}</dt><dd>{stat.value}</dd></div>)}</dl>
           <section><h3>Missões em curso</h3>{data.missions.length ? data.missions.map((mission) => <article key={mission.title}><b>{mission.title}</b><span>{mission.progress}% · {mission.actions} · {mission.participants}</span></article>) : <p>Nenhuma missão registrada.</p>}</section>
           <footer>Esta síntese reflete apenas os registros retornados pelo Angico neste momento.</footer>
         </section>

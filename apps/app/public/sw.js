@@ -1,6 +1,6 @@
 /* Static app-shell cache. Authenticated API responses are never cached here. */
-const CACHE = 'angico-cache-v3';
-const APP_SHELL = ['/', '/index.html', '/manifest.webmanifest', '/angico-icone-main.png', '/angico-leaf.png'];
+const CACHE = 'angico-cache-v4';
+const APP_SHELL = ['/', '/index.html', '/manifest.webmanifest', '/angico-icone.png'];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
