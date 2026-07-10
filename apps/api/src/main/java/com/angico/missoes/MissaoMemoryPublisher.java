@@ -27,7 +27,7 @@ public class MissaoMemoryPublisher {
         this.memory = memory;
     }
 
-    public void publicarCriada(Missao m) {
+    public void publicarCriada(Missao m, String actorId) {
         String entityId = String.valueOf(m.getId());
 
         memory.registrarObjeto(
@@ -40,7 +40,7 @@ public class MissaoMemoryPublisher {
 
         memory.registrarEvento(new MemoryEvent(
                 m.getWorkspaceId(), TIPO, entityId, "missao.criada", SOURCE,
-                m.getResponsavelId(), null, null, null, 1, m.getCreatedAt(), payload));
+                actorId, null, null, null, 1, m.getCreatedAt(), payload));
 
         if (m.getProblemaId() != null && !m.getProblemaId().isBlank()) {
             memory.registrarRelacaoAtiva(

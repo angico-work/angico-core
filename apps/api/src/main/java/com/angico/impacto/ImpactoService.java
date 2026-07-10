@@ -10,6 +10,7 @@ import com.angico.common.ForbiddenException;
 import com.angico.territorios.Territorio;
 import com.angico.territorios.TerritorioService;
 import com.angico.workspaces.WorkspaceAuthorizationService;
+import com.angico.workspaces.WorkspaceReferenceValidator;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -18,25 +19,25 @@ public class ImpactoService {
 
     private final IndicadorRepository indicadorRepository;
     private final MedicaoRepository medicaoRepository;
-    private final ResultadoRepository resultadoRepository;
     private final TerritorioService territorioService;
     private final OperationalMemoryService memoryService;
     private final WorkspaceAuthorizationService authorizationService;
+    private final WorkspaceReferenceValidator referenceValidator;
 
     public ImpactoService(
             IndicadorRepository indicadorRepository,
             MedicaoRepository medicaoRepository,
-            ResultadoRepository resultadoRepository,
             TerritorioService territorioService,
             OperationalMemoryService memoryService,
-            WorkspaceAuthorizationService authorizationService
+            WorkspaceAuthorizationService authorizationService,
+            WorkspaceReferenceValidator referenceValidator
     ) {
         this.indicadorRepository = indicadorRepository;
         this.medicaoRepository = medicaoRepository;
-        this.resultadoRepository = resultadoRepository;
         this.territorioService = territorioService;
         this.memoryService = memoryService;
         this.authorizationService = authorizationService;
+        this.referenceValidator = referenceValidator;
     }
 
     public List<Indicador> indicadores(String workspaceId) {
@@ -79,11 +80,8 @@ public class ImpactoService {
         );
         Indicador indicadorSalvo = indicador;
         if (request.resultadoId() != null) {
-            resultadoRepository.findById(request.resultadoId()).ifPresent(resultado -> {
-                if (!workspaceId.equals(resultado.getWorkspaceId())) {
-                    throw new ForbiddenException("Resultado fora do workspace autorizado.");
-                }
-                    memoryService.registrarRelacaoAtiva(
+            var resultado = referenceValidator.requireResultado(request.resultadoId(), workspaceId);
+            memoryService.registrarRelacaoAtiva(
                             indicadorSalvo.getWorkspaceId(),
                             "INDICADOR",
                             String.valueOf(indicadorSalvo.getId()),
@@ -93,7 +91,6 @@ public class ImpactoService {
                             "api",
                             "Indicador mede resultado informado"
                     );
-            });
         }
         return indicador;
     }

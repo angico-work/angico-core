@@ -57,7 +57,7 @@ public class WorkspaceService {
         String actorId = authorizationService.currentActorId();
         Instant now = clock.now();
         Workspace workspace = new Workspace(uniqueSlug(slugify(request.nome().trim())),
-                request.nome().trim(), blankToNull(request.criadoPor()), now);
+                request.nome().trim(), actorId, now);
         workspace.setDescricao(blankToNull(request.descricao()));
         workspace.setCidade(blankToNull(request.cidade()));
         workspace.setEstado(blankToNull(request.estado()));

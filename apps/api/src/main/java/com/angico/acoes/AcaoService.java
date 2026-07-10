@@ -2,6 +2,7 @@ package com.angico.acoes;
 
 import com.angico.common.ClockProvider;
 import com.angico.workspaces.WorkspaceAuthorizationService;
+import com.angico.workspaces.WorkspaceReferenceValidator;
 import java.util.List;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -16,19 +17,22 @@ public class AcaoService {
     private final AcaoMemoryPublisher acaoMemoryPublisher;
     private final ClockProvider clock;
     private final WorkspaceAuthorizationService authorizationService;
+    private final WorkspaceReferenceValidator referenceValidator;
 
     public AcaoService(
             AcaoRepository acaoRepository,
             AtribuicaoRepository atribuicaoRepository,
             AcaoMemoryPublisher acaoMemoryPublisher,
             ClockProvider clock,
-            WorkspaceAuthorizationService authorizationService
+            WorkspaceAuthorizationService authorizationService,
+            WorkspaceReferenceValidator referenceValidator
     ) {
         this.acaoRepository = acaoRepository;
         this.atribuicaoRepository = atribuicaoRepository;
         this.acaoMemoryPublisher = acaoMemoryPublisher;
         this.clock = clock;
         this.authorizationService = authorizationService;
+        this.referenceValidator = referenceValidator;
     }
 
     /**
@@ -39,6 +43,8 @@ public class AcaoService {
     @Transactional
     public AcaoResponse registrar(AcaoCreateRequest request) {
         String workspaceId = authorizationService.requireAuthorizedWorkspace(request.workspaceId());
+        referenceValidator.requireMissao(request.missaoId(), workspaceId);
+        referenceValidator.requirePessoa(request.responsavelId(), workspaceId);
         Acao acao = new Acao(
                 workspaceId,
                 request.titulo(),
@@ -50,7 +56,7 @@ public class AcaoService {
         );
 
         Acao saved = acaoRepository.save(acao);
-        acaoMemoryPublisher.publicarIniciada(saved);
+        acaoMemoryPublisher.publicarIniciada(saved, authorizationService.currentActorId());
         return AcaoResponse.from(saved);
     }
 

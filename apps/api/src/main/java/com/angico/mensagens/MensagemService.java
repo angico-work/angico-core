@@ -28,6 +28,7 @@ import com.angico.territorios.TerritorioRepository;
 import com.angico.territorios.TerritorioService;
 import com.angico.workspaces.WorkspaceAuthorizationService;
 import com.angico.workspaces.WorkspaceMemberRepository;
+import com.angico.workspaces.WorkspaceReferenceValidator;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.PathResource;
 import org.springframework.core.io.Resource;
@@ -60,6 +61,7 @@ public class MensagemService {
     private final WorkspaceMemberRepository memberRepository;
     private final OperationalMemoryService memoryService;
     private final OntologyService ontologyService;
+    private final WorkspaceReferenceValidator referenceValidator;
     private final Path uploadRoot;
     private final long maxBytes;
     private final Set<String> allowedContentTypes;
@@ -75,6 +77,7 @@ public class MensagemService {
             WorkspaceMemberRepository memberRepository,
             OperationalMemoryService memoryService,
             OntologyService ontologyService,
+            WorkspaceReferenceValidator referenceValidator,
             @Value("${angico.uploads.dir:uploads}") String uploadDir,
             @Value("${angico.uploads.max-bytes:2097152}") long maxBytes,
             @Value("${angico.uploads.allowed-content-types}") String allowedContentTypes
@@ -89,6 +92,7 @@ public class MensagemService {
         this.memberRepository = memberRepository;
         this.memoryService = memoryService;
         this.ontologyService = ontologyService;
+        this.referenceValidator = referenceValidator;
         this.uploadRoot = Path.of(uploadDir).toAbsolutePath().normalize();
         this.maxBytes = maxBytes;
         this.allowedContentTypes = Arrays.stream(allowedContentTypes.split(","))
@@ -215,6 +219,10 @@ public class MensagemService {
         requireConversationAccess(conversa);
         validateMessage(corpo, latitude, longitude, attachments);
         String normalizedLinkedType = normalizeLinkedType(linkedEntityType, linkedEntityId);
+        if (normalizedLinkedType != null) {
+            referenceValidator.requireLinkableEntity(
+                    normalizedLinkedType, linkedEntityId, conversa.getWorkspaceId());
+        }
 
         Instant now = Instant.now();
         Mensagem mensagem = new Mensagem();

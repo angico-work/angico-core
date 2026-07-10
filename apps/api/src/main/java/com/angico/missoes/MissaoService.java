@@ -2,6 +2,7 @@ package com.angico.missoes;
 
 import com.angico.common.ClockProvider;
 import com.angico.workspaces.WorkspaceAuthorizationService;
+import com.angico.workspaces.WorkspaceReferenceValidator;
 import java.util.List;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -16,17 +17,20 @@ public class MissaoService {
     private final MissaoMemoryPublisher missaoMemoryPublisher;
     private final ClockProvider clock;
     private final WorkspaceAuthorizationService authorizationService;
+    private final WorkspaceReferenceValidator referenceValidator;
 
     public MissaoService(
             MissaoRepository missaoRepository,
             MissaoMemoryPublisher missaoMemoryPublisher,
             ClockProvider clock,
-            WorkspaceAuthorizationService authorizationService
+            WorkspaceAuthorizationService authorizationService,
+            WorkspaceReferenceValidator referenceValidator
     ) {
         this.missaoRepository = missaoRepository;
         this.missaoMemoryPublisher = missaoMemoryPublisher;
         this.clock = clock;
         this.authorizationService = authorizationService;
+        this.referenceValidator = referenceValidator;
     }
 
     /**
@@ -37,6 +41,8 @@ public class MissaoService {
     @Transactional
     public MissaoResponse registrar(MissaoRequest request) {
         String workspaceId = authorizationService.requireAuthorizedWorkspace(request.workspaceId());
+        referenceValidator.requireProblema(request.problemaId(), workspaceId);
+        referenceValidator.requirePessoa(request.responsavelId(), workspaceId);
         Missao missao = new Missao(
                 workspaceId,
                 request.titulo(),
@@ -49,7 +55,7 @@ public class MissaoService {
         );
 
         Missao saved = missaoRepository.save(missao);
-        missaoMemoryPublisher.publicarCriada(saved);
+        missaoMemoryPublisher.publicarCriada(saved, authorizationService.currentActorId());
         return MissaoResponse.from(saved);
     }
 

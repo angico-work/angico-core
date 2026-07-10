@@ -2,6 +2,7 @@ package com.angico.observacoes;
 
 import com.angico.common.ClockProvider;
 import com.angico.workspaces.WorkspaceAuthorizationService;
+import com.angico.workspaces.WorkspaceReferenceValidator;
 import java.util.List;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -16,17 +17,20 @@ public class ObservacaoService {
     private final ObservacaoMemoryPublisher observacaoMemoryPublisher;
     private final ClockProvider clock;
     private final WorkspaceAuthorizationService authorizationService;
+    private final WorkspaceReferenceValidator referenceValidator;
 
     public ObservacaoService(
             ObservacaoRepository observacaoRepository,
             ObservacaoMemoryPublisher observacaoMemoryPublisher,
             ClockProvider clock,
-            WorkspaceAuthorizationService authorizationService
+            WorkspaceAuthorizationService authorizationService,
+            WorkspaceReferenceValidator referenceValidator
     ) {
         this.observacaoRepository = observacaoRepository;
         this.observacaoMemoryPublisher = observacaoMemoryPublisher;
         this.clock = clock;
         this.authorizationService = authorizationService;
+        this.referenceValidator = referenceValidator;
     }
 
     /**
@@ -37,6 +41,7 @@ public class ObservacaoService {
     @Transactional
     public ObservacaoResponse registrar(ObservacaoCreateRequest request) {
         String workspaceId = authorizationService.requireAuthorizedWorkspace(request.workspaceId());
+        referenceValidator.requireTerritorio(request.territorioId(), workspaceId);
         ObservacaoTerritorial observacao = new ObservacaoTerritorial(
                 workspaceId,
                 request.territorioId(),
@@ -49,7 +54,7 @@ public class ObservacaoService {
                 request.urgencia() == null || request.urgencia().isBlank()
                         ? URGENCIA_PADRAO : request.urgencia(),
                 STATUS_INICIAL,
-                request.autorId(),
+                authorizationService.currentActorId(),
                 clock.now()
         );
 

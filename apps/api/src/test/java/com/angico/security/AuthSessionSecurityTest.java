@@ -157,6 +157,19 @@ class AuthSessionSecurityTest {
     }
 
     @Test
+    void angicoIdAvailabilityCannotBeEnumeratedWithoutAuthentication() throws Exception {
+        mvc.perform(get("/api/auth/angico-id/available")
+                        .param("angicoId", "member.lookup"))
+                .andExpect(status().isUnauthorized());
+
+        SessionCredentials credentials = login();
+        mvc.perform(get("/api/auth/angico-id/available")
+                        .cookie(credentials.cookie())
+                        .param("angicoId", "member.lookup"))
+                .andExpect(status().isOk());
+    }
+
+    @Test
     void invalidValidatedPayloadReturns400InsteadOf500() throws Exception {
         SessionCredentials credentials = login();
 

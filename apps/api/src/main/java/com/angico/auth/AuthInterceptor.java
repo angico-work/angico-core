@@ -49,7 +49,6 @@ public class AuthInterceptor implements HandlerInterceptor {
         return "/health".equals(uri)
                 || "/api/auth/login".equals(uri)
                 || "/api/auth/register".equals(uri)
-                || "/api/auth/angico-id/available".equals(uri)
                 || uri.startsWith("/assets/")
                 || "/".equals(uri);
     }

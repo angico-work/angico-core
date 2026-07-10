@@ -27,7 +27,7 @@ public class AcaoMemoryPublisher {
         this.memory = memory;
     }
 
-    public void publicarIniciada(Acao a) {
+    public void publicarIniciada(Acao a, String actorId) {
         String entityId = String.valueOf(a.getId());
 
         memory.registrarObjeto(
@@ -39,7 +39,7 @@ public class AcaoMemoryPublisher {
 
         memory.registrarEvento(new MemoryEvent(
                 a.getWorkspaceId(), TIPO, entityId, "acao.iniciada", SOURCE,
-                a.getResponsavelId(), null, null, null, 1, a.getCreatedAt(), payload));
+                actorId, null, null, null, 1, a.getCreatedAt(), payload));
 
         if (a.getMissaoId() != null && !a.getMissaoId().isBlank()) {
             memory.registrarRelacaoAtiva(

@@ -99,10 +99,10 @@ class WorkspaceServiceTest {
 
     @Test
     void creatingMintsAnAccentFoldedSlugFromTheName() {
-        WorkspaceResponse created = create("Mutirão da Horta", "Júlia (@julia)");
+        WorkspaceResponse created = create("Mutirão da Horta", "forged.actor");
         assertEquals("mutirao-da-horta", created.slug());
         assertEquals("Mutirão da Horta", created.nome());
-        assertEquals("Júlia (@julia)", created.createdBy());
+        assertEquals("test.actor", created.createdBy());
         assertEquals("ACTIVE", created.status());
     }
 

@@ -2,6 +2,7 @@ package com.angico.potencialidades;
 
 import com.angico.common.ClockProvider;
 import com.angico.workspaces.WorkspaceAuthorizationService;
+import com.angico.workspaces.WorkspaceReferenceValidator;
 import java.util.List;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -15,17 +16,20 @@ public class PotencialidadeService {
     private final PotencialidadeMemoryPublisher potencialidadeMemoryPublisher;
     private final ClockProvider clock;
     private final WorkspaceAuthorizationService authorizationService;
+    private final WorkspaceReferenceValidator referenceValidator;
 
     public PotencialidadeService(
             PotencialidadeRepository potencialidadeRepository,
             PotencialidadeMemoryPublisher potencialidadeMemoryPublisher,
             ClockProvider clock,
-            WorkspaceAuthorizationService authorizationService
+            WorkspaceAuthorizationService authorizationService,
+            WorkspaceReferenceValidator referenceValidator
     ) {
         this.potencialidadeRepository = potencialidadeRepository;
         this.potencialidadeMemoryPublisher = potencialidadeMemoryPublisher;
         this.clock = clock;
         this.authorizationService = authorizationService;
+        this.referenceValidator = referenceValidator;
     }
 
     /**
@@ -36,6 +40,7 @@ public class PotencialidadeService {
     @Transactional
     public PotencialidadeResponse registrar(PotencialidadeCreateRequest request) {
         String workspaceId = authorizationService.requireAuthorizedWorkspace(request.workspaceId());
+        referenceValidator.requireTerritorio(request.territorioId(), workspaceId);
         PotencialidadeTerritorial potencialidade = new PotencialidadeTerritorial(
                 workspaceId,
                 request.territorioId(),
@@ -46,7 +51,7 @@ public class PotencialidadeService {
                 request.latitude(),
                 request.longitude(),
                 STATUS_INICIAL,
-                request.autorId(),
+                authorizationService.currentActorId(),
                 clock.now()
         );
 
