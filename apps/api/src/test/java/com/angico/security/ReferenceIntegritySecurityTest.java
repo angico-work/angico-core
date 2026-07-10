@@ -28,8 +28,9 @@ import com.angico.workspaces.WorkspaceMemberRepository;
 import com.angico.workspaces.WorkspaceRepository;
 import jakarta.servlet.http.Cookie;
 import java.time.Instant;
-import java.util.concurrent.atomic.AtomicInteger;
+import java.util.Locale;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -238,11 +239,32 @@ class ReferenceIntegritySecurityTest {
     @Test
     void existingGlobalAngicoIdCannotFallThroughToAConstraintFailure() throws Exception {
         long before = pessoaRepository.count();
+        String canonicalId = pessoaB.getAngicoId();
+        pessoaB.setAngicoId(" @" + canonicalId.toUpperCase(Locale.ROOT) + " ");
+        pessoaRepository.saveAndFlush(pessoaB);
 
         mvc.perform(authenticatedPost("/api/pessoas", """
                         {"workspaceId":"%s","nome":"Identidade duplicada","angicoId":"%s"}
-                        """.formatted(workspaceA, pessoaB.getAngicoId())))
+                        """.formatted(workspaceA, canonicalId)))
                 .andExpect(status().isBadRequest());
+
+        assertEquals(before, pessoaRepository.count());
+    }
+
+    @Test
+    void legacyFormattedAngicoIdIsReusedInsideTheSameWorkspace() throws Exception {
+        String canonicalId = "legacy." + IDS.incrementAndGet();
+        Pessoa legacyPerson = createPerson(
+                workspaceA, canonicalId, canonicalId + "@example.test");
+        long before = pessoaRepository.count();
+        legacyPerson.setAngicoId(" @" + canonicalId.toUpperCase(Locale.ROOT) + " ");
+        pessoaRepository.saveAndFlush(legacyPerson);
+
+        mvc.perform(authenticatedPost("/api/pessoas", """
+                        {"workspaceId":"%s","nome":"Identidade existente","angicoId":"%s"}
+                        """.formatted(workspaceA, canonicalId)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.id").value(legacyPerson.getId()));
 
         assertEquals(before, pessoaRepository.count());
     }

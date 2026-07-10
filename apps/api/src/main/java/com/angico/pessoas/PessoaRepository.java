@@ -16,12 +16,34 @@ public interface PessoaRepository extends JpaRepository<Pessoa, Long> {
 
     Optional<Pessoa> findByEmailIgnoreCase(String email);
 
-    Optional<Pessoa> findByAngicoIdIgnoreCase(String angicoId);
+    @Query("""
+            select p from Pessoa p
+            where lower(
+                case when substring(trim(p.angicoId), 1, 1) = '@'
+                    then substring(trim(p.angicoId), 2, length(trim(p.angicoId)))
+                    else trim(p.angicoId)
+                end
+            ) = lower(:angicoId)
+            """)
+    Optional<Pessoa> findByAngicoIdIgnoreCase(@Param("angicoId") String angicoId);
 
     Optional<Pessoa> findByAuthTokenHash(String authTokenHash);
 
     // Workspace-scoped lookups used by the mensagens module to resolve participants.
-    Optional<Pessoa> findByWorkspaceIdAndAngicoIdIgnoreCase(String workspaceId, String angicoId);
+    @Query("""
+            select p from Pessoa p
+            where p.workspaceId = :workspaceId
+              and lower(
+                  case when substring(trim(p.angicoId), 1, 1) = '@'
+                      then substring(trim(p.angicoId), 2, length(trim(p.angicoId)))
+                      else trim(p.angicoId)
+                  end
+              ) = lower(:angicoId)
+            """)
+    Optional<Pessoa> findByWorkspaceIdAndAngicoIdIgnoreCase(
+            @Param("workspaceId") String workspaceId,
+            @Param("angicoId") String angicoId
+    );
 
     Optional<Pessoa> findByWorkspaceIdAndEmailIgnoreCase(String workspaceId, String email);
 

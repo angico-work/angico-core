@@ -17,15 +17,18 @@ A autenticação é obrigatória por padrão. O usuário de demonstração só �
 ```bash
 mvn test
 scripts/smoke-prod-postgres.sh
+ANGICO_SMOKE_UPGRADE_FROM_REF=002a464 scripts/smoke-prod-postgres.sh
 ```
 
-O segundo comando é o gate opcional de produção: requer Docker, cria PostgreSQL efêmero, inicia o JAR com perfil `prod` sobre banco vazio e confirma a sequência Flyway `0,1,2`.
+O segundo comando é o gate opcional de produção: requer Docker, cria PostgreSQL efêmero, inicia o JAR com perfil `prod` sobre banco vazio e confirma a sequência Flyway `0,1,2`. O terceiro também empacota e inicia primeiro a revisão informada, depois inicia o JAR atual sobre o mesmo banco; ele é o gate de compatibilidade de upgrade usado pela Task 2.
 
 O endpoint de saúde está disponível em `GET /health`.
 
 ## Migração de sessão e identidade
 
 O perfil `prod` usa temporariamente `hibernate.ddl-auto=update` para materializar o modelo JPA real e, ainda durante a inicialização, aplica migrations Flyway aditivas. O coordenador depende do `EntityManagerFactory`, cria a baseline `0` automaticamente e executa V1/V2 antes de a aplicação ficar pronta. `render.yaml` habilita esse caminho com `ANGICO_FLYWAY_ENABLED=true`; qualquer duplicidade ou falha de migration encerra o startup.
+
+As V1/V2 PostgreSQL são imutáveis e preservam exatamente os bytes da primeira linhagem que habilitou Flyway em produção (`4145b44`). A suíte fixa seus hashes e o smoke de upgrade prova a partida sobre o histórico criado por `002a464`. A V1 mais antiga de `cd664bf` nunca foi habilitada automaticamente; se ela tiver sido aplicada manualmente, interrompa o deploy e faça um plano explícito de inspeção/repair do `flyway_schema_history` em clone do banco — não desative a validação.
 
 Antes do primeiro deploy contra um banco existente:
 

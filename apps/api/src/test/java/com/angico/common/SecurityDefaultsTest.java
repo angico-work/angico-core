@@ -8,6 +8,9 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.util.HexFormat;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.env.YamlPropertySourceLoader;
@@ -56,7 +59,7 @@ class SecurityDefaultsTest {
     @Test
     void productionMigrationsAreAdditiveAndVendorSpecific() throws IOException {
         List<ClassPathResource> migrations = List.of(
-                new ClassPathResource("db/migration/postgresql/V1__session_and_identity_constraints.sql"),
+                new ClassPathResource("db/migration/postgresql/V1__session_table.sql"),
                 new ClassPathResource("db/migration/postgresql/V2__identity_constraints.sql"),
                 new ClassPathResource("db/migration/h2/V1__session_table.sql"),
                 new ClassPathResource("db/migration/h2/V2__identity_constraints.sql")
@@ -77,6 +80,18 @@ class SecurityDefaultsTest {
         assertTrue(sql.contains("regexp_replace"));
         assertFalse(sql.contains("delete from"));
         assertFalse(sql.contains("drop table"));
+    }
+
+    @Test
+    void enabledPostgresqlMigrationLineageRemainsImmutable() throws IOException {
+        assertEquals(
+                "65e6dfcb83279dd54a91abd46ebcc01a57be84ea8fd7002dd2bbd64094a4f3bc",
+                sha256(new ClassPathResource("db/migration/postgresql/V1__session_table.sql"))
+        );
+        assertEquals(
+                "c6a714499ca6cc9e727e1f600a67891e39d2f1c6a375fa58e636e5084aaee6a4",
+                sha256(new ClassPathResource("db/migration/postgresql/V2__identity_constraints.sql"))
+        );
     }
 
     @Test
@@ -104,11 +119,14 @@ class SecurityDefaultsTest {
     }
 
     @Test
-    void postgresqlProductionSmokeTestIsReproducible() {
+    void postgresqlProductionSmokeTestIsReproducible() throws IOException {
         Path script = Files.exists(Path.of("scripts/smoke-prod-postgres.sh"))
                 ? Path.of("scripts/smoke-prod-postgres.sh")
                 : Path.of("apps/api/scripts/smoke-prod-postgres.sh");
         assertTrue(Files.isExecutable(script));
+        String contents = Files.readString(script);
+        assertTrue(contents.contains("ANGICO_SMOKE_UPGRADE_FROM_REF"));
+        assertTrue(contents.contains("archive \"$UPGRADE_FROM_REF\""));
     }
 
     private int occurrences(String value, String needle) {
@@ -119,6 +137,15 @@ class SecurityDefaultsTest {
             offset += needle.length();
         }
         return count;
+    }
+
+    private String sha256(ClassPathResource resource) throws IOException {
+        try {
+            return HexFormat.of().formatHex(
+                    MessageDigest.getInstance("SHA-256").digest(resource.getContentAsByteArray()));
+        } catch (NoSuchAlgorithmException exception) {
+            throw new IllegalStateException(exception);
+        }
     }
 
     private Object property(List<PropertySource<?>> sources, String name) {
