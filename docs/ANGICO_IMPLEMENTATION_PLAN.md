@@ -19,7 +19,7 @@ O trabalho será feito em fatias verticais. Cada tarefa termina com testes e bui
 - Componentes devem funcionar por teclado, ter foco visível e respeitar redução de movimento.
 - Código morto, comentários narrativos e duplicações devem ser removidos antes da entrega.
 
-## Tarefa 1 — Fronteiras independentes
+## Task 1 — Fronteiras independentes
 
 **Arquivos**
 
@@ -57,7 +57,7 @@ O trabalho será feito em fatias verticais. Cada tarefa termina com testes e bui
 - `cd apps/api && mvn test`
 - `rg -n "apps/(site|app|api)" apps/site/src apps/app/src` não deve encontrar import cruzado.
 
-## Tarefa 2 — Configuração e segurança fail-closed
+## Task 2 — Configuração e segurança fail-closed
 
 **Arquivos**
 
@@ -120,7 +120,7 @@ export interface AuthSession {
 - Variável de seed ausente não cria conta de demonstração.
 - Payload inválido recebe `400`, não `500`.
 
-## Tarefa 3 — Uma única memória operacional
+## Task 3 — Uma única memória operacional
 
 **Arquivos**
 
@@ -163,7 +163,7 @@ public record MemoryQuery(
 - Relação inválida aborta a transação.
 - Filtros de período, ator, origem e sync retornam apenas eventos autorizados.
 
-## Tarefa 4 — IndexedDB, outbox e sincronização
+## Task 4 — IndexedDB, outbox e sincronização
 
 **Arquivos**
 
@@ -223,7 +223,7 @@ export interface OutboxItem {
 - Logout de A impede B de ler cache de A.
 - Falha não remove payload nem anexo.
 
-## Tarefa 5 — Mensagens contextuais
+## Task 5 — Mensagens contextuais
 
 **Arquivos**
 
@@ -250,7 +250,7 @@ export interface OutboxItem {
 - Mensagem ligada a lote aparece na timeline do lote.
 - Rascunho persiste offline e é removido somente após confirmação.
 
-## Tarefa 6 — Rastro Verificável
+## Task 6 — Rastro Verificável
 
 **Arquivos**
 
@@ -305,7 +305,7 @@ export interface TraceGap {
 - Ordem ocorrida permanece correta após sync fora de ordem.
 - Usuário sem acesso ao workspace recebe `403`.
 
-## Tarefa 7 — Site público e refinamento do app
+## Task 7 — Site público e refinamento do app
 
 **Arquivos**
 
@@ -331,7 +331,7 @@ export interface TraceGap {
 - `prefers-reduced-motion` remove animação não essencial.
 - Nenhum erro de console ou request inesperado.
 
-## Tarefa 8 — Release, documentação e limpeza
+## Task 8 — Release, documentação e limpeza
 
 **Arquivos**
 
