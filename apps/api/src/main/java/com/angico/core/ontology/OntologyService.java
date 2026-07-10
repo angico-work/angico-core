@@ -25,6 +25,8 @@ public class OntologyService {
     public static final String INDICADOR = "INDICADOR";
     public static final String MEDICAO = "MEDICAO";
     public static final String RESULTADO = "RESULTADO";
+    public static final String RECURSO = "RECURSO";
+    public static final String USO_RECURSO = "USO_RECURSO";
     public static final String CONVERSA = "CONVERSA";
     public static final String MENSAGEM = "MENSAGEM";
     public static final String ANEXO = "ANEXO";
@@ -45,6 +47,8 @@ public class OntologyService {
             INDICADOR,
             MEDICAO,
             RESULTADO,
+            RECURSO,
+            USO_RECURSO,
             CONVERSA,
             MENSAGEM,
             ANEXO,
@@ -68,6 +72,7 @@ public class OntologyService {
             new RelationRule(PESSOA, "RESPONSAVEL_POR", ACAO),
             new RelationRule(ACAO, "PRODUZ", RESULTADO),
             new RelationRule(ACAO, "GERA", EVIDENCIA),
+            new RelationRule(ACAO, "UTILIZA", RECURSO),
             new RelationRule(EVIDENCIA, "SUSTENTA", RESULTADO),
             new RelationRule(INDICADOR, "MEDE", RESULTADO),
             new RelationRule(MEDICAO, "REFERE_SE_A", INDICADOR),
