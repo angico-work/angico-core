@@ -1,9 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   createEntity,
+  ensureTerritorio,
   getSession,
+  hasFreshOfflineSession,
   isAuthenticated,
   loadDashboard,
+  loadMemoria,
+  listConversas,
   listEntities,
   listWorkspaces,
   login,
@@ -107,6 +111,21 @@ describe('cookie session API', () => {
     await expect(loadDashboard('workspace-a')).rejects.toThrow('painel');
   });
 
+  it('loads memory from the provenance-rich history contract', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(response(200, []));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await loadMemoria('workspace-a');
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/history/workspaces/workspace-a', expect.any(Object));
+  });
+
+  it('reports an unavailable conversation list', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response(503, { detail: 'mensagens indisponíveis' })));
+
+    await expect(listConversas('workspace-a')).rejects.toThrow('mensagens indisponíveis');
+  });
+
   it('revalidates persisted metadata through the cookie-backed me endpoint', async () => {
     localStorage.setItem('angico.session', JSON.stringify(session));
     const refreshed = { ...session, nome: 'Ana Atualizada' };
@@ -128,11 +147,28 @@ describe('cookie session API', () => {
     await expect(listWorkspaces()).resolves.toEqual([]);
   });
 
+  it('does not create a placeholder territory just because conversations were opened', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(response(200, []));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(ensureTerritorio('workspace-a')).resolves.toBeNull();
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledWith('/api/territorios?workspaceId=workspace-a', expect.any(Object));
+  });
+
   it('purges the legacy bearer session format instead of retaining its token', () => {
     localStorage.setItem('angico.session', JSON.stringify({ ...session, token: 'legacy-bearer' }));
 
     expect(getSession()).toBeNull();
     expect(localStorage.getItem('angico.session')).toBeNull();
+  });
+
+  it('never keeps offline access beyond the server session expiry', () => {
+    localStorage.setItem('angico.session', JSON.stringify({ ...session, expiresAt: '2020-01-01T00:00:00Z' }));
+    localStorage.setItem('angico.session.validatedAt', new Date().toISOString());
+
+    expect(hasFreshOfflineSession()).toBe(false);
   });
 
   it('rejects attachments that exceed the API per-file limit before upload', async () => {

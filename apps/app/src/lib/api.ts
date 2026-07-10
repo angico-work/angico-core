@@ -5,15 +5,11 @@ import type {
 
 export const DEFAULT_WORKSPACE = 'coletivo-jardim-novo';
 
-// Browser requests are always same-origin. Vite proxies /api during local
-// development; Vercel's Function does the same in deployed environments.
 export const API_BASE = '';
 
 export function apiUrl(path: string): string {
   return `${API_BASE}${path}`;
 }
-
-// --- Auth session -----------------------------------------------------------
 
 const SESSION_KEY = 'angico.session';
 const SESSION_VALIDATED_KEY = 'angico.session.validatedAt';
@@ -63,14 +59,15 @@ export function clearSession(): void {
 }
 
 export function hasFreshOfflineSession(): boolean {
-  if (!getSession()) return false;
+  const session = getSession();
+  if (!session) return false;
   const validatedAt = Date.parse(localStorage.getItem(SESSION_VALIDATED_KEY) ?? '');
-  return Number.isFinite(validatedAt) && Date.now() - validatedAt <= OFFLINE_SESSION_LEASE_MS;
+  const serverExpiry = Date.parse(session.expiresAt);
+  if (!Number.isFinite(validatedAt) || !Number.isFinite(serverExpiry)) return false;
+  const offlineExpiry = Math.min(serverExpiry, validatedAt + OFFLINE_SESSION_LEASE_MS);
+  return Date.now() < offlineExpiry;
 }
 
-// Switches the active workspace and persists it on the session, so a refresh
-// keeps the member in the workspace they last chose. Every page reads
-// workspaceId from the shell context, so changing it triggers a full refetch.
 export function setSessionWorkspace(slug: string): void {
   const session = getSession();
   if (session) saveSession({ ...session, workspaceId: slug });
@@ -143,7 +140,6 @@ export async function logout(): Promise<void> {
   try {
     await apiFetch(apiUrl('/api/auth/logout'), { method: 'POST' });
   } catch {
-    // Logout is best-effort; the local session is cleared regardless.
   }
   clearSession();
 }
@@ -155,11 +151,6 @@ export async function revalidateSession(): Promise<AuthSession | null> {
   return saveSession((await response.json()) as AuthSession, true);
 }
 
-// --- Territory data ---------------------------------------------------------
-
-// Loads the territory dashboard. On failure we never fabricate numbers in
-// production — we return the honest empty state. In local development we fall
-// back to the demo sample so the UI stays explorable without a backend.
 export async function loadDashboard(workspaceId = DEFAULT_WORKSPACE): Promise<DashboardData> {
   try {
     const response = await apiFetch(apiUrl(`/api/glimpse/dashboard?workspaceId=${encodeURIComponent(workspaceId)}`), {
@@ -170,12 +161,14 @@ export async function loadDashboard(workspaceId = DEFAULT_WORKSPACE): Promise<Da
     }
     return (await response.json()) as DashboardData;
   } catch (error) {
-    if (error instanceof Error && error.message !== 'offline') throw error;
-    throw new Error('Não foi possível carregar o painel do território.');
+    if (error instanceof TypeError) {
+      throw new Error('Não foi possível carregar o painel do território. Verifique a conexão.');
+    }
+    if (error instanceof Error) throw error;
+    throw new Error('Não foi possível carregar o painel do território. Verifique a conexão.');
   }
 }
 
-// Registers a new observação. Throws on failure so the UI can surface it.
 export async function createObservacao(input: ObservacaoInput): Promise<Observacao> {
   const response = await apiFetch(apiUrl('/api/observacoes'), {
     method: 'POST',
@@ -201,8 +194,6 @@ export async function loadMapPoints(workspaceId = DEFAULT_WORKSPACE): Promise<Ma
   }
 }
 
-// --- Workspaces -------------------------------------------------------------
-
 export async function listWorkspaces(): Promise<Workspace[]> {
   try {
     const r = await apiFetch(apiUrl('/api/workspaces'), { headers: requestHeaders() });
@@ -223,9 +214,6 @@ export async function createWorkspace(nome: string, criadoPor?: string): Promise
   return (await r.json()) as Workspace;
 }
 
-// Removes a workspace from the registry. Its scoped data stays intact, so
-// re-creating the same name restores the view. The home workspace is protected
-// server-side (HTTP 400).
 export async function deleteWorkspace(slug: string): Promise<void> {
   const r = await apiFetch(apiUrl(`/api/workspaces/${encodeURIComponent(slug)}`), {
     method: 'DELETE',
@@ -236,7 +224,6 @@ export async function deleteWorkspace(slug: string): Promise<void> {
   }
 }
 
-// --- Workspace members ------------------------------------------------------
 export async function listMembers(slug: string): Promise<WorkspaceMember[]> {
   try {
     const r = await apiFetch(apiUrl(`/api/workspaces/${encodeURIComponent(slug)}/members`), { headers: requestHeaders() });
@@ -273,9 +260,6 @@ export async function removeMember(slug: string, memberId: number): Promise<void
   }
 }
 
-// --- Geocoding (forward + reverse) ------------------------------------------
-// Backed by /api/geocoding (Nominatim with an IBGE municipality fallback).
-// Debounce on the caller side and pass an AbortSignal to cancel stale lookups.
 export async function searchGeocoding(query: string, signal?: AbortSignal): Promise<GeoResult[]> {
   const q = query.trim();
   if (q.length < 3) return [];
@@ -286,8 +270,6 @@ export async function searchGeocoding(query: string, signal?: AbortSignal): Prom
     });
     if (!r.ok) return [];
     const body = (await r.json()) as GeoSearchResponse;
-    // Collapse duplicate hits — the geocoder often returns several segments of the
-    // same street/place with an identical displayName, which just reads as noise.
     const seen = new Set<string>();
     return (body.results ?? []).filter((g) => {
       if (seen.has(g.displayName)) return false;
@@ -299,10 +281,6 @@ export async function searchGeocoding(query: string, signal?: AbortSignal): Prom
   }
 }
 
-// Resolves a suggestion to coordinates. The IBGE municipality fallback returns
-// city names without coordinates (it answers when the geocoder is rate-limited);
-// in that case we re-geocode "city, state, country" to find a centre. Returns
-// null only when no provider can place the city.
 export async function resolveCoords(r: GeoResult, signal?: AbortSignal): Promise<[number, number] | null> {
   if (r.latitude != null && r.longitude != null) return [r.latitude, r.longitude];
   const q = [r.city, r.state, r.country].filter(Boolean).join(', ');
@@ -325,8 +303,6 @@ export async function reverseGeocode(lat: number, lng: number, signal?: AbortSig
   }
 }
 
-// Angico-ID-aware people search (workspace-scoped) backing the "Nova pessoa"
-// autocomplete. Matches the typed text against the Angico ID or the name.
 export async function searchPessoas(workspaceId: string, q: string, signal?: AbortSignal): Promise<PessoaHit[]> {
   const query = q.trim();
   if (query.length < 2) return [];
@@ -344,7 +320,7 @@ export async function searchPessoas(workspaceId: string, q: string, signal?: Abo
 
 export async function loadMemoria(workspaceId = DEFAULT_WORKSPACE): Promise<MemoriaEvent[]> {
   try {
-    const r = await apiFetch(apiUrl(`/api/glimpse/memoria?workspaceId=${encodeURIComponent(workspaceId)}`), {
+    const r = await apiFetch(apiUrl(`/api/history/workspaces/${encodeURIComponent(workspaceId)}`), {
       headers: requestHeaders()
     });
     if (!r.ok) throw new Error(await readError(r, 'Não foi possível carregar a memória do território.'));
@@ -355,7 +331,6 @@ export async function loadMemoria(workspaceId = DEFAULT_WORKSPACE): Promise<Memo
   }
 }
 
-// Generic list/create for the domain modules (observacoes, problemas, ...).
 export async function listEntities<T = Record<string, unknown>>(
   path: string, workspaceId = DEFAULT_WORKSPACE
 ): Promise<T[]> {
@@ -390,29 +365,28 @@ export async function createEntity<T = Record<string, unknown>>(
   return (await r.json()) as T;
 }
 
-// --- Mensagens & grupos -----------------------------------------------------
 export async function listConversas(workspaceId = DEFAULT_WORKSPACE): Promise<Conversa[]> {
   try {
     const r = await apiFetch(apiUrl(`/api/mensagens/conversas?workspaceId=${encodeURIComponent(workspaceId)}`), { headers: requestHeaders() });
-    if (!r.ok) return [];
+    if (!r.ok) throw new Error(await readError(r, 'Não foi possível carregar as conversas.'));
     return (await r.json()) as Conversa[];
-  } catch {
-    return [];
+  } catch (error) {
+    if (error instanceof Error && !(error instanceof TypeError)) throw error;
+    throw new Error('Não foi possível carregar as conversas. Verifique a conexão.');
   }
 }
 
 export async function listMensagens(conversaId: number): Promise<Mensagem[]> {
   try {
     const r = await apiFetch(apiUrl(`/api/mensagens/conversas/${conversaId}/mensagens`), { headers: requestHeaders() });
-    if (!r.ok) return [];
+    if (!r.ok) throw new Error(await readError(r, 'Não foi possível carregar as mensagens.'));
     return (await r.json()) as Mensagem[];
-  } catch {
-    return [];
+  } catch (error) {
+    if (error instanceof Error && !(error instanceof TypeError)) throw error;
+    throw new Error('Não foi possível carregar as mensagens. Verifique a conexão.');
   }
 }
 
-// Multipart send (text + optional image/file attachments). Do NOT set
-// Content-Type — the browser adds the multipart boundary.
 export async function sendMensagem(conversaId: number, corpo: string, attachments: File[] = []): Promise<Mensagem> {
   const maxFileBytes = 2 * 1024 * 1024;
   const maxAggregateBytes = 3.75 * 1024 * 1024;
@@ -450,10 +424,11 @@ export async function createConversa(input: CreateConversaInput): Promise<Conver
 export async function listTerritorios(workspaceId = DEFAULT_WORKSPACE): Promise<Territorio[]> {
   try {
     const r = await apiFetch(apiUrl(`/api/territorios?workspaceId=${encodeURIComponent(workspaceId)}`), { headers: requestHeaders() });
-    if (!r.ok) return [];
+    if (!r.ok) throw new Error(await readError(r, 'Não foi possível carregar os territórios.'));
     return (await r.json()) as Territorio[];
-  } catch {
-    return [];
+  } catch (error) {
+    if (error instanceof Error && !(error instanceof TypeError)) throw error;
+    throw new Error('Não foi possível carregar os territórios. Verifique a conexão.');
   }
 }
 
@@ -461,28 +436,11 @@ export function attachmentUrl(anexoId: number): string {
   return apiUrl(`/api/mensagens/anexos/${anexoId}`);
 }
 
-// Conversations must be anchored to a território. Resolve the workspace's first
-// território, creating a default one if none exists yet, so messaging works out
-// of the box for any workspace.
 export async function ensureTerritorio(workspaceId = DEFAULT_WORKSPACE): Promise<number | null> {
   const existing = await listTerritorios(workspaceId);
-  if (existing.length > 0) return existing[0].id;
-  try {
-    const r = await apiFetch(apiUrl('/api/territorios'), {
-      method: 'POST',
-      headers: requestHeaders({ 'Content-Type': 'application/json' }),
-      body: JSON.stringify({ workspaceId, nome: 'Território', tipo: 'BAIRRO', pais: 'Brasil' })
-    });
-    if (!r.ok) return null;
-    return ((await r.json()) as Territorio).id;
-  } catch {
-    return null;
-  }
+  return existing[0]?.id ?? null;
 }
 
-// --- Perfil (current pessoa) ------------------------------------------------
-// /api/auth/me doesn't carry telefone/foto, so resolve the full record from the
-// workspace people list by the session's pessoaId.
 export async function getProfile(workspaceId = DEFAULT_WORKSPACE): Promise<PessoaHit | null> {
   const session = getSession();
   if (!session) return null;
@@ -508,7 +466,6 @@ export async function updateProfile(input: ProfileUpdate): Promise<PessoaHit> {
   });
   if (!r.ok) throw new Error(await readError(r, 'Não foi possível salvar o perfil.'));
   const updated = (await r.json()) as PessoaHit;
-  // Keep the local session label in sync so the shell reflects the new name.
   const session = getSession();
   if (session) saveSession({ ...session, nome: updated.nome });
   return updated;

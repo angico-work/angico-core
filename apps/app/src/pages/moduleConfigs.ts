@@ -11,7 +11,10 @@ export interface ModuleConfig {
   key: string;
   title: string;
   subtitle: string;
+  emptyTitle: string;
+  emptyMessage: string;
   newLabel: string;
+  singular: string;
   path: string;
   accent: string;
   fields: FieldDef[];
@@ -20,113 +23,83 @@ export interface ModuleConfig {
   meta: (item: Record<string, unknown>) => string[];
 }
 
-const CATEGORIAS = ['Resíduos', 'Água e Saneamento', 'Mobilidade', 'Áreas Verdes', 'Calor e Arborização', 'Segurança Alimentar', 'Outros'];
-const URGENCIAS = ['BAIXA', 'MEDIA', 'ALTA'];
-const s = (item: Record<string, unknown>, k: string) => (item[k] == null ? '' : String(item[k]));
+const CATEGORIES = ['Resíduos', 'Água e Saneamento', 'Mobilidade', 'Áreas Verdes', 'Calor e Arborização', 'Segurança Alimentar', 'Outros'];
+const PRIORITIES = ['BAIXA', 'MEDIA', 'ALTA'];
+const value = (item: Record<string, unknown>, key: string) => item[key] == null ? '' : String(item[key]);
 
 export const MODULE_CONFIGS: Record<string, ModuleConfig> = {
   observacoes: {
-    key: 'observacoes',
-    title: 'Observações',
-    subtitle: 'Registros do que acontece no território — o ponto de partida.',
-    newLabel: 'Nova observação',
-    path: '/api/observacoes',
-    accent: '#2c8fbd',
-    fields: [
-      { name: 'categoria', label: 'Categoria', type: 'select', options: CATEGORIAS, required: true },
-      { name: 'titulo', label: 'Título', type: 'text', required: true, placeholder: 'Ex: Descarte irregular de lixo' },
-      { name: 'descricao', label: 'Descrição', type: 'textarea' },
-      { name: 'localizacao', label: 'Localização', type: 'text', placeholder: 'Ex: Rua das Flores, 245' },
-      { name: 'urgencia', label: 'Urgência', type: 'select', options: URGENCIAS }
-    ],
-    primary: (i) => s(i, 'titulo'),
-    badge: (i) => s(i, 'urgencia') || undefined,
-    meta: (i) => [s(i, 'categoria'), s(i, 'localizacao')].filter(Boolean)
+    key: 'observacoes', title: 'Observações', singular: 'Observação', newLabel: 'Registrar observação',
+    subtitle: 'Relatos de campo que iniciam a memória do território.',
+    emptyTitle: 'Nenhuma observação registrada', emptyMessage: 'Registre o que aconteceu, mesmo sem conexão.',
+    path: '/api/observacoes', accent: '#0E7C86', fields: [],
+    primary: (item) => value(item, 'titulo'), badge: (item) => value(item, 'urgencia') || value(item, 'status') || undefined,
+    meta: (item) => [value(item, 'categoria'), value(item, 'localizacao')].filter(Boolean)
   },
   problemas: {
-    key: 'problemas',
-    title: 'Problemas',
-    subtitle: 'Situações validadas e priorizadas a partir das observações.',
-    newLabel: 'Novo problema',
-    path: '/api/problemas',
-    accent: '#f97316',
+    key: 'problemas', title: 'Problemas', singular: 'Problema', newLabel: 'Registrar problema',
+    subtitle: 'Situações reconhecidas que exigem resposta organizada.',
+    emptyTitle: 'Nenhum problema reconhecido', emptyMessage: 'Valide uma situação observada antes de mobilizar uma resposta.',
+    path: '/api/problemas', accent: '#C65D36',
     fields: [
-      { name: 'categoria', label: 'Categoria', type: 'select', options: CATEGORIAS, required: true },
-      { name: 'titulo', label: 'Título', type: 'text', required: true },
-      { name: 'descricao', label: 'Descrição', type: 'textarea' },
-      { name: 'localizacao', label: 'Localização', type: 'text' },
-      { name: 'severidade', label: 'Severidade', type: 'select', options: URGENCIAS },
-      { name: 'origemObservacaoId', label: 'ID da observação de origem', type: 'text', placeholder: 'opcional' }
+      { name: 'categoria', label: 'Categoria', type: 'select', options: CATEGORIES, required: true },
+      { name: 'titulo', label: 'Situação reconhecida', type: 'text', required: true },
+      { name: 'descricao', label: 'Contexto', type: 'textarea' },
+      { name: 'localizacao', label: 'Local', type: 'text' },
+      { name: 'severidade', label: 'Severidade', type: 'select', options: PRIORITIES }
     ],
-    primary: (i) => s(i, 'titulo'),
-    badge: (i) => s(i, 'severidade') || undefined,
-    meta: (i) => [s(i, 'categoria'), s(i, 'status'), s(i, 'localizacao')].filter(Boolean)
-  },
-  missoes: {
-    key: 'missoes',
-    title: 'Missões',
-    subtitle: 'Mobilização coletiva para responder aos problemas.',
-    newLabel: 'Nova missão',
-    path: '/api/missoes',
-    accent: '#7c3aed',
-    fields: [
-      { name: 'titulo', label: 'Título', type: 'text', required: true },
-      { name: 'descricao', label: 'Descrição', type: 'textarea' },
-      { name: 'problemaId', label: 'ID do problema relacionado', type: 'text', placeholder: 'opcional' },
-      { name: 'responsavelId', label: 'ID do responsável', type: 'text', placeholder: 'opcional' }
-    ],
-    primary: (i) => s(i, 'titulo'),
-    badge: (i) => s(i, 'status') || undefined,
-    meta: (i) => [`Progresso: ${s(i, 'progresso') || '0'}%`].filter(Boolean)
-  },
-  acoes: {
-    key: 'acoes',
-    title: 'Ações',
-    subtitle: 'Passos concretos executados dentro das missões.',
-    newLabel: 'Nova ação',
-    path: '/api/acoes',
-    accent: '#12a044',
-    fields: [
-      { name: 'titulo', label: 'Título', type: 'text', required: true },
-      { name: 'descricao', label: 'Descrição', type: 'textarea' },
-      { name: 'missaoId', label: 'ID da missão', type: 'text', placeholder: 'opcional' },
-      { name: 'responsavelId', label: 'ID do responsável', type: 'text', placeholder: 'opcional' }
-    ],
-    primary: (i) => s(i, 'titulo'),
-    badge: (i) => s(i, 'status') || undefined,
-    meta: (i) => [s(i, 'descricao')].filter(Boolean)
+    primary: (item) => value(item, 'titulo'), badge: (item) => value(item, 'severidade') || value(item, 'status') || undefined,
+    meta: (item) => [value(item, 'categoria'), value(item, 'localizacao')].filter(Boolean)
   },
   potencialidades: {
-    key: 'potencialidades',
-    title: 'Potencialidades',
-    subtitle: 'Recursos e potências do território que podem ser fortalecidos.',
-    newLabel: 'Nova potencialidade',
-    path: '/api/potencialidades',
-    accent: '#2aa84a',
+    key: 'potencialidades', title: 'Potencialidades', singular: 'Potencialidade', newLabel: 'Registrar potencialidade',
+    subtitle: 'Recursos, saberes e capacidades que o território já possui.',
+    emptyTitle: 'Nenhuma potencialidade registrada', emptyMessage: 'Reconheça um recurso ou saber que pode fortalecer novas ações.',
+    path: '/api/potencialidades', accent: '#35A86B',
     fields: [
-      { name: 'categoria', label: 'Categoria', type: 'select', options: ['Segurança Alimentar', 'Agricultura Urbana', 'Áreas Verdes', 'Educação Ambiental', 'Cultura e Arte', 'Saberes Tradicionais', 'Energia Renovável', 'Reciclagem e Compostagem', 'Turismo de Base Comunitária', 'Saúde Comunitária', 'Esporte e Lazer', 'Coletivos e Associações', 'Espaços Públicos', 'Outros'], required: true },
-      { name: 'titulo', label: 'Título', type: 'text', required: true },
-      { name: 'descricao', label: 'Descrição', type: 'textarea' },
-      { name: 'localizacao', label: 'Localização', type: 'text' }
+      { name: 'categoria', label: 'Categoria', type: 'select', options: ['Agricultura Urbana', 'Educação Ambiental', 'Cultura e Arte', 'Saberes Tradicionais', 'Reciclagem e Compostagem', 'Saúde Comunitária', 'Coletivos e Associações', 'Espaços Públicos', 'Outros'], required: true },
+      { name: 'titulo', label: 'Potencialidade', type: 'text', required: true },
+      { name: 'descricao', label: 'Como pode contribuir', type: 'textarea' },
+      { name: 'localizacao', label: 'Local', type: 'text' }
     ],
-    primary: (i) => s(i, 'titulo'),
-    badge: (i) => s(i, 'status') || undefined,
-    meta: (i) => [s(i, 'categoria'), s(i, 'localizacao')].filter(Boolean)
+    primary: (item) => value(item, 'titulo'), badge: (item) => value(item, 'status') || undefined,
+    meta: (item) => [value(item, 'categoria'), value(item, 'localizacao')].filter(Boolean)
+  },
+  missoes: {
+    key: 'missoes', title: 'Missões', singular: 'Missão', newLabel: 'Criar missão',
+    subtitle: 'Compromissos coletivos que organizam uma resposta no tempo.',
+    emptyTitle: 'Nenhuma missão em curso', emptyMessage: 'Crie uma missão quando houver um problema e uma resposta possível.',
+    path: '/api/missoes', accent: '#063F4D',
+    fields: [
+      { name: 'titulo', label: 'Objetivo da missão', type: 'text', required: true },
+      { name: 'descricao', label: 'Resultado esperado', type: 'textarea' }
+    ],
+    primary: (item) => value(item, 'titulo'), badge: (item) => value(item, 'status') || undefined,
+    meta: (item) => [`Progresso ${value(item, 'progresso') || '0'}%`, value(item, 'descricao')].filter(Boolean)
+  },
+  acoes: {
+    key: 'acoes', title: 'Ações', singular: 'Ação', newLabel: 'Registrar ação',
+    subtitle: 'Trabalho realizado por pessoas, organizações e comunidades.',
+    emptyTitle: 'Nenhuma ação registrada', emptyMessage: 'Registre uma ação executada para preservar autoria e continuidade.',
+    path: '/api/acoes', accent: '#35A86B',
+    fields: [
+      { name: 'titulo', label: 'Ação realizada', type: 'text', required: true },
+      { name: 'descricao', label: 'O que foi feito', type: 'textarea' }
+    ],
+    primary: (item) => value(item, 'titulo'), badge: (item) => value(item, 'status') || undefined,
+    meta: (item) => [value(item, 'descricao')].filter(Boolean)
   },
   pessoas: {
-    key: 'pessoas',
-    title: 'Pessoas e Grupos',
-    subtitle: 'Os agentes de inteligência territorial.',
-    newLabel: 'Nova pessoa',
-    path: '/api/pessoas',
-    accent: '#004B6C',
+    key: 'pessoas', title: 'Pessoas e grupos', singular: 'Participante', newLabel: 'Adicionar participante',
+    subtitle: 'Quem torna o trabalho possível e forma a trajetória coletiva.',
+    emptyTitle: 'Nenhuma participação registrada', emptyMessage: 'Adicione uma pessoa pelo nome ou identidade Angico.',
+    path: '/api/pessoas', accent: '#0E7C86',
     fields: [
-      { name: 'angicoId', label: 'Angico ID', type: 'angico-search', placeholder: 'Buscar por nome ou @id…' },
+      { name: 'angicoId', label: 'Identidade Angico', type: 'angico-search', placeholder: 'Buscar por nome ou @identidade' },
       { name: 'nome', label: 'Nome', type: 'text', required: true },
-      { name: 'papel', label: 'Papel', type: 'text', placeholder: 'Ex: Jovem Mapeador, Mentor' }
+      { name: 'papel', label: 'Papel no território', type: 'text', placeholder: 'Ex.: mobilizadora, educador, cooperativa' }
     ],
-    primary: (i) => s(i, 'nome'),
-    badge: (i) => s(i, 'papel') || undefined,
-    meta: (i) => [s(i, 'angicoId') ? `@${s(i, 'angicoId')}` : 'sem Angico ID']
+    primary: (item) => value(item, 'nome'), badge: (item) => value(item, 'papel') || undefined,
+    meta: (item) => [value(item, 'angicoId') ? `@${value(item, 'angicoId')}` : 'Identidade ainda não vinculada']
   }
 };

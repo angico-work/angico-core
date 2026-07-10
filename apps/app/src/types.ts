@@ -1,6 +1,3 @@
-// Shape of the territory dashboard payload served by GET /api/glimpse/dashboard.
-// Mirrored on the API side once the `glimpse` aggregation endpoint exists.
-
 export interface Territory {
   id: string;
   name: string;
@@ -52,7 +49,6 @@ export interface DashboardData {
   memoryClaim: string;
 }
 
-// Payload for POST /api/observacoes
 export interface ObservacaoInput {
   workspaceId: string;
   territorioId?: string;
@@ -72,14 +68,12 @@ export interface ObservacaoInput {
   deviceId?: string;
 }
 
-// Response from the observações endpoints
 export interface Observacao extends ObservacaoInput {
   id: number;
   status: string;
   createdAt: string;
 }
 
-// Geolocated objeto for the map (GET /api/glimpse/map)
 export interface MapPoint {
   type: 'observacao' | 'problema' | 'potencialidade';
   id: number;
@@ -90,7 +84,6 @@ export interface MapPoint {
   longitude: number;
 }
 
-// A geocoding match from GET /api/geocoding/search (Nominatim + IBGE fallback).
 export interface GeoResult {
   displayName: string;
   city: string | null;
@@ -108,8 +101,6 @@ export interface GeoSearchResponse {
   error?: string | null;
 }
 
-// A person match from GET /api/pessoas/search — used to link a real Angico
-// identity to a território member via the "Nova pessoa" autocomplete.
 export interface PessoaHit {
   id: number;
   workspaceId: string;
@@ -121,7 +112,6 @@ export interface PessoaHit {
   createdAt: string;
 }
 
-// --- Mensagens & grupos (GET/POST /api/mensagens) ---------------------------
 export interface MensagemAnexo {
   id: number;
   originalFilename: string;
@@ -170,9 +160,6 @@ export interface Territorio {
   status: string | null;
 }
 
-// A named workspace (GET/POST /api/workspaces). The `slug` is the partition key
-// every module scopes by; the `nome` is what members see in the switcher. The
-// remaining fields are optional metadata about the place and lifecycle.
 export interface Workspace {
   slug: string;
   nome: string;
@@ -187,7 +174,6 @@ export interface Workspace {
   updatedAt?: string;
 }
 
-// A person's membership in a workspace, with a role that drives access control.
 export interface WorkspaceMember {
   id: number;
   workspaceId: string;
@@ -198,14 +184,20 @@ export interface WorkspaceMember {
   joinedAt: string;
 }
 
-// One row of the território memory timeline (GET /api/glimpse/memoria)
 export interface MemoriaEvent {
-  sequence: number;
+  sequence?: number;
+  commitSequence?: number;
   entityType: string;
   entityId: string;
   eventType: string;
   actorId: string | null;
   occurredAt: string;
+  recordedAt?: string;
+  source?: string;
+  syncStatus?: string;
+  entityVersion?: number;
+  deviceId?: string;
+  payload?: Record<string, unknown>;
 }
 
 export type IconName =

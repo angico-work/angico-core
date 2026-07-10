@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { listOutbox, type OutboxEntry, type OutboxStatus } from '../lib/offlineStore';
-import { syncPendingObservations } from '../lib/offlineSync';
+import { retryBlockedObservations } from '../lib/offlineSync';
 
 interface Props {
   ownerId?: string;
@@ -50,7 +50,7 @@ export default function SyncCenter({ ownerId, workspaceId, online, onClose }: Pr
     setSyncing(true);
     setError(null);
     try {
-      await syncPendingObservations({ ownerId, workspaceId });
+      await retryBlockedObservations(ownerId, workspaceId);
       await refresh();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Não foi possível iniciar a sincronização.');

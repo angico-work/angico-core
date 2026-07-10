@@ -8,7 +8,7 @@ import {
   listOutbox,
   resetOfflineDatabase
 } from './offlineStore';
-import { syncPendingObservations } from './offlineSync';
+import { retryBlockedObservations, syncPendingObservations } from './offlineSync';
 
 const session = {
   pessoaId: 7,
@@ -120,5 +120,26 @@ describe('offline synchronization', () => {
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect((await listOutbox('bia.sp'))[0].status).toBe('QUEUED');
+  });
+
+  it('retries a blocked entry only after a new authenticated session and explicit request', async () => {
+    await enqueueObservation(observation, 'ana.sp');
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(response(401, { detail: 'expired' }))
+      .mockResolvedValueOnce(response(201, { id: 41, status: 'ABERTA', createdAt: new Date().toISOString() }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await syncPendingObservations({ ownerId: 'ana.sp' });
+    expect((await listOutbox('ana.sp'))[0].status).toBe('BLOCKED');
+    expect(getSession()).toBeNull();
+
+    await expect(retryBlockedObservations('ana.sp', 'territorio-a')).rejects.toThrow('Entre novamente');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    localStorage.setItem('angico.session', JSON.stringify(session));
+    await retryBlockedObservations('ana.sp', 'territorio-a');
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect((await listOutbox('ana.sp'))[0].status).toBe('SYNCED');
   });
 });

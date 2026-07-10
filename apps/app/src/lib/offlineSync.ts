@@ -1,11 +1,12 @@
 import type { Observacao, ObservacaoInput } from '../types';
-import { apiFetch, apiUrl, getSession } from './api';
+import { apiFetch, apiUrl, getSession, isAuthenticated } from './api';
 import {
   claimOutboxEntry,
   enqueueObservation,
   getLocalObservation,
   listOutbox,
   markOutboxStatus,
+  requeueBlockedOutbox,
   type OutboxEntry,
   type OutboxStatus
 } from './offlineStore';
@@ -140,6 +141,14 @@ export async function syncPendingObservations(filter: SyncFilter = {}): Promise<
     if (!mayContinue) break;
   }
   return summary;
+}
+
+export async function retryBlockedObservations(ownerId: string, workspaceId: string): Promise<SyncSummary> {
+  if (!isAuthenticated()) {
+    throw new Error('Entre novamente antes de tentar enviar registros bloqueados.');
+  }
+  await requeueBlockedOutbox(ownerId, workspaceId);
+  return syncPendingObservations({ ownerId, workspaceId });
 }
 
 export async function captureObservation(input: ObservacaoInput): Promise<CaptureResult> {

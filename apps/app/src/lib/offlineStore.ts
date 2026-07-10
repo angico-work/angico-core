@@ -358,6 +358,13 @@ export async function markOutboxStatus(
   announceChange();
 }
 
+export async function requeueBlockedOutbox(ownerId: string, workspaceId: string): Promise<number> {
+  const blocked = (await listOutbox(ownerId, workspaceId)).filter((entry) => entry.status === 'BLOCKED');
+  const now = new Date().toISOString();
+  await Promise.all(blocked.map((entry) => markOutboxStatus(entry.id, 'QUEUED', { nextAttemptAt: now })));
+  return blocked.length;
+}
+
 export async function resetOfflineDatabase(): Promise<void> {
   if (databasePromise) {
     const db = await databasePromise;

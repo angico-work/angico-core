@@ -1,90 +1,87 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import type { AppContext } from '../components/AppShell';
 import { createEntity, getSession, listEntities } from '../lib/api';
 import { listLocalObservations } from '../lib/offlineStore';
 import AngicoIdField from '../components/AngicoIdField';
 import NewEntityModal, { type EntityType } from '../components/NewEntityModal';
+import { EmptyState, ErrorState, LoadingState } from '../components/PageFeedback';
 import { MODULE_CONFIGS, type ModuleConfig } from './moduleConfigs';
 
 type Item = Record<string, unknown>;
-
-// Geo-anchored modules use the rich modal (address search + map + creator);
-// the others keep the generic config form.
 const GEO_TYPES: Record<string, EntityType> = {
-  observacoes: 'observacao',
-  problemas: 'problema',
-  potencialidades: 'potencialidade'
+  observacoes: 'observacao', problemas: 'problema', potencialidades: 'potencialidade'
 };
 
-function CreateModal({ config, workspaceId, onClose, onCreated }: {
+const SYNC_LABEL: Record<string, string> = {
+  QUEUED: 'Salvo neste aparelho', SYNCING: 'Enviando', RETRYABLE_ERROR: 'Aguardando conexão',
+  CONFLICT: 'Conflito', BLOCKED: 'Sessão necessária', ACTION_REQUIRED: 'Correção necessária', SYNCED: 'Compartilhado'
+};
+
+function GenericCreateDialog({ config, workspaceId, onClose, onCreated }: {
   config: ModuleConfig; workspaceId: string; onClose: () => void; onCreated: () => void;
 }) {
-  const [values, setValues] = useState<Record<string, string>>(() => {
-    const init: Record<string, string> = {};
-    config.fields.forEach((f) => { init[f.name] = f.type === 'select' && f.options ? f.options[0] : ''; });
-    return init;
-  });
+  const [values, setValues] = useState<Record<string, string>>(() => Object.fromEntries(
+    config.fields.map((field) => [field.name, field.type === 'select' ? field.options?.[0] ?? '' : ''])
+  ));
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  async function submit(e: FormEvent) {
-    e.preventDefault();
+  async function submit(event: FormEvent) {
+    event.preventDefault();
     setSubmitting(true);
     setError(null);
     const body: Record<string, unknown> = { workspaceId };
-    config.fields.forEach((f) => { if (values[f.name]) body[f.name] = values[f.name]; });
+    config.fields.forEach((field) => { if (values[field.name]?.trim()) body[field.name] = values[field.name].trim(); });
     try {
       await createEntity(config.path, body);
       onCreated();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erro inesperado');
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Não foi possível salvar.');
       setSubmitting(false);
     }
   }
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-card" onClick={(e) => e.stopPropagation()}>
-        <h2 style={{ marginTop: 0 }}>{config.newLabel}</h2>
+    <div className="modal-overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+      <section className="modal-card" role="dialog" aria-modal="true" aria-labelledby="generic-create-title">
+        <header className="dialog-head"><div><span className="overline">Novo registro</span><h2 id="generic-create-title">{config.newLabel}</h2></div><button className="icon-button" type="button" aria-label="Fechar" onClick={onClose}>×</button></header>
         <form onSubmit={submit}>
-          {config.fields.map((f) => (
-            <div className="field" key={f.name}>
-              <label htmlFor={`f-${f.name}`}>{f.label}{f.required ? ' *' : ''}</label>
-              {f.type === 'angico-search' ? (
+          {config.fields.map((field) => (
+            <div className="field" key={field.name}>
+              <label htmlFor={`field-${field.name}`}>{field.label}{field.required ? ' *' : ''}</label>
+              {field.type === 'angico-search' ? (
                 <AngicoIdField
-                  id={`f-${f.name}`}
+                  id={`field-${field.name}`}
                   workspaceId={workspaceId}
-                  value={values[f.name]}
-                  placeholder={f.placeholder}
-                  onChange={(t) => setValues((v) => ({ ...v, [f.name]: t }))}
-                  onPick={(p) => setValues((v) => ({ ...v, angicoId: p.angicoId ?? '', nome: p.nome, papel: p.papel ?? v.papel }))}
+                  value={values[field.name]}
+                  placeholder={field.placeholder}
+                  onChange={(next) => setValues((current) => ({ ...current, [field.name]: next }))}
+                  onPick={(person) => setValues((current) => ({ ...current, angicoId: person.angicoId ?? '', nome: person.nome, papel: person.papel ?? current.papel }))}
                 />
-              ) : f.type === 'textarea' ? (
-                <textarea id={`f-${f.name}`} rows={3} value={values[f.name]} placeholder={f.placeholder}
-                  onChange={(e) => setValues((v) => ({ ...v, [f.name]: e.target.value }))} />
-              ) : f.type === 'select' ? (
-                <select id={`f-${f.name}`} value={values[f.name]}
-                  onChange={(e) => setValues((v) => ({ ...v, [f.name]: e.target.value }))}>
-                  {f.options!.map((o) => <option key={o} value={o}>{o}</option>)}
+              ) : field.type === 'textarea' ? (
+                <textarea id={`field-${field.name}`} rows={4} value={values[field.name]} placeholder={field.placeholder} onChange={(event) => setValues((current) => ({ ...current, [field.name]: event.target.value }))} />
+              ) : field.type === 'select' ? (
+                <select id={`field-${field.name}`} value={values[field.name]} onChange={(event) => setValues((current) => ({ ...current, [field.name]: event.target.value }))}>
+                  {field.options?.map((option) => <option key={option}>{option}</option>)}
                 </select>
               ) : (
-                <input id={`f-${f.name}`} value={values[f.name]} placeholder={f.placeholder} required={f.required}
-                  onChange={(e) => setValues((v) => ({ ...v, [f.name]: e.target.value }))} />
+                <input id={`field-${field.name}`} value={values[field.name]} placeholder={field.placeholder} required={field.required} onChange={(event) => setValues((current) => ({ ...current, [field.name]: event.target.value }))} />
               )}
             </div>
           ))}
-          {error && <div style={{ color: '#dc2626', fontSize: 14 }}>{error}</div>}
-          <div style={{ display: 'flex', gap: 12, marginTop: 8 }}>
-            <button type="button" className="ghost-button" onClick={onClose} disabled={submitting}>Cancelar</button>
-            <button type="submit" className="primary-button" disabled={submitting}>
-              {submitting ? 'Salvando...' : 'Salvar'}
-            </button>
-          </div>
+          {error && <div className="form-error" role="alert">{error}</div>}
+          <footer className="dialog-actions"><button type="button" className="ghost-button" onClick={onClose}>Cancelar</button><button type="submit" className="primary-button" disabled={submitting}>{submitting ? 'Salvando…' : 'Salvar registro'}</button></footer>
         </form>
-      </div>
+      </section>
     </div>
   );
+}
+
+function formatDate(item: Item): string | null {
+  const value = item.createdAt ?? item.occurredAt;
+  if (typeof value !== 'string') return null;
+  return new Date(value).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
 }
 
 export default function ModulePage({ configKey }: { configKey: string }) {
@@ -92,83 +89,78 @@ export default function ModulePage({ configKey }: { configKey: string }) {
   const config = MODULE_CONFIGS[configKey];
   const [items, setItems] = useState<Item[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
 
-  function refresh() {
+  const refresh = useCallback(async () => {
     setLoading(true);
-    void listEntities<Item>(config.path, workspaceId).then(async (data) => {
-      if (configKey !== 'observacoes') return data;
-      const session = getSession();
-      const ownerId = session?.angicoId || (session ? `pessoa-${session.pessoaId}` : undefined);
-      if (!ownerId) return data;
-      const local = await listLocalObservations(ownerId, workspaceId);
-      const pending = local
-        .filter((record) => record.syncStatus !== 'SYNCED')
-        .map<Item>((record) => ({
-          ...record.data,
-          id: `local-${record.clientMutationId}`,
-          status: record.syncStatus,
-          syncStatus: record.syncStatus
+    setError(null);
+    let localPending: Item[] = [];
+    try {
+      if (configKey === 'observacoes') {
+        const session = getSession();
+        const ownerId = session?.angicoId || (session ? `pessoa-${session.pessoaId}` : undefined);
+        const local = ownerId ? await listLocalObservations(ownerId, workspaceId) : [];
+        localPending = local.filter((record) => record.syncStatus !== 'SYNCED').map<Item>((record) => ({
+          ...record.data, localKey: record.clientMutationId, status: record.syncStatus, syncStatus: record.syncStatus
         }));
-      return [...pending, ...data];
-    }).then((data) => {
-      setItems(data);
+      }
+      const remote = await listEntities<Item>(config.path, workspaceId);
+      if (configKey !== 'observacoes') {
+        setItems(remote);
+      } else {
+        setItems([...localPending, ...remote]);
+      }
+    } catch (caught) {
+      setItems(localPending);
+      setError(caught instanceof Error ? caught.message : 'Não foi possível carregar os registros.');
+    } finally {
       setLoading(false);
-    });
-  }
-  useEffect(refresh, [config.path, workspaceId]);
+    }
+  }, [config.path, configKey, workspaceId]);
+
+  useEffect(() => { void refresh(); }, [refresh]);
   useEffect(() => {
-    window.addEventListener('angico:sync-state', refresh);
-    return () => window.removeEventListener('angico:sync-state', refresh);
-  });
+    const handleSync = () => { void refresh(); };
+    window.addEventListener('angico:sync-state', handleSync);
+    return () => window.removeEventListener('angico:sync-state', handleSync);
+  }, [refresh]);
 
   return (
-    <div className="page">
-      <div className="page-head">
-        <div>
-          <h1>{config.title}</h1>
-          <p>{config.subtitle}</p>
-        </div>
-        <button className="primary-button" onClick={() => setShowCreate(true)}>＋ {config.newLabel}</button>
-      </div>
+    <div className="page module-page">
+      <header className="page-head">
+        <div><span className="overline">Memória operacional</span><h1>{config.title}</h1><p>{config.subtitle}</p></div>
+        <button className="primary-button" onClick={() => setShowCreate(true)}>{config.newLabel}</button>
+      </header>
 
-      {loading ? (
-        <p className="muted">Carregando…</p>
-      ) : items.length === 0 ? (
-        <div className="empty-state">
-          <p>Nenhum registro ainda.</p>
-          <button className="secondary-button" onClick={() => setShowCreate(true)}>{config.newLabel}</button>
-        </div>
-      ) : (
-        <div className="entity-grid">
-          {items.map((item) => (
-            <article className="entity-card" key={String(item.id)} style={{ borderLeftColor: config.accent }}>
-              <div className="entity-card-head">
-                <strong>{config.primary(item)}</strong>
-                {config.badge?.(item) && <span className="entity-badge" style={{ background: config.accent }}>{config.badge(item)}</span>}
-              </div>
-              {config.meta(item).map((m, idx) => <span className="entity-meta" key={idx}>{m}</span>)}
-              <span className="entity-id">#{String(item.id)}</span>
-            </article>
-          ))}
-        </div>
+      {loading ? <LoadingState /> : (
+        <>
+          {error && <ErrorState title={items.length ? 'Mostrando dados salvos neste aparelho' : undefined} message={error} onRetry={() => void refresh()} />}
+          {!error && items.length === 0 && <EmptyState title={config.emptyTitle} message={config.emptyMessage} action={<button className="secondary-button" onClick={() => setShowCreate(true)}>{config.newLabel}</button>} />}
+          {items.length > 0 && <section className="record-sheet">
+          <header className="record-sheet-head"><span>{items.length} {items.length === 1 ? 'registro' : 'registros'}</span><span>Mais recentes primeiro</span></header>
+          <div className="record-list">
+            {items.map((item, index) => {
+              const badge = config.badge?.(item);
+              const status = String(item.syncStatus ?? item.status ?? '');
+              const date = formatDate(item);
+              return (
+                <article className="record-row" key={String(item.localKey ?? item.id ?? index)} style={{ '--record-accent': config.accent } as React.CSSProperties}>
+                  <span className="record-mark" aria-hidden="true" />
+                  <div className="record-main"><h2>{config.primary(item) || `${config.singular} sem título`}</h2><div className="record-meta">{config.meta(item).map((entry) => <span key={entry}>{entry}</span>)}</div></div>
+                  <div className="record-provenance">{badge && <strong>{SYNC_LABEL[badge] ?? badge}</strong>}{status && status !== badge && <span>{SYNC_LABEL[status] ?? status}</span>}{date && <time dateTime={String(item.createdAt ?? item.occurredAt)}>{date}</time>}</div>
+                </article>
+              );
+            })}
+          </div>
+          </section>}
+        </>
       )}
 
       {showCreate && (GEO_TYPES[configKey] ? (
-        <NewEntityModal
-          workspaceId={workspaceId}
-          initialType={GEO_TYPES[configKey]}
-          lockType
-          onClose={() => setShowCreate(false)}
-          onCreated={() => { setShowCreate(false); refresh(); }}
-        />
+        <NewEntityModal workspaceId={workspaceId} initialType={GEO_TYPES[configKey]} lockType onClose={() => setShowCreate(false)} onCreated={() => { setShowCreate(false); void refresh(); }} />
       ) : (
-        <CreateModal
-          config={config}
-          workspaceId={workspaceId}
-          onClose={() => setShowCreate(false)}
-          onCreated={() => { setShowCreate(false); refresh(); }}
-        />
+        <GenericCreateDialog config={config} workspaceId={workspaceId} onClose={() => setShowCreate(false)} onCreated={() => { setShowCreate(false); void refresh(); }} />
       ))}
     </div>
   );
