@@ -100,25 +100,10 @@ a {
   text-decoration: none;
 }
 
-.wordmark-mark {
-  position: relative;
-  display: inline-block;
-  width: 22px;
-  height: 22px;
-  border: 1px solid currentColor;
-  border-radius: 50% 50% 50% 8px;
-  transform: rotate(-45deg);
-}
-
-.wordmark-mark::after {
-  position: absolute;
-  right: 4px;
-  bottom: 4px;
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: var(--folha);
-  content: "";
+.wordmark-symbol {
+  width: 23px;
+  height: 27px;
+  object-fit: contain;
 }
 
 .site-header nav {
@@ -326,6 +311,11 @@ form button:hover {
   color: var(--fibra);
 }
 
+.trace-section a:focus-visible,
+.site-footer a:focus-visible {
+  outline-color: var(--fibra);
+}
+
 .trace-inner {
   padding-block: clamp(72px, 9vw, 126px);
 }
@@ -435,7 +425,7 @@ form button:hover {
 .trace-list a:focus-visible .trace-node,
 .trace-list li:target .trace-node {
   background: var(--folha);
-  color: var(--mata);
+  color: var(--grafite);
 }
 
 .trace-participants {
@@ -574,6 +564,10 @@ form button:hover {
   background: color-mix(in srgb, var(--agua) 8%, var(--fibra));
 }
 
+.public-boundary .register-code {
+  color: var(--mata);
+}
+
 .boundary-inner {
   display: grid;
   grid-template-columns: minmax(130px, 0.3fr) minmax(280px, 0.8fr) minmax(260px, 0.65fr);
@@ -618,7 +612,7 @@ label {
 input,
 textarea {
   width: 100%;
-  border: 1px solid color-mix(in srgb, var(--mata) 52%, transparent);
+  border: 1px solid var(--agua);
   border-radius: 0;
   background: transparent;
   padding: 12px 14px;
@@ -650,7 +644,8 @@ form button {
 }
 
 .site-footer {
-  border-top: 1px solid color-mix(in srgb, var(--mata) 24%, transparent);
+  background: var(--mata);
+  color: var(--fibra);
 }
 
 .footer-inner {
@@ -659,8 +654,21 @@ form button {
   gap: 34px;
   align-items: center;
   min-height: 116px;
-  color: var(--mata);
+  color: var(--fibra);
   font-size: 0.9rem;
+}
+
+.footer-wordmark {
+  display: inline-flex;
+  width: 126px;
+  min-height: 44px;
+  align-items: center;
+}
+
+.footer-wordmark img {
+  display: block;
+  width: 126px;
+  height: auto;
 }
 
 .footer-inner p {
@@ -841,9 +849,9 @@ form button {
     font-size: 1.15rem;
   }
 
-  .wordmark-mark {
-    width: 19px;
-    height: 19px;
+  .wordmark-symbol {
+    width: 20px;
+    height: 24px;
   }
 
   h1 {

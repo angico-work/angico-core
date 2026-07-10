@@ -44,7 +44,7 @@ export default function Site({ appUrl, contactApiUrl }: SiteProps) {
       <header className="site-header">
         <div className="site-frame header-inner">
           <a className="wordmark" href="#inicio" aria-label="Angico, início">
-            <span className="wordmark-mark" aria-hidden="true" />
+            <img className="wordmark-symbol" src="/angico-leaf-ink.png" alt="" />
             <span>Angico</span>
           </a>
 
@@ -172,9 +172,8 @@ export default function Site({ appUrl, contactApiUrl }: SiteProps) {
 
       <footer className="site-footer">
         <div className="site-frame footer-inner">
-          <a className="wordmark" href="#inicio" aria-label="Angico, voltar ao início">
-            <span className="wordmark-mark" aria-hidden="true" />
-            <span>Angico</span>
+          <a className="footer-wordmark" href="#inicio" aria-label="Angico, voltar ao início">
+            <img src="/angico-logo-white.png" alt="" />
           </a>
           <p>Memória coletiva para ações que precisam continuar.</p>
           <a href="#conteudo">Voltar ao início</a>
