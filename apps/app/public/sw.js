@@ -1,16 +1,5 @@
-/* Angico service worker — offline support via runtime caching.
- *
- * Strategy:
- *  - SPA navigations: network-first, falling back to the cached app shell so the
- *    app still opens with no connection.
- *  - Same-origin static assets (JS/CSS/fonts/images): stale-while-revalidate, so
- *    after the first online visit they load instantly and work offline.
- *  - Same-origin API GETs (/api/...): network-first with a cache fallback, so the
- *    last território data seen online is still rendered offline.
- *
- * Bump CACHE to invalidate everything on the next deploy.
- */
-const CACHE = 'angico-cache-v2';
+/* Static app-shell cache. Authenticated API responses are never cached here. */
+const CACHE = 'angico-cache-v3';
 const APP_SHELL = ['/', '/index.html', '/manifest.webmanifest', '/angico-icone-main.png', '/angico-leaf.png'];
 
 self.addEventListener('install', (event) => {
@@ -49,19 +38,9 @@ self.addEventListener('fetch', (event) => {
 
   if (url.origin !== self.location.origin) return;
 
-  // API reads → network-first, fall back to the last cached response.
+  // Private API responses cannot be shared safely across browser users.
   if (url.pathname.startsWith('/api/')) {
-    event.respondWith(
-      fetch(request)
-        .then((response) => {
-          if (response && response.status === 200) {
-            const copy = response.clone();
-            caches.open(CACHE).then((cache) => cache.put(request, copy));
-          }
-          return response;
-        })
-        .catch(() => caches.match(request))
-    );
+    event.respondWith(fetch(request, { cache: 'no-store' }));
     return;
   }
 

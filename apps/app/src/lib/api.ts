@@ -20,47 +20,48 @@ export function apiUrl(path: string): string {
 export const USE_DEMO_DATA = import.meta.env.DEV || import.meta.env.VITE_USE_DEMO_DATA === 'true';
 
 // --- Auth session -----------------------------------------------------------
-// The auth slice ported from the dev branch issues an opaque bearer token on
-// login/register. We keep the full session in localStorage so a refresh stays
-// logged in, and attach the token to every API call.
 
 const SESSION_KEY = 'angico.session';
 
 export interface AuthSession {
-  token: string | null;
   pessoaId: number;
-  workspaceId: string;
   nome: string;
   email: string | null;
   angicoId: string | null;
   papel: string | null;
+  workspaceId: string | null;
+  expiresAt: string;
+  csrfToken: string;
 }
 
 export function getSession(): AuthSession | null {
   try {
     const raw = localStorage.getItem(SESSION_KEY);
-    return raw ? (JSON.parse(raw) as AuthSession) : null;
+    if (!raw) return null;
+    const session = JSON.parse(raw) as AuthSession & { token?: unknown };
+    if (Object.prototype.hasOwnProperty.call(session, 'token')) {
+      clearSession();
+      return null;
+    }
+    return session;
   } catch {
     return null;
   }
 }
 
-export function getToken(): string | null {
-  return getSession()?.token ?? null;
-}
-
 export function isAuthenticated(): boolean {
-  return Boolean(getToken());
+  const session = getSession();
+  return Boolean(session && Date.parse(session.expiresAt) > Date.now());
 }
 
 function saveSession(session: AuthSession): AuthSession {
-  localStorage.setItem(SESSION_KEY, JSON.stringify(session));
+  localStorage.setItem(SESSION_KEY, JSON.stringify(session, (key, value) => key === 'token' ? undefined : value));
   return session;
 }
 
-function clearSession(): void {
+export function clearSession(): void {
   localStorage.removeItem(SESSION_KEY);
-  localStorage.removeItem('angico_session'); // legacy key from the demo login
+  localStorage.removeItem('angico_session');
 }
 
 // Switches the active workspace and persists it on the session, so a refresh
@@ -71,10 +72,27 @@ export function setSessionWorkspace(slug: string): void {
   if (session) saveSession({ ...session, workspaceId: slug });
 }
 
-// Adds the bearer token when present; merges any extra headers (e.g. JSON).
-function authHeaders(extra: Record<string, string> = {}): Record<string, string> {
-  const token = getToken();
-  return token ? { ...extra, Authorization: `Bearer ${token}` } : extra;
+const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
+
+export async function apiFetch(input: RequestInfo | URL, init: RequestInit = {}): Promise<Response> {
+  const method = (init.method ?? 'GET').toUpperCase();
+  const headers = { ...(init.headers as Record<string, string> | undefined) };
+  const csrfToken = getSession()?.csrfToken;
+  if (!SAFE_METHODS.has(method) && csrfToken) {
+    headers['X-CSRF-Token'] = csrfToken;
+  }
+  const response = await fetch(input, { ...init, credentials: 'include', headers });
+  if (response.status === 401) {
+    clearSession();
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new Event('angico:unauthorized'));
+    }
+  }
+  return response;
+}
+
+function requestHeaders(extra: Record<string, string> = {}): Record<string, string> {
+  return extra;
 }
 
 async function readError(response: Response, fallback: string): Promise<string> {
@@ -87,7 +105,7 @@ async function readError(response: Response, fallback: string): Promise<string> 
 }
 
 export async function login(email: string, password: string): Promise<AuthSession> {
-  const response = await fetch(apiUrl('/api/auth/login'), {
+  const response = await apiFetch(apiUrl('/api/auth/login'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email, password })
@@ -106,7 +124,7 @@ export interface RegisterInput {
 }
 
 export async function register(input: RegisterInput): Promise<AuthSession> {
-  const response = await fetch(apiUrl('/api/auth/register'), {
+  const response = await apiFetch(apiUrl('/api/auth/register'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(input)
@@ -119,11 +137,18 @@ export async function register(input: RegisterInput): Promise<AuthSession> {
 
 export async function logout(): Promise<void> {
   try {
-    await fetch(apiUrl('/api/auth/logout'), { method: 'POST', headers: authHeaders() });
+    await apiFetch(apiUrl('/api/auth/logout'), { method: 'POST' });
   } catch {
     // Logout is best-effort; the local session is cleared regardless.
   }
   clearSession();
+}
+
+export async function revalidateSession(): Promise<AuthSession | null> {
+  if (!getSession()) return null;
+  const response = await apiFetch(apiUrl('/api/auth/me'));
+  if (!response.ok) return null;
+  return saveSession((await response.json()) as AuthSession);
 }
 
 // --- Territory data ---------------------------------------------------------
@@ -133,8 +158,8 @@ export async function logout(): Promise<void> {
 // back to the demo sample so the UI stays explorable without a backend.
 export async function loadDashboard(workspaceId = DEFAULT_WORKSPACE): Promise<DashboardData> {
   try {
-    const response = await fetch(apiUrl(`/api/glimpse/dashboard?workspaceId=${encodeURIComponent(workspaceId)}`), {
-      headers: authHeaders()
+    const response = await apiFetch(apiUrl(`/api/glimpse/dashboard?workspaceId=${encodeURIComponent(workspaceId)}`), {
+      headers: requestHeaders()
     });
     if (!response.ok) {
       throw new Error('API indisponível');
@@ -147,9 +172,9 @@ export async function loadDashboard(workspaceId = DEFAULT_WORKSPACE): Promise<Da
 
 // Registers a new observação. Throws on failure so the UI can surface it.
 export async function createObservacao(input: ObservacaoInput): Promise<Observacao> {
-  const response = await fetch(apiUrl('/api/observacoes'), {
+  const response = await apiFetch(apiUrl('/api/observacoes'), {
     method: 'POST',
-    headers: authHeaders({ 'Content-Type': 'application/json' }),
+    headers: requestHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify(input)
   });
   if (!response.ok) {
@@ -160,8 +185,8 @@ export async function createObservacao(input: ObservacaoInput): Promise<Observac
 
 export async function loadMapPoints(workspaceId = DEFAULT_WORKSPACE): Promise<MapPoint[]> {
   try {
-    const r = await fetch(apiUrl(`/api/glimpse/map?workspaceId=${encodeURIComponent(workspaceId)}`), {
-      headers: authHeaders()
+    const r = await apiFetch(apiUrl(`/api/glimpse/map?workspaceId=${encodeURIComponent(workspaceId)}`), {
+      headers: requestHeaders()
     });
     if (!r.ok) throw new Error();
     return (await r.json()) as MapPoint[];
@@ -171,26 +196,21 @@ export async function loadMapPoints(workspaceId = DEFAULT_WORKSPACE): Promise<Ma
 }
 
 // --- Workspaces -------------------------------------------------------------
-// Named partitions. The slug scopes every module's data; the nome is the label
-// shown in the switcher. Falls back to the shipped default when the API is
-// unreachable, so the shell still renders in dev/offline.
-const DEFAULT_WORKSPACE_LABEL = 'Coletivo Jardim Novo';
 
 export async function listWorkspaces(): Promise<Workspace[]> {
   try {
-    const r = await fetch(apiUrl('/api/workspaces'), { headers: authHeaders() });
+    const r = await apiFetch(apiUrl('/api/workspaces'), { headers: requestHeaders() });
     if (!r.ok) throw new Error();
-    const list = (await r.json()) as Workspace[];
-    return list.length ? list : [{ slug: DEFAULT_WORKSPACE, nome: DEFAULT_WORKSPACE_LABEL }];
+    return (await r.json()) as Workspace[];
   } catch {
-    return [{ slug: DEFAULT_WORKSPACE, nome: DEFAULT_WORKSPACE_LABEL }];
+    return [];
   }
 }
 
 export async function createWorkspace(nome: string, criadoPor?: string): Promise<Workspace> {
-  const r = await fetch(apiUrl('/api/workspaces'), {
+  const r = await apiFetch(apiUrl('/api/workspaces'), {
     method: 'POST',
-    headers: authHeaders({ 'Content-Type': 'application/json' }),
+    headers: requestHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify({ nome: nome.trim(), criadoPor })
   });
   if (!r.ok) throw new Error(await readError(r, 'Não foi possível criar o workspace.'));
@@ -201,9 +221,9 @@ export async function createWorkspace(nome: string, criadoPor?: string): Promise
 // re-creating the same name restores the view. The home workspace is protected
 // server-side (HTTP 400).
 export async function deleteWorkspace(slug: string): Promise<void> {
-  const r = await fetch(apiUrl(`/api/workspaces/${encodeURIComponent(slug)}`), {
+  const r = await apiFetch(apiUrl(`/api/workspaces/${encodeURIComponent(slug)}`), {
     method: 'DELETE',
-    headers: authHeaders()
+    headers: requestHeaders()
   });
   if (!r.ok && r.status !== 404) {
     throw new Error(await readError(r, 'Não foi possível remover o workspace.'));
@@ -213,7 +233,7 @@ export async function deleteWorkspace(slug: string): Promise<void> {
 // --- Workspace members ------------------------------------------------------
 export async function listMembers(slug: string): Promise<WorkspaceMember[]> {
   try {
-    const r = await fetch(apiUrl(`/api/workspaces/${encodeURIComponent(slug)}/members`), { headers: authHeaders() });
+    const r = await apiFetch(apiUrl(`/api/workspaces/${encodeURIComponent(slug)}/members`), { headers: requestHeaders() });
     if (!r.ok) return [];
     return (await r.json()) as WorkspaceMember[];
   } catch {
@@ -228,9 +248,9 @@ export interface AddMemberInput {
 }
 
 export async function addMember(slug: string, input: AddMemberInput): Promise<WorkspaceMember> {
-  const r = await fetch(apiUrl(`/api/workspaces/${encodeURIComponent(slug)}/members`), {
+  const r = await apiFetch(apiUrl(`/api/workspaces/${encodeURIComponent(slug)}/members`), {
     method: 'POST',
-    headers: authHeaders({ 'Content-Type': 'application/json' }),
+    headers: requestHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify(input)
   });
   if (!r.ok) throw new Error(await readError(r, 'Não foi possível adicionar o membro.'));
@@ -238,9 +258,9 @@ export async function addMember(slug: string, input: AddMemberInput): Promise<Wo
 }
 
 export async function removeMember(slug: string, memberId: number): Promise<void> {
-  const r = await fetch(apiUrl(`/api/workspaces/${encodeURIComponent(slug)}/members/${memberId}`), {
+  const r = await apiFetch(apiUrl(`/api/workspaces/${encodeURIComponent(slug)}/members/${memberId}`), {
     method: 'DELETE',
-    headers: authHeaders()
+    headers: requestHeaders()
   });
   if (!r.ok && r.status !== 404) {
     throw new Error(await readError(r, 'Não foi possível remover o membro.'));
@@ -254,8 +274,8 @@ export async function searchGeocoding(query: string, signal?: AbortSignal): Prom
   const q = query.trim();
   if (q.length < 3) return [];
   try {
-    const r = await fetch(apiUrl(`/api/geocoding/search?q=${encodeURIComponent(q)}`), {
-      headers: authHeaders(),
+    const r = await apiFetch(apiUrl(`/api/geocoding/search?q=${encodeURIComponent(q)}`), {
+      headers: requestHeaders(),
       signal
     });
     if (!r.ok) return [];
@@ -288,8 +308,8 @@ export async function resolveCoords(r: GeoResult, signal?: AbortSignal): Promise
 
 export async function reverseGeocode(lat: number, lng: number, signal?: AbortSignal): Promise<GeoResult | null> {
   try {
-    const r = await fetch(apiUrl(`/api/geocoding/reverse?lat=${lat}&lng=${lng}`), {
-      headers: authHeaders(),
+    const r = await apiFetch(apiUrl(`/api/geocoding/reverse?lat=${lat}&lng=${lng}`), {
+      headers: requestHeaders(),
       signal
     });
     if (!r.ok) return null;
@@ -305,9 +325,9 @@ export async function searchPessoas(workspaceId: string, q: string, signal?: Abo
   const query = q.trim();
   if (query.length < 2) return [];
   try {
-    const r = await fetch(
+    const r = await apiFetch(
       apiUrl(`/api/pessoas/search?workspaceId=${encodeURIComponent(workspaceId)}&q=${encodeURIComponent(query)}`),
-      { headers: authHeaders(), signal }
+      { headers: requestHeaders(), signal }
     );
     if (!r.ok) return [];
     return (await r.json()) as PessoaHit[];
@@ -318,8 +338,8 @@ export async function searchPessoas(workspaceId: string, q: string, signal?: Abo
 
 export async function loadMemoria(workspaceId = DEFAULT_WORKSPACE): Promise<MemoriaEvent[]> {
   try {
-    const r = await fetch(apiUrl(`/api/glimpse/memoria?workspaceId=${encodeURIComponent(workspaceId)}`), {
-      headers: authHeaders()
+    const r = await apiFetch(apiUrl(`/api/glimpse/memoria?workspaceId=${encodeURIComponent(workspaceId)}`), {
+      headers: requestHeaders()
     });
     if (!r.ok) throw new Error();
     return (await r.json()) as MemoriaEvent[];
@@ -333,8 +353,8 @@ export async function listEntities<T = Record<string, unknown>>(
   path: string, workspaceId = DEFAULT_WORKSPACE
 ): Promise<T[]> {
   try {
-    const r = await fetch(apiUrl(`${path}?workspaceId=${encodeURIComponent(workspaceId)}`), {
-      headers: authHeaders()
+    const r = await apiFetch(apiUrl(`${path}?workspaceId=${encodeURIComponent(workspaceId)}`), {
+      headers: requestHeaders()
     });
     if (!r.ok) throw new Error();
     return (await r.json()) as T[];
@@ -346,9 +366,9 @@ export async function listEntities<T = Record<string, unknown>>(
 export async function createEntity<T = Record<string, unknown>>(
   path: string, body: Record<string, unknown>
 ): Promise<T> {
-  const r = await fetch(apiUrl(path), {
+  const r = await apiFetch(apiUrl(path), {
     method: 'POST',
-    headers: authHeaders({ 'Content-Type': 'application/json' }),
+    headers: requestHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify(body)
   });
   if (!r.ok) {
@@ -360,7 +380,7 @@ export async function createEntity<T = Record<string, unknown>>(
 // --- Mensagens & grupos -----------------------------------------------------
 export async function listConversas(workspaceId = DEFAULT_WORKSPACE): Promise<Conversa[]> {
   try {
-    const r = await fetch(apiUrl(`/api/mensagens/conversas?workspaceId=${encodeURIComponent(workspaceId)}`), { headers: authHeaders() });
+    const r = await apiFetch(apiUrl(`/api/mensagens/conversas?workspaceId=${encodeURIComponent(workspaceId)}`), { headers: requestHeaders() });
     if (!r.ok) return [];
     return (await r.json()) as Conversa[];
   } catch {
@@ -370,7 +390,7 @@ export async function listConversas(workspaceId = DEFAULT_WORKSPACE): Promise<Co
 
 export async function listMensagens(conversaId: number): Promise<Mensagem[]> {
   try {
-    const r = await fetch(apiUrl(`/api/mensagens/conversas/${conversaId}/mensagens`), { headers: authHeaders() });
+    const r = await apiFetch(apiUrl(`/api/mensagens/conversas/${conversaId}/mensagens`), { headers: requestHeaders() });
     if (!r.ok) return [];
     return (await r.json()) as Mensagem[];
   } catch {
@@ -384,8 +404,8 @@ export async function sendMensagem(conversaId: number, corpo: string, attachment
   const form = new FormData();
   if (corpo.trim()) form.append('corpo', corpo.trim());
   attachments.forEach((file) => form.append('attachments', file));
-  const r = await fetch(apiUrl(`/api/mensagens/conversas/${conversaId}/mensagens`), {
-    method: 'POST', headers: authHeaders(), body: form
+  const r = await apiFetch(apiUrl(`/api/mensagens/conversas/${conversaId}/mensagens`), {
+    method: 'POST', headers: requestHeaders(), body: form
   });
   if (!r.ok) throw new Error(await readError(r, 'Não foi possível enviar a mensagem.'));
   return (await r.json()) as Mensagem;
@@ -399,8 +419,8 @@ export interface CreateConversaInput {
 }
 
 export async function createConversa(input: CreateConversaInput): Promise<Conversa> {
-  const r = await fetch(apiUrl('/api/mensagens/conversas'), {
-    method: 'POST', headers: authHeaders({ 'Content-Type': 'application/json' }), body: JSON.stringify(input)
+  const r = await apiFetch(apiUrl('/api/mensagens/conversas'), {
+    method: 'POST', headers: requestHeaders({ 'Content-Type': 'application/json' }), body: JSON.stringify(input)
   });
   if (!r.ok) throw new Error(await readError(r, 'Não foi possível criar a conversa.'));
   return (await r.json()) as Conversa;
@@ -408,7 +428,7 @@ export async function createConversa(input: CreateConversaInput): Promise<Conver
 
 export async function listTerritorios(workspaceId = DEFAULT_WORKSPACE): Promise<Territorio[]> {
   try {
-    const r = await fetch(apiUrl(`/api/territorios?workspaceId=${encodeURIComponent(workspaceId)}`), { headers: authHeaders() });
+    const r = await apiFetch(apiUrl(`/api/territorios?workspaceId=${encodeURIComponent(workspaceId)}`), { headers: requestHeaders() });
     if (!r.ok) return [];
     return (await r.json()) as Territorio[];
   } catch {
@@ -427,9 +447,9 @@ export async function ensureTerritorio(workspaceId = DEFAULT_WORKSPACE): Promise
   const existing = await listTerritorios(workspaceId);
   if (existing.length > 0) return existing[0].id;
   try {
-    const r = await fetch(apiUrl('/api/territorios'), {
+    const r = await apiFetch(apiUrl('/api/territorios'), {
       method: 'POST',
-      headers: authHeaders({ 'Content-Type': 'application/json' }),
+      headers: requestHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({ workspaceId, nome: 'Território', tipo: 'BAIRRO', pais: 'Brasil' })
     });
     if (!r.ok) return null;
@@ -446,7 +466,7 @@ export async function getProfile(workspaceId = DEFAULT_WORKSPACE): Promise<Pesso
   const session = getSession();
   if (!session) return null;
   try {
-    const r = await fetch(apiUrl(`/api/pessoas?workspaceId=${encodeURIComponent(workspaceId)}`), { headers: authHeaders() });
+    const r = await apiFetch(apiUrl(`/api/pessoas?workspaceId=${encodeURIComponent(workspaceId)}`), { headers: requestHeaders() });
     if (!r.ok) return null;
     const list = (await r.json()) as PessoaHit[];
     return list.find((p) => p.id === session.pessoaId) ?? null;
@@ -462,8 +482,8 @@ export interface ProfileUpdate {
 }
 
 export async function updateProfile(input: ProfileUpdate): Promise<PessoaHit> {
-  const r = await fetch(apiUrl('/api/pessoas/me'), {
-    method: 'PUT', headers: authHeaders({ 'Content-Type': 'application/json' }), body: JSON.stringify(input)
+  const r = await apiFetch(apiUrl('/api/pessoas/me'), {
+    method: 'PUT', headers: requestHeaders({ 'Content-Type': 'application/json' }), body: JSON.stringify(input)
   });
   if (!r.ok) throw new Error(await readError(r, 'Não foi possível salvar o perfil.'));
   const updated = (await r.json()) as PessoaHit;

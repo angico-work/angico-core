@@ -26,7 +26,7 @@ export default function LoginPage() {
     setLoading(true);
     try {
       await login(email.trim(), password);
-      navigate('/app');
+      navigate('/app', { replace: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Não foi possível entrar.');
     } finally {

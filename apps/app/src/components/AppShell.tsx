@@ -5,7 +5,7 @@ import Topbar from './Topbar';
 import ProfileModal from './ProfileModal';
 import {
   DEFAULT_WORKSPACE, createWorkspace, deleteWorkspace, getProfile, getSession,
-  isAuthenticated, listWorkspaces, logout, setSessionWorkspace
+  isAuthenticated, listWorkspaces, logout, revalidateSession, setSessionWorkspace
 } from '../lib/api';
 import type { PessoaHit, Workspace } from '../types';
 
@@ -29,18 +29,35 @@ export default function AppShell() {
   const [profile, setProfile] = useState<PessoaHit | null>(null);
   const [showProfile, setShowProfile] = useState(false);
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
+  const [authStatus, setAuthStatus] = useState<'checking' | 'authenticated' | 'anonymous'>(
+    isAuthenticated() ? 'checking' : 'anonymous'
+  );
   const session = getSession();
   const [activeSlug, setActiveSlug] = useState(session?.workspaceId ?? DEFAULT_WORKSPACE);
 
-  // Load the named workspace list once. If the session points at a workspace
-  // that no longer exists, fall back to the first available one.
   useEffect(() => {
+    let active = true;
+    const unauthorized = () => setAuthStatus('anonymous');
+    window.addEventListener('angico:unauthorized', unauthorized);
+    if (isAuthenticated()) {
+      revalidateSession().then((validated) => {
+        if (active) setAuthStatus(validated ? 'authenticated' : 'anonymous');
+      }).catch(() => {
+        if (active) setAuthStatus('anonymous');
+      });
+    }
+    return () => {
+      active = false;
+      window.removeEventListener('angico:unauthorized', unauthorized);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (authStatus !== 'authenticated') return;
     let active = true;
     listWorkspaces().then((list) => {
       if (!active) return;
       setWorkspaces(list);
-      // If the session points at a workspace that no longer exists, prefer the
-      // home workspace, then fall back to the first available one.
       if (list.length && !list.some((w) => w.slug === activeSlug)) {
         const fallback = list.find((w) => w.slug === DEFAULT_WORKSPACE)?.slug ?? list[0].slug;
         setActiveSlug(fallback);
@@ -49,23 +66,27 @@ export default function AppShell() {
     });
     return () => { active = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [authStatus]);
 
   // Resolve the current member's full record within the active workspace.
   useEffect(() => {
+    if (authStatus !== 'authenticated') return;
     let active = true;
     getProfile(activeSlug).then((p) => { if (active) setProfile(p); });
     return () => { active = false; };
-  }, [activeSlug]);
+  }, [activeSlug, authStatus]);
 
-  // Auth guard: the core app is only reachable with a valid session.
-  if (!isAuthenticated()) {
+  if (authStatus === 'checking') {
+    return <main aria-busy="true">Validando sessão…</main>;
+  }
+  if (authStatus === 'anonymous') {
     return <Navigate to="/login" replace />;
   }
 
   async function handleLogout() {
     await logout();
-    navigate('/login');
+    setAuthStatus('anonymous');
+    navigate('/login', { replace: true });
   }
 
   function switchWorkspace(slug: string) {
