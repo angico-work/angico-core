@@ -5,11 +5,16 @@
   "type": "module",
   "scripts": {
     "dev": "vite --host 0.0.0.0 --port 5175",
-    "build": "tsc --noEmit && vite build",
+    "typecheck": "tsc --noEmit",
+    "check": "npm run typecheck && npm test -- --run",
+    "build": "npm run typecheck && vite build",
     "preview": "vite preview --host 0.0.0.0 --port 4175",
     "test": "vitest"
   },
   "dependencies": {
+    "@fontsource/outfit": "^5.2.8",
+    "@fontsource/source-sans-3": "^5.2.8",
+    "@fontsource/spline-sans-mono": "^5.2.8",
     "react": "^19.2.7",
     "react-dom": "^19.2.7"
   },

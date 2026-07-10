@@ -1,6 +1,8 @@
-# Angico Site
+# Site público do Angico
 
-Site público independente do Angico. O projeto apresenta a proposta do produto, encaminha visitantes para a aplicação operacional e envia o formulário de contato para um endpoint público configurado. Ele não importa rotas, tipos nem dependências privadas de `apps/app` ou `apps/api`.
+Experiência pública independente que apresenta o Angico como memória operacional socioambiental e explica o percurso verificável entre território, ação, evidência e resultado. O site encaminha visitantes para a aplicação autenticada sem importar rotas, tipos ou dependências privadas dos outros produtos.
+
+O formulário de contato só existe quando um endpoint público é configurado. Na ausência desse destino, a interface informa a indisponibilidade em vez de simular um envio.
 
 ## Desenvolvimento
 
@@ -23,5 +25,6 @@ Quando uma URL não está configurada, o site mostra o canal correspondente como
 
 ```bash
 npm test -- --run
+npm run typecheck
 npm run build
 ```
