@@ -4,6 +4,7 @@ import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.not;
 import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.containsString;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -13,6 +14,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.angico.auth.PasswordHasher;
+import com.angico.core.memory.MemoryEventRepository;
+import com.angico.core.memory.StoredMemoryEvent;
 import com.angico.mensagens.Conversa;
 import com.angico.mensagens.ConversaRepository;
 import com.angico.mensagens.Mensagem;
@@ -89,6 +92,9 @@ class WorkspaceIsolationSecurityTest {
 
     @Autowired
     private TerritorioRepository territorioRepository;
+
+    @Autowired
+    private MemoryEventRepository memoryEventRepository;
 
     private String workspaceA;
     private String workspaceB;
@@ -290,6 +296,16 @@ class WorkspaceIsolationSecurityTest {
                 .andReturn();
         Number attachmentId = com.jayway.jsonpath.JsonPath.read(
                 sent.getResponse().getContentAsString(), "$.anexos[0].id");
+        Number messageId = com.jayway.jsonpath.JsonPath.read(
+                sent.getResponse().getContentAsString(), "$.id");
+        StoredMemoryEvent messageEvent = memoryEventRepository
+                .findByWorkspaceIdOrderBySequenceAsc(workspaceA)
+                .stream()
+                .filter(event -> "MENSAGEM_ENVIADA".equals(event.getEventType()))
+                .filter(event -> String.valueOf(messageId.longValue()).equals(event.getEntityId()))
+                .findFirst()
+                .orElseThrow();
+        assertEquals(actor.getAngicoId(), messageEvent.getActorId());
 
         mvc.perform(get("/api/mensagens/conversas")
                         .param("workspaceId", workspaceA)

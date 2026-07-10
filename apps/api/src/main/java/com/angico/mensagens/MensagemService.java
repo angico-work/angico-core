@@ -191,7 +191,7 @@ public class MensagemService {
                 conversaId,
                 "CONVERSA_CRIADA",
                 "api",
-                String.valueOf(actor.getId()),
+                actor.getAngicoId(),
                 null,
                 null,
                 null,
@@ -512,7 +512,7 @@ public class MensagemService {
                 mensagemId,
                 "MENSAGEM_ENVIADA",
                 "api",
-                String.valueOf(actor.getId()),
+                actor.getAngicoId(),
                 null,
                 null,
                 null,
@@ -526,7 +526,7 @@ public class MensagemService {
         return new MemoryRelationMetadata(
                 "api",
                 context,
-                String.valueOf(actor.getId()),
+                actor.getAngicoId(),
                 null
         );
     }
