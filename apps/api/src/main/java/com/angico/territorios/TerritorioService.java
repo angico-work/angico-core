@@ -5,8 +5,6 @@ import java.util.List;
 import java.util.Map;
 
 import com.angico.acoes.AcaoRepository;
-import com.angico.common.CurrentActorProvider;
-import com.angico.common.ForbiddenException;
 import com.angico.core.memory.MemoryEvent;
 import com.angico.core.memory.MemoryQueryService;
 import com.angico.core.memory.OperationalMemoryService;
@@ -17,6 +15,7 @@ import com.angico.missoes.MissaoRepository;
 import com.angico.observacoes.ObservacaoRepository;
 import com.angico.potencialidades.PotencialidadeRepository;
 import com.angico.problemas.ProblemaRepository;
+import com.angico.workspaces.WorkspaceAuthorizationService;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -39,7 +38,7 @@ public class TerritorioService {
     private final MensagemRepository mensagemRepository;
     private final OperationalMemoryService memoryService;
     private final MemoryQueryService memoryQueryService;
-    private final CurrentActorProvider currentActorProvider;
+    private final WorkspaceAuthorizationService authorizationService;
     private final ObjectMapper objectMapper;
 
     public TerritorioService(
@@ -54,7 +53,7 @@ public class TerritorioService {
             MensagemRepository mensagemRepository,
             OperationalMemoryService memoryService,
             MemoryQueryService memoryQueryService,
-            CurrentActorProvider currentActorProvider,
+            WorkspaceAuthorizationService authorizationService,
             ObjectMapper objectMapper
     ) {
         this.territorioRepository = territorioRepository;
@@ -68,13 +67,12 @@ public class TerritorioService {
         this.mensagemRepository = mensagemRepository;
         this.memoryService = memoryService;
         this.memoryQueryService = memoryQueryService;
-        this.currentActorProvider = currentActorProvider;
+        this.authorizationService = authorizationService;
         this.objectMapper = objectMapper;
     }
 
     public List<TerritorioResponse> list(String workspaceId) {
-        String selectedWorkspace = workspace(workspaceId);
-        ensureWorkspaceAccess(selectedWorkspace);
+        String selectedWorkspace = authorizationService.requireAuthorizedWorkspace(workspaceId);
         return territorioRepository.findByWorkspaceIdOrderByNomeAsc(selectedWorkspace)
                 .stream()
                 .map(this::toResponse)
@@ -83,27 +81,29 @@ public class TerritorioService {
 
     public TerritorioResponse get(Long id) {
         Territorio territorio = requireTerritorio(id);
-        ensureWorkspaceAccess(territorio.getWorkspaceId());
         return toResponse(territorio);
     }
 
     public Territorio requireTerritorio(Long id) {
-        return territorioRepository.findById(id)
+        Territorio territorio = territorioRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Territorio nao encontrado: " + id));
+        authorizationService.requireMember(territorio.getWorkspaceId());
+        return territorio;
     }
 
     public Territorio defaultTerritory() {
-        return territorioRepository.findFirstByWorkspaceIdOrderByIdAsc(DEFAULT_WORKSPACE_ID)
+        Territorio territorio = territorioRepository.findFirstByWorkspaceIdOrderByIdAsc(DEFAULT_WORKSPACE_ID)
                 .orElseGet(() -> territorioRepository.findAll().stream().findFirst()
                         .orElseThrow(() -> new IllegalStateException("Nenhum territorio cadastrado.")));
+        authorizationService.requireMember(territorio.getWorkspaceId());
+        return territorio;
     }
 
     @Transactional
     public TerritorioResponse create(TerritorioCreateRequest request) {
         Instant now = Instant.now();
         Territorio territorio = new Territorio();
-        territorio.setWorkspaceId(workspace(request.workspaceId()));
-        ensureWorkspaceAccess(territorio.getWorkspaceId());
+        territorio.setWorkspaceId(authorizationService.requireAuthorizedWorkspace(request.workspaceId()));
         territorio.setNome(requireText(request.nome(), "nome"));
         territorio.setTipo(defaultText(request.tipo(), "BAIRRO"));
         territorio.setCidade(request.cidade());
@@ -144,20 +144,6 @@ public class TerritorioService {
         ));
 
         return toResponse(territorio);
-    }
-
-    private void ensureWorkspaceAccess(String workspaceId) {
-        currentActorProvider.currentWorkspaceId().ifPresent(actorWorkspace -> {
-            if (!actorWorkspace.equals(workspaceId)) {
-                throw new ForbiddenException("Acesso negado ao workspace informado.");
-            }
-        });
-    }
-
-    private boolean canViewOntologyDetails() {
-        return currentActorProvider.currentPapel()
-                .map(role -> role.equalsIgnoreCase("COORDENACAO") || role.equalsIgnoreCase("ADMIN"))
-                .orElse(false);
     }
 
     private TerritorioResponse toResponse(Territorio territorio) {

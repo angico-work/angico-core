@@ -66,13 +66,24 @@ class WorkspaceServiceTest {
         // Permissive access (no request context in a unit test): never blocks,
         // and no authenticated actor so create() adds no owner.
         WorkspaceAccessService accessService = mock(WorkspaceAccessService.class);
-        when(accessService.currentActorId()).thenReturn(Optional.empty());
-        when(accessService.currentActorName()).thenReturn(Optional.empty());
+        when(accessService.currentActorId()).thenReturn(Optional.of("test.actor"));
+        when(accessService.currentActorName()).thenReturn(Optional.of("Test Actor"));
+
+        WorkspaceAuthorizationService authorizationService = mock(WorkspaceAuthorizationService.class);
+        when(authorizationService.currentActorId()).thenReturn("test.actor");
+        when(authorizationService.authorizedWorkspaceIds()).thenAnswer(call ->
+                workspaceStore.stream().map(Workspace::getSlug).toList());
 
         // Memory wiring is exercised at integration level; here it is a no-op.
         WorkspaceMemoryPublisher memoryPublisher = mock(WorkspaceMemoryPublisher.class);
 
-        service = new WorkspaceService(workspaceRepository, memberRepository, accessService, memoryPublisher, new ClockProvider());
+        service = new WorkspaceService(
+                workspaceRepository,
+                memberRepository,
+                accessService,
+                authorizationService,
+                memoryPublisher,
+                new ClockProvider());
     }
 
     private WorkspaceResponse create(String nome, String criadoPor) {
@@ -126,7 +137,7 @@ class WorkspaceServiceTest {
         assertEquals("maria.sp", member.actorId());
         assertEquals("COORDINATOR", member.role());
         assertEquals("ACTIVE", member.status());
-        assertEquals(1, service.membros(slug).size());
+        assertEquals(2, service.membros(slug).size());
     }
 
     @Test

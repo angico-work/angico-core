@@ -21,6 +21,7 @@ public class WorkspaceService {
     private final WorkspaceRepository workspaceRepository;
     private final WorkspaceMemberRepository memberRepository;
     private final WorkspaceAccessService accessService;
+    private final WorkspaceAuthorizationService authorizationService;
     private final WorkspaceMemoryPublisher memoryPublisher;
     private final ClockProvider clock;
 
@@ -28,12 +29,14 @@ public class WorkspaceService {
             WorkspaceRepository workspaceRepository,
             WorkspaceMemberRepository memberRepository,
             WorkspaceAccessService accessService,
+            WorkspaceAuthorizationService authorizationService,
             WorkspaceMemoryPublisher memoryPublisher,
             ClockProvider clock
     ) {
         this.workspaceRepository = workspaceRepository;
         this.memberRepository = memberRepository;
         this.accessService = accessService;
+        this.authorizationService = authorizationService;
         this.memoryPublisher = memoryPublisher;
         this.clock = clock;
     }
@@ -41,14 +44,17 @@ public class WorkspaceService {
     @Transactional
     public List<WorkspaceResponse> listar() {
         ensureDefault();
+        Set<String> authorized = Set.copyOf(authorizationService.authorizedWorkspaceIds());
         return workspaceRepository.findAllByOrderByCreatedAtAsc()
                 .stream()
+                .filter(workspace -> authorized.contains(workspace.getSlug()))
                 .map(WorkspaceResponse::from)
                 .toList();
     }
 
     @Transactional
     public WorkspaceResponse criar(WorkspaceCreateRequest request) {
+        String actorId = authorizationService.currentActorId();
         Instant now = clock.now();
         Workspace workspace = new Workspace(uniqueSlug(slugify(request.nome().trim())),
                 request.nome().trim(), blankToNull(request.criadoPor()), now);
@@ -59,16 +65,12 @@ public class WorkspaceService {
         workspace.setCenterLongitude(request.centerLongitude());
         Workspace saved = workspaceRepository.save(workspace);
 
-        String actorId = accessService.currentActorId().orElse(null);
         memoryPublisher.publicarCriado(saved, actorId);
 
-        // The creator becomes the OWNER when there's an authenticated actor.
-        if (actorId != null) {
-            String displayName = accessService.currentActorName().orElse(actorId);
-            WorkspaceMember owner = memberRepository.save(
-                    new WorkspaceMember(saved.getSlug(), actorId, displayName, "OWNER", "ACTIVE", now));
-            memoryPublisher.publicarMembroAdicionado(owner, actorId);
-        }
+        String displayName = accessService.currentActorName().orElse(actorId);
+        WorkspaceMember owner = memberRepository.save(
+                new WorkspaceMember(saved.getSlug(), actorId, displayName, "OWNER", "ACTIVE", now));
+        memoryPublisher.publicarMembroAdicionado(owner, actorId);
 
         return WorkspaceResponse.from(saved);
     }
@@ -121,6 +123,7 @@ public class WorkspaceService {
     // --- Members --------------------------------------------------------------
 
     public List<WorkspaceMemberResponse> membros(String slug) {
+        authorizationService.requireMember(slug);
         return memberRepository.findByWorkspaceIdOrderByJoinedAtAsc(slug)
                 .stream()
                 .map(WorkspaceMemberResponse::from)

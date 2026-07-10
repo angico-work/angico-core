@@ -1,6 +1,7 @@
 package com.angico.missoes;
 
 import com.angico.common.ClockProvider;
+import com.angico.workspaces.WorkspaceAuthorizationService;
 import java.util.List;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -14,15 +15,18 @@ public class MissaoService {
     private final MissaoRepository missaoRepository;
     private final MissaoMemoryPublisher missaoMemoryPublisher;
     private final ClockProvider clock;
+    private final WorkspaceAuthorizationService authorizationService;
 
     public MissaoService(
             MissaoRepository missaoRepository,
             MissaoMemoryPublisher missaoMemoryPublisher,
-            ClockProvider clock
+            ClockProvider clock,
+            WorkspaceAuthorizationService authorizationService
     ) {
         this.missaoRepository = missaoRepository;
         this.missaoMemoryPublisher = missaoMemoryPublisher;
         this.clock = clock;
+        this.authorizationService = authorizationService;
     }
 
     /**
@@ -32,8 +36,9 @@ public class MissaoService {
      */
     @Transactional
     public MissaoResponse registrar(MissaoRequest request) {
+        String workspaceId = authorizationService.requireAuthorizedWorkspace(request.workspaceId());
         Missao missao = new Missao(
-                request.workspaceId(),
+                workspaceId,
                 request.titulo(),
                 request.descricao(),
                 STATUS_INICIAL,
@@ -50,7 +55,8 @@ public class MissaoService {
 
     @Transactional(readOnly = true)
     public List<MissaoResponse> listar(String workspaceId) {
-        return missaoRepository.findByWorkspaceIdOrderByCreatedAtDesc(workspaceId)
+        String authorized = authorizationService.requireAuthorizedWorkspace(workspaceId);
+        return missaoRepository.findByWorkspaceIdOrderByCreatedAtDesc(authorized)
                 .stream()
                 .map(MissaoResponse::from)
                 .toList();

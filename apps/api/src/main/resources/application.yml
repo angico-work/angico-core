@@ -1,42 +1,33 @@
 spring:
   application:
     name: angico-api
+  profiles:
+    default: dev
   servlet:
     multipart:
       max-file-size: ${ANGICO_UPLOAD_MAX_FILE_SIZE:2MB}
       max-request-size: ${ANGICO_UPLOAD_MAX_REQUEST_SIZE:8MB}
-  datasource:
-    # Env-driven so a deploy can point at Postgres; defaults to a file-based H2 in
-    # PostgreSQL-compatibility mode so local data survives restarts with zero infra
-    # (the future Postgres swap becomes essentially a url/driver change).
-    url: ${ANGICO_DB_URL:jdbc:h2:file:./data/angico;MODE=PostgreSQL;DB_CLOSE_DELAY=-1;AUTO_SERVER=TRUE}
-    username: ${ANGICO_DB_USER:sa}
-    password: ${ANGICO_DB_PASSWORD:}
   jpa:
-    hibernate:
-      ddl-auto: update
     open-in-view: false
+  flyway:
+    enabled: ${ANGICO_FLYWAY_ENABLED:false}
+    baseline-on-migrate: false
 
 server:
-  # Honors the platform-provided PORT (Render/Railway/Heroku-style), 8082 locally.
   port: ${SERVER_PORT:${PORT:8082}}
 
-# Angico integration settings.
 angico:
   auth:
     required: ${ANGICO_AUTH_REQUIRED:true}
-  # Comma-separated origins for cross-origin deploys (web served from a different
-  # host than the API). Defaults to the local Vite dev hosts.
-  allowed-origins: ${ANGICO_ALLOWED_ORIGINS:http://localhost:5175,http://127.0.0.1:5175,http://localhost:5176,http://127.0.0.1:5176}
+    public-registration: ${ANGICO_PUBLIC_REGISTRATION:false}
+    cookie-secure: ${ANGICO_COOKIE_SECURE:true}
+  allowed-origins: ${ANGICO_ALLOWED_ORIGINS:}
   seed-demo-leader: ${ANGICO_SEED_DEMO_LEADER:false}
   seed-demo-leader-password: ${ANGICO_SEED_DEMO_LEADER_PASSWORD:}
-  # Geocoding via OpenStreetMap/Nominatim + IBGE municipality fallback. Keyless;
-  # Nominatim's usage policy only asks for a descriptive User-Agent.
   geocoder:
     provider: ${ANGICO_GEOCODER_PROVIDER:nominatim}
     user-agent: ${ANGICO_GEOCODER_USER_AGENT:Angico/0.1 (contato@angico.app)}
     default-country: ${ANGICO_GEOCODER_DEFAULT_COUNTRY:BR}
-  # Message attachments (mensagens module).
   uploads:
     dir: ${ANGICO_UPLOAD_DIR:uploads}
     max-bytes: ${ANGICO_UPLOAD_MAX_BYTES:2097152}

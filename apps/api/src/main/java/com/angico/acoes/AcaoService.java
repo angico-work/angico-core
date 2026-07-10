@@ -1,6 +1,7 @@
 package com.angico.acoes;
 
 import com.angico.common.ClockProvider;
+import com.angico.workspaces.WorkspaceAuthorizationService;
 import java.util.List;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -14,17 +15,20 @@ public class AcaoService {
     private final AtribuicaoRepository atribuicaoRepository;
     private final AcaoMemoryPublisher acaoMemoryPublisher;
     private final ClockProvider clock;
+    private final WorkspaceAuthorizationService authorizationService;
 
     public AcaoService(
             AcaoRepository acaoRepository,
             AtribuicaoRepository atribuicaoRepository,
             AcaoMemoryPublisher acaoMemoryPublisher,
-            ClockProvider clock
+            ClockProvider clock,
+            WorkspaceAuthorizationService authorizationService
     ) {
         this.acaoRepository = acaoRepository;
         this.atribuicaoRepository = atribuicaoRepository;
         this.acaoMemoryPublisher = acaoMemoryPublisher;
         this.clock = clock;
+        this.authorizationService = authorizationService;
     }
 
     /**
@@ -34,8 +38,9 @@ public class AcaoService {
      */
     @Transactional
     public AcaoResponse registrar(AcaoCreateRequest request) {
+        String workspaceId = authorizationService.requireAuthorizedWorkspace(request.workspaceId());
         Acao acao = new Acao(
-                request.workspaceId(),
+                workspaceId,
                 request.titulo(),
                 request.descricao(),
                 STATUS_INICIAL,
@@ -51,7 +56,8 @@ public class AcaoService {
 
     @Transactional(readOnly = true)
     public List<AcaoResponse> listar(String workspaceId) {
-        return acaoRepository.findByWorkspaceIdOrderByCreatedAtDesc(workspaceId)
+        String authorized = authorizationService.requireAuthorizedWorkspace(workspaceId);
+        return acaoRepository.findByWorkspaceIdOrderByCreatedAtDesc(authorized)
                 .stream()
                 .map(AcaoResponse::from)
                 .toList();

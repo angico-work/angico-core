@@ -15,9 +15,9 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
-import com.angico.common.CurrentActorProvider;
-import com.angico.common.UnauthorizedException;
+import com.angico.common.ForbiddenException;
 import com.angico.core.memory.MemoryEvent;
+import com.angico.core.memory.MemoryRelationRepository;
 import com.angico.core.memory.OperationalMemoryService;
 import com.angico.core.ontology.OntologyService;
 import com.angico.pessoas.AngicoIdNormalizer;
@@ -26,6 +26,7 @@ import com.angico.pessoas.PessoaRepository;
 import com.angico.territorios.Territorio;
 import com.angico.territorios.TerritorioRepository;
 import com.angico.territorios.TerritorioService;
+import com.angico.workspaces.WorkspaceAuthorizationService;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.PathResource;
 import org.springframework.core.io.Resource;
@@ -46,13 +47,15 @@ public class MensagemService {
             OntologyService.RESULTADO,
             OntologyService.INDICADOR
     );
+    private static final Set<String> ADMIN_ROLES = Set.of("OWNER", "ADMIN");
 
     private final ConversaRepository conversaRepository;
     private final MensagemRepository mensagemRepository;
     private final MensagemAnexoRepository anexoRepository;
     private final PessoaRepository pessoaRepository;
     private final TerritorioRepository territorioRepository;
-    private final CurrentActorProvider currentActorProvider;
+    private final WorkspaceAuthorizationService authorizationService;
+    private final MemoryRelationRepository relationRepository;
     private final OperationalMemoryService memoryService;
     private final OntologyService ontologyService;
     private final Path uploadRoot;
@@ -65,7 +68,8 @@ public class MensagemService {
             MensagemAnexoRepository anexoRepository,
             PessoaRepository pessoaRepository,
             TerritorioRepository territorioRepository,
-            CurrentActorProvider currentActorProvider,
+            WorkspaceAuthorizationService authorizationService,
+            MemoryRelationRepository relationRepository,
             OperationalMemoryService memoryService,
             OntologyService ontologyService,
             @Value("${angico.uploads.dir:uploads}") String uploadDir,
@@ -77,7 +81,8 @@ public class MensagemService {
         this.anexoRepository = anexoRepository;
         this.pessoaRepository = pessoaRepository;
         this.territorioRepository = territorioRepository;
-        this.currentActorProvider = currentActorProvider;
+        this.authorizationService = authorizationService;
+        this.relationRepository = relationRepository;
         this.memoryService = memoryService;
         this.ontologyService = ontologyService;
         this.uploadRoot = Path.of(uploadDir).toAbsolutePath().normalize();
@@ -89,35 +94,42 @@ public class MensagemService {
     }
 
     public List<ConversaResponse> list(String workspaceId) {
-        String allowedWorkspace = authorizedWorkspace(workspaceId);
+        String allowedWorkspace = authorizationService.requireAuthorizedWorkspace(workspaceId);
         return conversaRepository.findByWorkspaceIdOrderByUpdatedAtDesc(allowedWorkspace)
                 .stream()
+                .filter(this::canAccessConversation)
                 .map(conversa -> toResponse(conversa, List.of()))
                 .toList();
     }
 
     public ConversaResponse get(Long conversaId) {
         Conversa conversa = requireConversa(conversaId);
-        ensureWorkspaceAccess(conversa.getWorkspaceId());
+        requireConversationAccess(conversa);
         return toResponse(conversa, messages(conversa.getId()));
     }
 
     public List<MensagemResponse> messages(Long conversaId) {
         Conversa conversa = requireConversa(conversaId);
-        ensureWorkspaceAccess(conversa.getWorkspaceId());
+        requireConversationAccess(conversa);
         List<Mensagem> mensagens = mensagemRepository.findByConversaIdOrderByCreatedAtAsc(conversaId);
         return toMessageResponses(mensagens);
     }
 
     public List<MensagemResponse> recent(String workspaceId) {
-        String allowedWorkspace = authorizedWorkspace(workspaceId);
-        return toMessageResponses(mensagemRepository.findTop8ByWorkspaceIdOrderByCreatedAtDesc(allowedWorkspace));
+        String allowedWorkspace = authorizationService.requireAuthorizedWorkspace(workspaceId);
+        List<Mensagem> visible = mensagemRepository.findTop8ByWorkspaceIdOrderByCreatedAtDesc(allowedWorkspace)
+                .stream()
+                .filter(message -> conversaRepository.findById(message.getConversaId())
+                        .map(this::canAccessConversation)
+                        .orElse(false))
+                .toList();
+        return toMessageResponses(visible);
     }
 
     @Transactional
     public ConversaResponse create(ConversaRequest request) {
         Pessoa actor = currentPessoa();
-        String workspaceId = authorizedWorkspace(request.workspaceId());
+        String workspaceId = authorizationService.requireAuthorizedWorkspace(request.workspaceId());
         Territorio territorio = territorioRepository.findById(request.territorioId())
                 .orElseThrow(() -> new IllegalArgumentException("Territorio nao encontrado: " + request.territorioId()));
         if (!workspaceId.equals(territorio.getWorkspaceId())) {
@@ -196,7 +208,7 @@ public class MensagemService {
     ) {
         Pessoa actor = currentPessoa();
         Conversa conversa = requireConversa(conversaId);
-        ensureWorkspaceAccess(conversa.getWorkspaceId());
+        requireConversationAccess(conversa);
         validateMessage(corpo, latitude, longitude, attachments);
         String normalizedLinkedType = normalizeLinkedType(linkedEntityType, linkedEntityId);
 
@@ -226,7 +238,15 @@ public class MensagemService {
     public MensagemAnexo requireAttachment(Long anexoId) {
         MensagemAnexo anexo = anexoRepository.findById(anexoId)
                 .orElseThrow(() -> new IllegalArgumentException("Anexo nao encontrado: " + anexoId));
-        ensureWorkspaceAccess(anexo.getWorkspaceId());
+        authorizationService.requireMember(anexo.getWorkspaceId());
+        Mensagem mensagem = mensagemRepository.findById(anexo.getMensagemId())
+                .orElseThrow(() -> new IllegalArgumentException("Mensagem do anexo nao encontrada."));
+        Conversa conversa = requireConversa(mensagem.getConversaId());
+        if (!anexo.getWorkspaceId().equals(mensagem.getWorkspaceId())
+                || !anexo.getWorkspaceId().equals(conversa.getWorkspaceId())) {
+            throw new ForbiddenException("Anexo fora da conversa autorizada.");
+        }
+        requireConversationAccess(conversa);
         return anexo;
     }
 
@@ -244,26 +264,30 @@ public class MensagemService {
     }
 
     private Pessoa currentPessoa() {
-        Long pessoaId = currentActorProvider.currentPessoaId()
-                .orElseThrow(() -> new UnauthorizedException("Sessao invalida."));
-        return pessoaRepository.findById(pessoaId)
-                .orElseThrow(() -> new UnauthorizedException("Sessao invalida."));
+        return authorizationService.currentPessoa();
     }
 
-    private String authorizedWorkspace(String requestedWorkspaceId) {
-        String actorWorkspace = currentActorProvider.currentWorkspaceId()
-                .orElseThrow(() -> new UnauthorizedException("Sessao invalida."));
-        String normalized = requestedWorkspaceId == null || requestedWorkspaceId.isBlank()
-                ? actorWorkspace
-                : requestedWorkspaceId.trim();
-        if (!actorWorkspace.equals(normalized)) {
-            throw new UnauthorizedException("Acesso negado ao workspace informado.");
+    private void requireConversationAccess(Conversa conversa) {
+        authorizationService.requireMember(conversa.getWorkspaceId());
+        if (!canAccessConversation(conversa)) {
+            throw new ForbiddenException("Apenas participantes podem acessar esta conversa.");
         }
-        return normalized;
     }
 
-    private void ensureWorkspaceAccess(String workspaceId) {
-        authorizedWorkspace(workspaceId);
+    private boolean canAccessConversation(Conversa conversa) {
+        if (authorizationService.hasRole(conversa.getWorkspaceId(), ADMIN_ROLES)) {
+            return true;
+        }
+        Pessoa actor = currentPessoa();
+        return relationRepository
+                .existsByWorkspaceIdAndOriginTypeAndOriginIdAndDestinationTypeAndDestinationIdAndRelationTypeAndActiveTrue(
+                        conversa.getWorkspaceId(),
+                        OntologyService.CONVERSA,
+                        String.valueOf(conversa.getId()),
+                        OntologyService.PESSOA,
+                        String.valueOf(actor.getId()),
+                        "TEM_PARTICIPANTE"
+                );
     }
 
     private Pessoa resolveParticipant(String workspaceId, String rawReference) {

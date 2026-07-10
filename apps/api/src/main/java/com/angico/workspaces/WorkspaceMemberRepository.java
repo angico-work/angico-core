@@ -12,5 +12,7 @@ public interface WorkspaceMemberRepository extends JpaRepository<WorkspaceMember
 
     Optional<WorkspaceMember> findByWorkspaceIdAndActorId(String workspaceId, String actorId);
 
+    List<WorkspaceMember> findByActorIdAndStatusOrderByJoinedAtAsc(String actorId, String status);
+
     Optional<WorkspaceMember> findByIdAndWorkspaceId(Long id, String workspaceId);
 }

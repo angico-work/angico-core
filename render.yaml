@@ -5,6 +5,8 @@ services:
     rootDir: apps/api
     plan: starter
     envVars:
+      - key: SPRING_PROFILES_ACTIVE
+        value: prod
       - key: ANGICO_DB_URL
         sync: false
       - key: ANGICO_DB_USER
@@ -15,6 +17,12 @@ services:
         sync: false
       - key: ANGICO_AUTH_REQUIRED
         value: "true"
+      - key: ANGICO_PUBLIC_REGISTRATION
+        value: "false"
+      - key: ANGICO_COOKIE_SECURE
+        value: "true"
+      - key: ANGICO_FLYWAY_ENABLED
+        value: "false"
       - key: ANGICO_SEED_DEMO_LEADER
         value: "false"
       - key: ANGICO_SEED_DEMO_LEADER_PASSWORD

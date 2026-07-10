@@ -30,10 +30,7 @@ public class Pessoa {
     @Column(nullable = false)
     private Instant createdAt;
 
-    // --- Auth / identity, grafted from the dev "v.1 funcional" auth slice ---
-    // All nullable so the existing 4-arg creation path (PessoaService) keeps
-    // working; uniqueness is enforced in AuthService, not via DB constraints,
-    // to avoid ddl-auto=update friction on an existing data directory.
+    // Nullable legacy identity columns remain for data compatibility.
     private String email;
 
     private String angicoId;
@@ -54,8 +51,6 @@ public class Pessoa {
 
     private Instant lastLoginAt;
 
-    // Public no-arg constructor: required by JPA and used by the auth flow,
-    // which builds a Pessoa via setters during register / ensureLeader.
     public Pessoa() {
     }
 

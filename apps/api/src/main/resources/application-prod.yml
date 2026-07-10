@@ -1,0 +1,16 @@
+spring:
+  config:
+    activate:
+      on-profile: prod
+  datasource:
+    url: ${ANGICO_DB_URL}
+    username: ${ANGICO_DB_USER}
+    password: ${ANGICO_DB_PASSWORD}
+  jpa:
+    hibernate:
+      ddl-auto: validate
+
+angico:
+  auth:
+    cookie-secure: true
+  allowed-origins: ${ANGICO_ALLOWED_ORIGINS}

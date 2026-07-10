@@ -1,0 +1,16 @@
+spring:
+  config:
+    activate:
+      on-profile: dev
+  datasource:
+    url: ${ANGICO_DB_URL:jdbc:h2:file:./data/angico;MODE=PostgreSQL;DB_CLOSE_DELAY=-1;AUTO_SERVER=TRUE}
+    username: ${ANGICO_DB_USER:sa}
+    password: ${ANGICO_DB_PASSWORD:}
+  jpa:
+    hibernate:
+      ddl-auto: update
+
+angico:
+  auth:
+    cookie-secure: false
+  allowed-origins: ${ANGICO_ALLOWED_ORIGINS:http://localhost:5176,http://127.0.0.1:5176}

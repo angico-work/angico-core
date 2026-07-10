@@ -1,6 +1,7 @@
 package com.angico.potencialidades;
 
 import com.angico.common.ClockProvider;
+import com.angico.workspaces.WorkspaceAuthorizationService;
 import java.util.List;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -13,15 +14,18 @@ public class PotencialidadeService {
     private final PotencialidadeRepository potencialidadeRepository;
     private final PotencialidadeMemoryPublisher potencialidadeMemoryPublisher;
     private final ClockProvider clock;
+    private final WorkspaceAuthorizationService authorizationService;
 
     public PotencialidadeService(
             PotencialidadeRepository potencialidadeRepository,
             PotencialidadeMemoryPublisher potencialidadeMemoryPublisher,
-            ClockProvider clock
+            ClockProvider clock,
+            WorkspaceAuthorizationService authorizationService
     ) {
         this.potencialidadeRepository = potencialidadeRepository;
         this.potencialidadeMemoryPublisher = potencialidadeMemoryPublisher;
         this.clock = clock;
+        this.authorizationService = authorizationService;
     }
 
     /**
@@ -31,8 +35,9 @@ public class PotencialidadeService {
      */
     @Transactional
     public PotencialidadeResponse registrar(PotencialidadeCreateRequest request) {
+        String workspaceId = authorizationService.requireAuthorizedWorkspace(request.workspaceId());
         PotencialidadeTerritorial potencialidade = new PotencialidadeTerritorial(
-                request.workspaceId(),
+                workspaceId,
                 request.territorioId(),
                 request.categoria(),
                 request.titulo(),
@@ -52,7 +57,8 @@ public class PotencialidadeService {
 
     @Transactional(readOnly = true)
     public List<PotencialidadeResponse> listar(String workspaceId) {
-        return potencialidadeRepository.findByWorkspaceIdOrderByCreatedAtDesc(workspaceId)
+        String authorized = authorizationService.requireAuthorizedWorkspace(workspaceId);
+        return potencialidadeRepository.findByWorkspaceIdOrderByCreatedAtDesc(authorized)
                 .stream()
                 .map(PotencialidadeResponse::from)
                 .toList();

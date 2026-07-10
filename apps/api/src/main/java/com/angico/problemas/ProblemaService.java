@@ -1,6 +1,7 @@
 package com.angico.problemas;
 
 import com.angico.common.ClockProvider;
+import com.angico.workspaces.WorkspaceAuthorizationService;
 import java.util.List;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -14,15 +15,18 @@ public class ProblemaService {
     private final ProblemaRepository problemaRepository;
     private final ProblemaMemoryPublisher problemaMemoryPublisher;
     private final ClockProvider clock;
+    private final WorkspaceAuthorizationService authorizationService;
 
     public ProblemaService(
             ProblemaRepository problemaRepository,
             ProblemaMemoryPublisher problemaMemoryPublisher,
-            ClockProvider clock
+            ClockProvider clock,
+            WorkspaceAuthorizationService authorizationService
     ) {
         this.problemaRepository = problemaRepository;
         this.problemaMemoryPublisher = problemaMemoryPublisher;
         this.clock = clock;
+        this.authorizationService = authorizationService;
     }
 
     /**
@@ -32,8 +36,9 @@ public class ProblemaService {
      */
     @Transactional
     public ProblemaResponse registrar(ProblemaRequest request) {
+        String workspaceId = authorizationService.requireAuthorizedWorkspace(request.workspaceId());
         ProblemaSocioambiental problema = new ProblemaSocioambiental(
-                request.workspaceId(),
+                workspaceId,
                 request.territorioId(),
                 request.categoria(),
                 request.titulo(),
@@ -56,7 +61,8 @@ public class ProblemaService {
 
     @Transactional(readOnly = true)
     public List<ProblemaResponse> listar(String workspaceId) {
-        return problemaRepository.findByWorkspaceIdOrderByCreatedAtDesc(workspaceId)
+        String authorized = authorizationService.requireAuthorizedWorkspace(workspaceId);
+        return problemaRepository.findByWorkspaceIdOrderByCreatedAtDesc(authorized)
                 .stream()
                 .map(ProblemaResponse::from)
                 .toList();

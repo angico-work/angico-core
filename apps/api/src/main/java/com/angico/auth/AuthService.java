@@ -1,18 +1,25 @@
 package com.angico.auth;
 
+import com.angico.common.ForbiddenException;
+import com.angico.common.UnauthorizedException;
+import com.angico.pessoas.AngicoIdNormalizer;
+import com.angico.pessoas.Pessoa;
+import com.angico.pessoas.PessoaRepository;
+import com.angico.workspaces.Workspace;
+import com.angico.workspaces.WorkspaceMember;
+import com.angico.workspaces.WorkspaceMemberRepository;
+import com.angico.workspaces.WorkspaceRepository;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.SecureRandom;
+import java.text.Normalizer;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.Base64;
 import java.util.Locale;
 import java.util.Optional;
 import java.util.regex.Pattern;
-
-import com.angico.common.UnauthorizedException;
-import com.angico.pessoas.AngicoIdNormalizer;
-import com.angico.pessoas.Pessoa;
-import com.angico.pessoas.PessoaRepository;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -20,41 +27,55 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class AuthService {
 
-    // Default workspace for self-service registration. Kept in sync with the
-    // app client's DEFAULT_WORKSPACE (apps/app/src/lib/api.ts) so a freshly
-    // registered leader lands in the same territory the UI queries by default.
     public static final String DEFAULT_WORKSPACE_ID = "coletivo-jardim-novo";
+    public static final Duration SESSION_LIFETIME = Duration.ofHours(12);
 
     private static final SecureRandom SECURE_RANDOM = new SecureRandom();
     private static final Pattern BASIC_EMAIL_PATTERN = Pattern.compile("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$");
 
     private final PessoaRepository pessoaRepository;
     private final PasswordHasher passwordHasher;
+    private final AuthSessionRepository sessionRepository;
+    private final WorkspaceRepository workspaceRepository;
+    private final WorkspaceMemberRepository memberRepository;
+    private final boolean publicRegistration;
 
-    public AuthService(PessoaRepository pessoaRepository, PasswordHasher passwordHasher) {
+    public AuthService(
+            PessoaRepository pessoaRepository,
+            PasswordHasher passwordHasher,
+            AuthSessionRepository sessionRepository,
+            WorkspaceRepository workspaceRepository,
+            WorkspaceMemberRepository memberRepository,
+            @Value("${angico.auth.public-registration:false}") boolean publicRegistration
+    ) {
         this.pessoaRepository = pessoaRepository;
         this.passwordHasher = passwordHasher;
+        this.sessionRepository = sessionRepository;
+        this.workspaceRepository = workspaceRepository;
+        this.memberRepository = memberRepository;
+        this.publicRegistration = publicRegistration;
     }
 
     @Transactional
-    public AuthResponse login(LoginRequest request) {
+    public IssuedSession login(LoginRequest request) {
         String email = normalizeEmail(request.email());
         Pessoa pessoa = pessoaRepository.findByEmailIgnoreCase(email)
                 .filter(candidate -> "ATIVA".equalsIgnoreCase(candidate.getStatus()))
                 .filter(candidate -> passwordHasher.matches(request.password(), candidate.getPasswordHash()))
                 .orElseThrow(() -> new UnauthorizedException("Credenciais inválidas."));
 
-        String token = newToken();
-        Instant now = Instant.now();
-        pessoa.setAuthTokenHash(hashToken(token));
-        pessoa.setAuthTokenIssuedAt(now);
-        pessoa.setLastLoginAt(now);
-        pessoa = pessoaRepository.save(pessoa);
-        return toResponse(token, pessoa);
+        String workspaceId = ensureLegacyMembership(pessoa);
+        pessoa.setLastLoginAt(Instant.now());
+        pessoaRepository.save(pessoa);
+        return issueSession(pessoa, workspaceId);
     }
 
     @Transactional
-    public AuthResponse register(RegisterRequest request) {
+    public IssuedSession register(RegisterRequest request) {
+        if (!publicRegistration) {
+            throw new ForbiddenException("Cadastro público desabilitado.");
+        }
+
         String nome = requireText(request.nome(), "Nome");
         String email = normalizeEmail(request.email());
         String angicoId = AngicoIdNormalizer.normalize(request.angicoId());
@@ -68,26 +89,29 @@ public class AuthService {
             throw new IllegalArgumentException("Angico ID já está em uso.");
         }
 
+        Instant now = Instant.now();
+        String workspaceId = uniqueIsolatedWorkspaceSlug(angicoId);
+        Workspace workspace = workspaceRepository.save(
+                new Workspace(workspaceId, "Espaço de " + nome, "@" + angicoId, now));
+
         Pessoa pessoa = new Pessoa();
-        pessoa.setWorkspaceId(DEFAULT_WORKSPACE_ID);
+        pessoa.setWorkspaceId(workspace.getSlug());
         pessoa.setNome(nome);
         pessoa.setEmail(email);
         pessoa.setAngicoId(angicoId);
-        pessoa.setPapel("LIDER");
+        pessoa.setPapel("OWNER");
         pessoa.setStatus("ATIVA");
         pessoa.setPasswordHash(passwordHasher.hash(password));
-        Instant now = Instant.now();
         pessoa.setCreatedAt(now);
-        String token = newToken();
-        pessoa.setAuthTokenHash(hashToken(token));
-        pessoa.setAuthTokenIssuedAt(now);
         pessoa.setLastLoginAt(now);
         try {
             pessoa = pessoaRepository.saveAndFlush(pessoa);
         } catch (DataIntegrityViolationException ex) {
             throw new IllegalArgumentException("Email ou Angico ID já cadastrado.");
         }
-        return toResponse(token, pessoa);
+        memberRepository.save(new WorkspaceMember(
+                workspace.getSlug(), angicoId, nome, "OWNER", "ACTIVE", now));
+        return issueSession(pessoa, workspace.getSlug());
     }
 
     public AngicoIdAvailabilityResponse checkAngicoId(String rawAngicoId) {
@@ -100,21 +124,46 @@ public class AuthService {
         );
     }
 
-    public Optional<Pessoa> authenticateToken(String rawToken) {
+    public Optional<SessionPrincipal> authenticateSession(String rawToken) {
         if (rawToken == null || rawToken.isBlank()) {
             return Optional.empty();
         }
-        return pessoaRepository.findByAuthTokenHash(hashToken(rawToken))
-                .filter(pessoa -> "ATIVA".equalsIgnoreCase(pessoa.getStatus()));
+        String csrfToken = csrfTokenFor(rawToken);
+        return sessionRepository.findByTokenHashAndRevokedAtIsNullAndExpiresAtAfter(hashToken(rawToken), Instant.now())
+                .filter(session -> secureEquals(session.getCsrfTokenHash(), hashToken(csrfToken)))
+                .flatMap(session -> pessoaRepository.findById(session.getPessoaId())
+                        .filter(pessoa -> "ATIVA".equalsIgnoreCase(pessoa.getStatus()))
+                        .map(pessoa -> new SessionPrincipal(pessoa, session, csrfToken)));
+    }
+
+    public AuthResponse currentSession(Long sessionId, String csrfToken) {
+        AuthSession session = requireActiveSession(sessionId);
+        Pessoa pessoa = pessoaRepository.findById(session.getPessoaId())
+                .filter(candidate -> "ATIVA".equalsIgnoreCase(candidate.getStatus()))
+                .orElseThrow(() -> new UnauthorizedException("Sessão inválida."));
+        if (!secureEquals(session.getCsrfTokenHash(), hashToken(csrfToken))) {
+            throw new UnauthorizedException("Sessão inválida.");
+        }
+        return toResponse(pessoa, session, csrfToken);
+    }
+
+    public boolean validCsrf(Long sessionId, String rawCsrfToken) {
+        if (rawCsrfToken == null || rawCsrfToken.isBlank()) {
+            return false;
+        }
+        try {
+            AuthSession session = requireActiveSession(sessionId);
+            return secureEquals(session.getCsrfTokenHash(), hashToken(rawCsrfToken));
+        } catch (UnauthorizedException ex) {
+            return false;
+        }
     }
 
     @Transactional
-    public void logout(Long pessoaId) {
-        Pessoa pessoa = pessoaRepository.findById(pessoaId)
-                .orElseThrow(() -> new UnauthorizedException("Sessão inválida."));
-        pessoa.setAuthTokenHash(null);
-        pessoa.setAuthTokenIssuedAt(null);
-        pessoaRepository.save(pessoa);
+    public void logout(Long sessionId) {
+        AuthSession session = requireActiveSession(sessionId);
+        session.revoke(Instant.now());
+        sessionRepository.save(session);
     }
 
     @Transactional
@@ -127,12 +176,14 @@ public class AuthService {
             String rawPassword
     ) {
         String normalizedEmail = normalizeEmail(email);
-        return pessoaRepository.findByEmailIgnoreCase(normalizedEmail)
+        Pessoa pessoa = pessoaRepository.findByEmailIgnoreCase(normalizedEmail)
                 .map(existing -> {
+                    if (!workspaceId.equals(existing.getWorkspaceId())) {
+                        throw new IllegalStateException("A conta de demonstração já pertence a outro workspace.");
+                    }
                     if (existing.getPasswordHash() == null || existing.getPasswordHash().isBlank()) {
                         existing.setPasswordHash(passwordHasher.hash(rawPassword));
                     }
-                    existing.setWorkspaceId(workspaceId);
                     existing.setNome(nome);
                     if (existing.getAngicoId() == null || existing.getAngicoId().isBlank()) {
                         existing.setAngicoId(AngicoIdNormalizer.normalizeOptional(angicoId));
@@ -142,29 +193,111 @@ public class AuthService {
                     return pessoaRepository.save(existing);
                 })
                 .orElseGet(() -> {
-                    Pessoa pessoa = new Pessoa();
-                    pessoa.setWorkspaceId(workspaceId);
-                    pessoa.setNome(nome);
-                    pessoa.setEmail(normalizedEmail);
-                    pessoa.setAngicoId(AngicoIdNormalizer.normalize(angicoId));
-                    pessoa.setPapel(papel);
-                    pessoa.setStatus("ATIVA");
-                    pessoa.setPasswordHash(passwordHasher.hash(rawPassword));
-                    pessoa.setCreatedAt(Instant.now());
-                    return pessoaRepository.save(pessoa);
+                    Pessoa created = new Pessoa();
+                    created.setWorkspaceId(workspaceId);
+                    created.setNome(nome);
+                    created.setEmail(normalizedEmail);
+                    created.setAngicoId(AngicoIdNormalizer.normalize(angicoId));
+                    created.setPapel(papel);
+                    created.setStatus("ATIVA");
+                    created.setPasswordHash(passwordHasher.hash(rawPassword));
+                    created.setCreatedAt(Instant.now());
+                    return pessoaRepository.save(created);
                 });
+        ensureLegacyMembership(pessoa);
+        return pessoa;
     }
 
-    private AuthResponse toResponse(String token, Pessoa pessoa) {
-        return new AuthResponse(
-                token,
+    private IssuedSession issueSession(Pessoa pessoa, String workspaceId) {
+        String rawToken = newToken();
+        String csrfToken = csrfTokenFor(rawToken);
+        Instant now = Instant.now();
+        AuthSession session = sessionRepository.save(new AuthSession(
                 pessoa.getId(),
-                pessoa.getWorkspaceId(),
+                workspaceId,
+                hashToken(rawToken),
+                hashToken(csrfToken),
+                now,
+                now.plus(SESSION_LIFETIME)
+        ));
+        return new IssuedSession(rawToken, toResponse(pessoa, session, csrfToken));
+    }
+
+    private String ensureLegacyMembership(Pessoa pessoa) {
+        String actorId = pessoa.getAngicoId();
+        String legacyWorkspaceId = pessoa.getWorkspaceId();
+        if (actorId != null && !actorId.isBlank() && legacyWorkspaceId != null && !legacyWorkspaceId.isBlank()) {
+            memberRepository.findByWorkspaceIdAndActorId(legacyWorkspaceId, actorId)
+                    .orElseGet(() -> memberRepository.save(new WorkspaceMember(
+                            legacyWorkspaceId,
+                            actorId,
+                            pessoa.getNome(),
+                            membershipRole(pessoa.getPapel()),
+                            "ACTIVE",
+                            Instant.now()
+                    )));
+        }
+        if (actorId == null || actorId.isBlank()) {
+            return null;
+        }
+        var activeMemberships = memberRepository.findByActorIdAndStatusOrderByJoinedAtAsc(actorId, "ACTIVE");
+        return activeMemberships
+                .stream()
+                .filter(member -> legacyWorkspaceId != null && legacyWorkspaceId.equals(member.getWorkspaceId()))
+                .findFirst()
+                .or(() -> activeMemberships.stream().findFirst())
+                .map(WorkspaceMember::getWorkspaceId)
+                .orElse(null);
+    }
+
+    private String membershipRole(String papel) {
+        if (papel == null) {
+            return "MEMBER";
+        }
+        return switch (papel.trim().toUpperCase(Locale.ROOT)) {
+            case "LIDER", "OWNER" -> "OWNER";
+            case "ADMIN" -> "ADMIN";
+            case "COORDENACAO", "COORDINATOR" -> "COORDINATOR";
+            case "MAPPER" -> "MAPPER";
+            case "VIEWER" -> "VIEWER";
+            default -> "MEMBER";
+        };
+    }
+
+    private AuthSession requireActiveSession(Long sessionId) {
+        Instant now = Instant.now();
+        return sessionRepository.findById(sessionId)
+                .filter(session -> session.getRevokedAt() == null)
+                .filter(session -> session.getExpiresAt().isAfter(now))
+                .orElseThrow(() -> new UnauthorizedException("Sessão inválida ou expirada."));
+    }
+
+    private AuthResponse toResponse(Pessoa pessoa, AuthSession session, String csrfToken) {
+        return new AuthResponse(
+                pessoa.getId(),
                 pessoa.getNome(),
                 pessoa.getEmail(),
                 pessoa.getAngicoId(),
-                pessoa.getPapel()
+                pessoa.getPapel(),
+                session.getWorkspaceId(),
+                session.getExpiresAt(),
+                csrfToken
         );
+    }
+
+    private String uniqueIsolatedWorkspaceSlug(String angicoId) {
+        String folded = Normalizer.normalize(angicoId, Normalizer.Form.NFD)
+                .replaceAll("\\p{M}", "")
+                .toLowerCase(Locale.ROOT)
+                .replaceAll("[^a-z0-9]+", "-")
+                .replaceAll("(^-+|-+$)", "");
+        String root = "pessoal-" + (folded.isBlank() ? "workspace" : folded);
+        String candidate = root;
+        int suffix = 2;
+        while (workspaceRepository.existsBySlug(candidate)) {
+            candidate = root + "-" + suffix++;
+        }
+        return candidate;
     }
 
     private String requireText(String value, String fieldName) {
@@ -196,6 +329,10 @@ public class AuthService {
         return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
     }
 
+    private String csrfTokenFor(String sessionToken) {
+        return hashToken("csrf:" + sessionToken);
+    }
+
     private String hashToken(String token) {
         try {
             byte[] digest = MessageDigest.getInstance("SHA-256")
@@ -204,5 +341,21 @@ public class AuthService {
         } catch (Exception ex) {
             throw new IllegalStateException("Falha ao validar token.", ex);
         }
+    }
+
+    private boolean secureEquals(String expected, String actual) {
+        if (expected == null || actual == null) {
+            return false;
+        }
+        return MessageDigest.isEqual(
+                expected.getBytes(StandardCharsets.UTF_8),
+                actual.getBytes(StandardCharsets.UTF_8)
+        );
+    }
+
+    public record IssuedSession(String token, AuthResponse response) {
+    }
+
+    public record SessionPrincipal(Pessoa pessoa, AuthSession session, String csrfToken) {
     }
 }

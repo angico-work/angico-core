@@ -1,6 +1,7 @@
 package com.angico.observacoes;
 
 import com.angico.common.ClockProvider;
+import com.angico.workspaces.WorkspaceAuthorizationService;
 import java.util.List;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -14,15 +15,18 @@ public class ObservacaoService {
     private final ObservacaoRepository observacaoRepository;
     private final ObservacaoMemoryPublisher observacaoMemoryPublisher;
     private final ClockProvider clock;
+    private final WorkspaceAuthorizationService authorizationService;
 
     public ObservacaoService(
             ObservacaoRepository observacaoRepository,
             ObservacaoMemoryPublisher observacaoMemoryPublisher,
-            ClockProvider clock
+            ClockProvider clock,
+            WorkspaceAuthorizationService authorizationService
     ) {
         this.observacaoRepository = observacaoRepository;
         this.observacaoMemoryPublisher = observacaoMemoryPublisher;
         this.clock = clock;
+        this.authorizationService = authorizationService;
     }
 
     /**
@@ -32,8 +36,9 @@ public class ObservacaoService {
      */
     @Transactional
     public ObservacaoResponse registrar(ObservacaoCreateRequest request) {
+        String workspaceId = authorizationService.requireAuthorizedWorkspace(request.workspaceId());
         ObservacaoTerritorial observacao = new ObservacaoTerritorial(
-                request.workspaceId(),
+                workspaceId,
                 request.territorioId(),
                 request.categoria(),
                 request.titulo(),
@@ -59,7 +64,8 @@ public class ObservacaoService {
 
     @Transactional(readOnly = true)
     public List<ObservacaoResponse> listar(String workspaceId) {
-        return observacaoRepository.findByWorkspaceIdOrderByCreatedAtDesc(workspaceId)
+        String authorized = authorizationService.requireAuthorizedWorkspace(workspaceId);
+        return observacaoRepository.findByWorkspaceIdOrderByCreatedAtDesc(authorized)
                 .stream()
                 .map(ObservacaoResponse::from)
                 .toList();

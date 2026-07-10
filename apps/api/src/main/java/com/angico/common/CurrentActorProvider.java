@@ -6,11 +6,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
 
-/**
- * Exposes the authenticated actor that {@link AuthInterceptor} attached to the
- * current request. Returns empty when there is no authenticated session, so
- * unauthenticated/public requests keep working under the soft-auth default.
- */
+/** Exposes the authenticated actor attached by {@link AuthInterceptor}. */
 @Component
 public class CurrentActorProvider {
 

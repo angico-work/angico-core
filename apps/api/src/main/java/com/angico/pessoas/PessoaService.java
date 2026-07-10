@@ -3,6 +3,7 @@ package com.angico.pessoas;
 import com.angico.common.ClockProvider;
 import com.angico.common.CurrentActorProvider;
 import com.angico.common.UnauthorizedException;
+import com.angico.workspaces.WorkspaceAuthorizationService;
 import java.util.List;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -16,17 +17,20 @@ public class PessoaService {
     private final PessoaMemoryPublisher pessoaMemoryPublisher;
     private final ClockProvider clock;
     private final CurrentActorProvider currentActorProvider;
+    private final WorkspaceAuthorizationService authorizationService;
 
     public PessoaService(
             PessoaRepository pessoaRepository,
             PessoaMemoryPublisher pessoaMemoryPublisher,
             ClockProvider clock,
-            CurrentActorProvider currentActorProvider
+            CurrentActorProvider currentActorProvider,
+            WorkspaceAuthorizationService authorizationService
     ) {
         this.pessoaRepository = pessoaRepository;
         this.pessoaMemoryPublisher = pessoaMemoryPublisher;
         this.clock = clock;
         this.currentActorProvider = currentActorProvider;
+        this.authorizationService = authorizationService;
     }
 
     /**
@@ -35,19 +39,20 @@ public class PessoaService {
      */
     @Transactional
     public PessoaResponse registrar(PessoaRequest request) {
+        String workspaceId = authorizationService.requireAuthorizedWorkspace(request.workspaceId());
         String angicoId = safeNormalize(request.angicoId());
         // Link to the real identity: if this Angico ID is already part of the
         // território, reuse that person instead of creating a duplicate.
         if (angicoId != null) {
             var existing = pessoaRepository
-                    .findByWorkspaceIdAndAngicoIdIgnoreCase(request.workspaceId(), angicoId);
+                    .findByWorkspaceIdAndAngicoIdIgnoreCase(workspaceId, angicoId);
             if (existing.isPresent()) {
                 return PessoaResponse.from(existing.get());
             }
         }
 
         Pessoa pessoa = new Pessoa(
-                request.workspaceId(),
+                workspaceId,
                 request.nome(),
                 request.papel() == null || request.papel().isBlank()
                         ? PAPEL_PADRAO : request.papel(),
@@ -62,7 +67,8 @@ public class PessoaService {
 
     @Transactional(readOnly = true)
     public List<PessoaResponse> listar(String workspaceId) {
-        return pessoaRepository.findByWorkspaceIdOrderByCreatedAtDesc(workspaceId)
+        String authorized = authorizationService.requireAuthorizedWorkspace(workspaceId);
+        return pessoaRepository.findByWorkspaceIdOrderByCreatedAtDesc(authorized)
                 .stream()
                 .map(PessoaResponse::from)
                 .toList();
@@ -71,10 +77,11 @@ public class PessoaService {
     /** Powers the Angico-ID autocomplete on the "Nova pessoa" form. */
     @Transactional(readOnly = true)
     public List<PessoaResponse> search(String workspaceId, String q) {
+        String authorized = authorizationService.requireAuthorizedWorkspace(workspaceId);
         if (q == null || q.trim().length() < 2) {
             return List.of();
         }
-        return pessoaRepository.searchInWorkspace(workspaceId, q.trim())
+        return pessoaRepository.searchInWorkspace(authorized, q.trim())
                 .stream()
                 .map(PessoaResponse::from)
                 .toList();
@@ -87,6 +94,7 @@ public class PessoaService {
                 .orElseThrow(() -> new UnauthorizedException("Sessao invalida."));
         Pessoa pessoa = pessoaRepository.findById(pessoaId)
                 .orElseThrow(() -> new UnauthorizedException("Sessao invalida."));
+        authorizationService.requireMember(pessoa.getWorkspaceId());
         if (request.nome() != null && !request.nome().isBlank()) {
             pessoa.setNome(request.nome().trim());
         }

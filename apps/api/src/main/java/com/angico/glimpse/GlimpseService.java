@@ -13,6 +13,7 @@ import com.angico.potencialidades.PotencialidadeRepository;
 import com.angico.potencialidades.PotencialidadeTerritorial;
 import com.angico.problemas.ProblemaRepository;
 import com.angico.problemas.ProblemaSocioambiental;
+import com.angico.workspaces.WorkspaceAuthorizationService;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -43,6 +44,7 @@ public class GlimpseService {
     private final MissaoRepository missoes;
     private final AcaoRepository acoes;
     private final ClockProvider clock;
+    private final WorkspaceAuthorizationService authorizationService;
 
     public GlimpseService(
             MemoryObjectRepository objects,
@@ -52,7 +54,8 @@ public class GlimpseService {
             PotencialidadeRepository potencialidades,
             MissaoRepository missoes,
             AcaoRepository acoes,
-            ClockProvider clock
+            ClockProvider clock,
+            WorkspaceAuthorizationService authorizationService
     ) {
         this.objects = objects;
         this.events = events;
@@ -62,10 +65,12 @@ public class GlimpseService {
         this.missoes = missoes;
         this.acoes = acoes;
         this.clock = clock;
+        this.authorizationService = authorizationService;
     }
 
     @Transactional(readOnly = true)
     public DashboardResponse dashboard(String workspaceId) {
+        workspaceId = authorizationService.requireAuthorizedWorkspace(workspaceId);
         List<ObservacaoTerritorial> recent = observacoes.findByWorkspaceIdOrderByCreatedAtDesc(workspaceId);
         Instant now = clock.now();
 
@@ -102,6 +107,7 @@ public class GlimpseService {
     /** Geolocated objetos for the territory map. */
     @Transactional(readOnly = true)
     public List<MapPoint> mapPoints(String workspaceId) {
+        workspaceId = authorizationService.requireAuthorizedWorkspace(workspaceId);
         List<MapPoint> points = new ArrayList<>();
         for (ObservacaoTerritorial o : observacoes.findByWorkspaceIdOrderByCreatedAtDesc(workspaceId)) {
             if (o.getLatitude() != null && o.getLongitude() != null) {
@@ -127,6 +133,7 @@ public class GlimpseService {
     /** The território's living memory: most recent events first. */
     @Transactional(readOnly = true)
     public List<MemoriaEvent> memoria(String workspaceId) {
+        workspaceId = authorizationService.requireAuthorizedWorkspace(workspaceId);
         return events.findTop100ByWorkspaceIdOrderBySequenceDesc(workspaceId).stream()
                 .map(this::toMemoriaEvent)
                 .toList();

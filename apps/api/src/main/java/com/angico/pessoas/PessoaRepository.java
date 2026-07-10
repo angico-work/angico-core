@@ -14,7 +14,6 @@ public interface PessoaRepository extends JpaRepository<Pessoa, Long> {
 
     long countByWorkspaceId(String workspaceId);
 
-    // --- Auth finders (grafted from the dev auth slice) ---
     Optional<Pessoa> findByEmailIgnoreCase(String email);
 
     Optional<Pessoa> findByAngicoIdIgnoreCase(String angicoId);

@@ -6,8 +6,10 @@ import java.util.Map;
 
 import com.angico.core.memory.MemoryEvent;
 import com.angico.core.memory.OperationalMemoryService;
+import com.angico.common.ForbiddenException;
 import com.angico.territorios.Territorio;
 import com.angico.territorios.TerritorioService;
+import com.angico.workspaces.WorkspaceAuthorizationService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -19,32 +21,41 @@ public class ImpactoService {
     private final ResultadoRepository resultadoRepository;
     private final TerritorioService territorioService;
     private final OperationalMemoryService memoryService;
+    private final WorkspaceAuthorizationService authorizationService;
 
     public ImpactoService(
             IndicadorRepository indicadorRepository,
             MedicaoRepository medicaoRepository,
             ResultadoRepository resultadoRepository,
             TerritorioService territorioService,
-            OperationalMemoryService memoryService
+            OperationalMemoryService memoryService,
+            WorkspaceAuthorizationService authorizationService
     ) {
         this.indicadorRepository = indicadorRepository;
         this.medicaoRepository = medicaoRepository;
         this.resultadoRepository = resultadoRepository;
         this.territorioService = territorioService;
         this.memoryService = memoryService;
+        this.authorizationService = authorizationService;
     }
 
     public List<Indicador> indicadores(String workspaceId) {
-        return indicadorRepository.findByWorkspaceIdOrderByNomeAsc(TerritorioService.workspace(workspaceId));
+        String authorized = authorizationService.requireAuthorizedWorkspace(workspaceId);
+        return indicadorRepository.findByWorkspaceIdOrderByNomeAsc(authorized);
     }
 
     public List<Medicao> medicoes(String workspaceId) {
-        return medicaoRepository.findByWorkspaceIdOrderByCreatedAtDesc(TerritorioService.workspace(workspaceId));
+        String authorized = authorizationService.requireAuthorizedWorkspace(workspaceId);
+        return medicaoRepository.findByWorkspaceIdOrderByCreatedAtDesc(authorized);
     }
 
     @Transactional
     public Indicador createIndicador(IndicadorRequest request) {
+        String workspaceId = authorizationService.requireAuthorizedWorkspace(request.workspaceId());
         Territorio territorio = territorioService.requireTerritorio(request.territorioId());
+        if (!workspaceId.equals(territorio.getWorkspaceId())) {
+            throw new ForbiddenException("Território fora do workspace autorizado.");
+        }
         Instant now = Instant.now();
         Indicador indicador = new Indicador();
         indicador.setWorkspaceId(territorio.getWorkspaceId());
@@ -68,7 +79,10 @@ public class ImpactoService {
         );
         Indicador indicadorSalvo = indicador;
         if (request.resultadoId() != null) {
-            resultadoRepository.findById(request.resultadoId()).ifPresent(resultado ->
+            resultadoRepository.findById(request.resultadoId()).ifPresent(resultado -> {
+                if (!workspaceId.equals(resultado.getWorkspaceId())) {
+                    throw new ForbiddenException("Resultado fora do workspace autorizado.");
+                }
                     memoryService.registrarRelacaoAtiva(
                             indicadorSalvo.getWorkspaceId(),
                             "INDICADOR",
@@ -78,16 +92,20 @@ public class ImpactoService {
                             "MEDE",
                             "api",
                             "Indicador mede resultado informado"
-                    )
-            );
+                    );
+            });
         }
         return indicador;
     }
 
     @Transactional
     public Medicao createMedicao(MedicaoRequest request) {
+        String workspaceId = authorizationService.requireAuthorizedWorkspace(request.workspaceId());
         Indicador indicador = indicadorRepository.findById(request.indicadorId())
                 .orElseThrow(() -> new IllegalArgumentException("Indicador nao encontrado: " + request.indicadorId()));
+        if (!workspaceId.equals(indicador.getWorkspaceId())) {
+            throw new ForbiddenException("Indicador fora do workspace autorizado.");
+        }
         Instant now = Instant.now();
         Medicao medicao = new Medicao();
         medicao.setWorkspaceId(indicador.getWorkspaceId());
@@ -95,7 +113,7 @@ public class ImpactoService {
         medicao.setValor(request.valor());
         medicao.setUnidade(TerritorioService.defaultText(request.unidade(), indicador.getUnidade()));
         medicao.setFonte(request.fonte());
-        medicao.setActorId(request.actorId());
+        medicao.setActorId(authorizationService.currentActorId());
         medicao.setMeasuredAt(request.measuredAt() == null ? now : request.measuredAt());
         medicao.setCreatedAt(now);
         medicao = medicaoRepository.save(medicao);
