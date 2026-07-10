@@ -1,194 +1,172 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useOutletContext } from 'react-router-dom';
 import type { AppContext } from '../components/AppShell';
-import Toast, { type ToastContent } from '../components/Toast';
+import { EmptyState, ErrorState, LoadingState } from '../components/PageFeedback';
 import NewEntityModal from '../components/NewEntityModal';
 import MapView from '../components/MapView';
 import { icon } from '../lib/icons';
-import { loadDashboard, loadMapPoints } from '../lib/api';
-import { emptyDashboard } from '../data/fallbackDashboard';
-import type {
-  Activity, CategorySlice, DashboardData, ImpactItem, MapPoint, Mission, Stat
-} from '../types';
+import { loadDashboard, loadMapPoints, loadMemoria } from '../lib/api';
+import type { DashboardData, MapPoint, MemoriaEvent } from '../types';
 
-type Interact = (toast: ToastContent) => void;
-
-// Neutral national view used only when a território has no located points yet,
-// so the empty map never implies a specific city.
 const DEFAULT_CENTER: [number, number] = [-14.235, -51.925];
-const CATEGORY_COLORS = ['#2c80a6', '#f97316', '#efc224', '#5bb84f', '#9670c6'];
 
-function StatCard({ item, onInteract }: { item: Stat; onInteract: Interact }) {
-  return (
-    <article className="stat-card" onClick={() => onInteract({
-      title: item.label,
-      description: `Indicador selecionado: ${item.value}. Rastreável até eventos, evidências e medições originais.`,
-      actionLabel: 'Ver origem'
-    })}>
-      <div className="stat-icon">{icon(item.icon)}</div>
-      <div>
-        <strong>{item.value}</strong>
-        <span>{item.label}</span>
-        {item.trend && <small>{item.trend}</small>}
-      </div>
-    </article>
-  );
+function eventLabel(event: MemoriaEvent): string {
+  const labels: Record<string, string> = {
+    'observacao.registrada': 'Observação registrada',
+    'problema.registrado': 'Problema reconhecido',
+    'potencialidade.registrada': 'Potencialidade registrada',
+    'missao.criada': 'Missão criada',
+    'acao.iniciada': 'Ação iniciada',
+    'pessoa.engajada': 'Participação registrada'
+  };
+  return labels[event.eventType] ?? event.eventType.replaceAll('.', ' · ');
 }
 
-function CategoryPanel({ items }: { items: CategorySlice[] }) {
-  const total = items.reduce((sum, item) => sum + Number(item.value || 0), 0);
-  // Drive the ring from the real distribution: each slice spans its share of 360°.
-  let sweep = 0;
-  const stops = items
-    .map((item, index) => {
-      const start = total > 0 ? (sweep / total) * 360 : 0;
-      sweep += Number(item.value || 0);
-      const end = total > 0 ? (sweep / total) * 360 : 0;
-      return `${CATEGORY_COLORS[index % CATEGORY_COLORS.length]} ${start}deg ${end}deg`;
-    })
-    .join(', ');
-  const donutStyle = total > 0 ? { background: `conic-gradient(${stops})` } : undefined;
-  return (
-    <article className="panel-card">
-      <div className="panel-title"><h3>Problemas por Categoria</h3><Link to="/app/observacoes">Ver todos</Link></div>
-      <div className="donut-wrap">
-        <div className="donut" style={donutStyle}><div className="donut-center"><b>{total}</b><span>Total</span></div></div>
-        <div className="category-list">
-          {items.length === 0 && <span className="entity-meta">Sem dados ainda</span>}
-          {items.map((item, index) => (
-            <div className="category-row" key={item.name}>
-              <span className="legend-dot" style={{ background: CATEGORY_COLORS[index % CATEGORY_COLORS.length] }} />
-              <span>{item.name}</span><b>{item.value}</b>
-            </div>
-          ))}
-        </div>
-      </div>
-    </article>
-  );
-}
-
-function MissionPanel({ missions }: { missions: Mission[] }) {
-  return (
-    <article className="panel-card">
-      <div className="panel-title"><h3>Missões em Andamento</h3><Link to="/app/missoes">Ver todas</Link></div>
-      <div className="mission-list">
-        {missions.length === 0 && <span className="entity-meta">Nenhuma missão ainda</span>}
-        {missions.map((mission) => (
-          <div className="mission-row" key={mission.title}>
-            <div className="impact-icon">{icon('mission')}</div>
-            <div>
-              <b>{mission.title}</b>
-              <div className="mini-progress"><i style={{ width: `${mission.progress}%` }} /></div>
-              <span>{mission.actions} • {mission.participants}</span>
-            </div>
-            <strong>{mission.progress}%</strong>
-          </div>
-        ))}
-      </div>
-    </article>
-  );
-}
-
-function ImpactPanel({ impact }: { impact: ImpactItem[] }) {
-  return (
-    <article className="panel-card">
-      <div className="panel-title"><h3>Impacto do Território</h3></div>
-      <div className="impact-grid">
-        {impact.map((item) => (
-          <div className="impact-cell" key={item.label}>
-            <div className="impact-icon">{icon(item.icon)}</div>
-            <div><b>{item.value}</b><span>{item.label}</span><small>{item.period}</small></div>
-          </div>
-        ))}
-      </div>
-    </article>
-  );
-}
-
-function ActivityPanel({ activities }: { activities: Activity[] }) {
-  return (
-    <aside className="activity-rail">
-      <div className="activity-card">
-        <div className="panel-title"><h3>Atividades Recentes</h3><Link to="/app/memoria">Ver todas</Link></div>
-        <div className="activity-list">
-          {activities.length === 0 && <span className="entity-meta">Sem atividades ainda</span>}
-          {activities.map((item, index) => (
-            <div className="activity-item" key={`${item.title}-${index}`}>
-              <div className={`activity-icon ${item.type}`}>{icon(item.type)}</div>
-              <div>
-                <b>{item.title}</b>
-                <span>{item.subtitle}</span>
-                {item.location && <span>{item.location}</span>}
-                <small>{item.time}</small>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-    </aside>
-  );
+function shortDate(value: string): string {
+  return new Date(value).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
 }
 
 export default function DashboardPage() {
   const { workspaceId } = useOutletContext<AppContext>();
-  const [data, setData] = useState<DashboardData>(emptyDashboard);
+  const [data, setData] = useState<DashboardData | null>(null);
   const [points, setPoints] = useState<MapPoint[]>([]);
-  const [toast, setToast] = useState<ToastContent | null>(null);
+  const [events, setEvents] = useState<MemoriaEvent[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [showNew, setShowNew] = useState(false);
 
-  const refresh = useCallback(() => {
-    void loadDashboard(workspaceId).then(setData);
-    void loadMapPoints(workspaceId).then(setPoints);
+  const refresh = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    const [dashboard, map, memory] = await Promise.allSettled([
+      loadDashboard(workspaceId),
+      loadMapPoints(workspaceId),
+      loadMemoria(workspaceId)
+    ]);
+    if (dashboard.status === 'fulfilled') setData(dashboard.value);
+    else {
+      setData(null);
+      setError(dashboard.reason instanceof Error ? dashboard.reason.message : 'O painel não respondeu.');
+    }
+    setPoints(map.status === 'fulfilled' ? map.value : []);
+    setEvents(memory.status === 'fulfilled' ? memory.value : []);
+    setLoading(false);
   }, [workspaceId]);
 
-  useEffect(refresh, [refresh]);
+  useEffect(() => { void refresh(); }, [refresh]);
 
-  function handleCreated() {
-    setShowNew(false);
-    setToast({
-      title: 'Observação registrada',
-      description: 'Já faz parte da memória do território: virou objeto, evento e relação no core do Angico.',
-      actionLabel: 'Ótimo'
-    });
-    refresh();
-  }
-
-  const center = points.length ? [points[0].latitude, points[0].longitude] as [number, number] : DEFAULT_CENTER;
+  const center = points.length
+    ? [points[0].latitude, points[0].longitude] as [number, number]
+    : DEFAULT_CENTER;
 
   return (
-    <div className="dashboard-content">
-      <div className="dashboard-main">
-        <div className="page-head">
-          <div>
-            <h1>Resumo do Território</h1>
-            <p>{data.territory.subtitle} de {data.territory.name}</p>
+    <div className="page dashboard-page">
+      <header className="page-head">
+        <div>
+          <span className="overline">Caderno do território</span>
+          <h1>{data?.territory.name || 'Visão geral'}</h1>
+          <p>Registros, mobilização e memória em uma leitura operacional.</p>
+        </div>
+        <button className="primary-button" onClick={() => setShowNew(true)}>Registrar observação</button>
+      </header>
+
+      {loading && <LoadingState label="Abrindo o caderno do território…" />}
+      {!loading && error && <ErrorState message={error} onRetry={() => void refresh()} />}
+
+      {!loading && data && (
+        <>
+          <section className="ledger-strip" aria-label="Contagem dos registros">
+            {data.stats.map((item) => (
+              <div className="ledger-stat" key={item.label}>
+                <span>{icon(item.icon)}</span>
+                <div><strong>{item.value}</strong><small>{item.label}</small></div>
+                {item.trend && <em>{item.trend}</em>}
+              </div>
+            ))}
+          </section>
+
+          <div className="dashboard-grid">
+            <section className="sheet map-sheet">
+              <header className="section-headline">
+                <div><span className="overline">Territorialidade</span><h2>Onde os registros se acumulam</h2></div>
+                <Link to="/app/mapa">Abrir mapa</Link>
+              </header>
+              <div className="map-frame">
+                <MapView points={points} center={center} zoom={points.length ? 14 : 4} height={360} fitToPoints />
+                {points.length === 0 && (
+                  <div className="map-empty-label"><b>Nenhum ponto localizado</b><span>Registros sem local continuam preservados no caderno.</span></div>
+                )}
+              </div>
+            </section>
+
+            <section className="sheet trace-sheet">
+              <header className="section-headline">
+                <div><span className="overline">Rastro verificável</span><h2>Últimos acontecimentos</h2></div>
+                <Link to="/app/memoria">Ver memória</Link>
+              </header>
+              {events.length === 0 ? (
+                <EmptyState title="A memória ainda não começou" message="O primeiro registro de campo abrirá este rastro." />
+              ) : (
+                <ol className="compact-trace">
+                  {events.slice(0, 6).map((event) => (
+                    <li key={event.commitSequence ?? event.sequence}>
+                      <span className={`entity-mark type-${event.entityType.toLowerCase()}`} aria-hidden="true" />
+                      <div><b>{eventLabel(event)}</b><small>{event.entityType} · {shortDate(event.occurredAt)}</small></div>
+                    </li>
+                  ))}
+                </ol>
+              )}
+            </section>
           </div>
-          <button className="primary-button" onClick={() => setShowNew(true)}>＋ Nova observação</button>
-        </div>
 
-        <div className="stat-grid">
-          {data.stats.map((item) => <StatCard key={item.label} item={item} onInteract={setToast} />)}
-        </div>
+          <div className="dashboard-grid lower">
+            <section className="sheet">
+              <header className="section-headline">
+                <div><span className="overline">Mobilização</span><h2>Missões em curso</h2></div>
+                <Link to="/app/missoes">Ver missões</Link>
+              </header>
+              {data.missions.length === 0 ? (
+                <EmptyState title="Nenhuma missão registrada" message="Missões organizam uma resposta coletiva a um problema real." />
+              ) : (
+                <div className="mission-ledger">
+                  {data.missions.map((mission) => (
+                    <article key={mission.title}>
+                      <div><b>{mission.title}</b><span>{mission.actions} · {mission.participants}</span></div>
+                      <div className="progress-line"><span style={{ width: `${mission.progress}%` }} /></div>
+                      <strong>{mission.progress}%</strong>
+                    </article>
+                  ))}
+                </div>
+              )}
+            </section>
 
-        <div className="dashboard-map">
-          <div className="panel-title" style={{ marginBottom: 12 }}>
-            <h3>Mapa do Território</h3><Link to="/app/mapa">Abrir mapa completo →</Link>
+            <section className="sheet">
+              <header className="section-headline">
+                <div><span className="overline">Resultados medidos</span><h2>Indicadores disponíveis</h2></div>
+                <Link to="/app/indicadores">Ver indicadores</Link>
+              </header>
+              {data.impact.length === 0 ? (
+                <EmptyState title="Ainda sem medições" message="Números só aparecem quando existem resultados registrados." />
+              ) : (
+                <dl className="indicator-ledger">
+                  {data.impact.map((item) => (
+                    <div key={item.label}><dt>{item.label}<small>{item.period}</small></dt><dd>{item.value}</dd></div>
+                  ))}
+                </dl>
+              )}
+            </section>
           </div>
-          <MapView points={points} center={center} zoom={points.length ? 14 : 4} height={360} fitToPoints />
-        </div>
+        </>
+      )}
 
-        <div className="bottom-grid">
-          <CategoryPanel items={data.categoryDistribution} />
-          <MissionPanel missions={data.missions} />
-          <ImpactPanel impact={data.impact} />
-        </div>
-      </div>
-
-      <ActivityPanel activities={data.activities} />
-
-      {toast && <Toast toast={toast} onDismiss={() => setToast(null)} />}
       {showNew && (
-        <NewEntityModal workspaceId={workspaceId} initialType="observacao" lockType onClose={() => setShowNew(false)} onCreated={handleCreated} />
+        <NewEntityModal
+          workspaceId={workspaceId}
+          initialType="observacao"
+          lockType
+          onClose={() => setShowNew(false)}
+          onCreated={() => { setShowNew(false); void refresh(); }}
+        />
       )}
     </div>
   );

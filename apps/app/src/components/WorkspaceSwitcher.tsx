@@ -12,10 +12,6 @@ interface Props {
   onDelete: (slug: string) => Promise<void>;
 }
 
-// The workspace switcher — the platform's top-level partition control. Picking a
-// workspace reloads every module (mapa, observações, problemas, potencialidades,
-// mensagens) against that workspace's isolated data, so a member helping across
-// parallel activities keeps one workspace per activity.
 export default function WorkspaceSwitcher({ workspaces, activeSlug, onSwitch, onCreate, onDelete }: Props) {
   const [open, setOpen] = useState(false);
   const [creating, setCreating] = useState(false);
@@ -27,7 +23,11 @@ export default function WorkspaceSwitcher({ workspaces, activeSlug, onSwitch, on
   const rootRef = useRef<HTMLDivElement>(null);
 
   const active = workspaces.find((w) => w.slug === activeSlug);
-  const activeName = active?.nome ?? 'Workspace';
+  const activeName = active?.nome ?? activeSlug
+    .split(/[-_]/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
 
   function close() {
     setOpen(false);
@@ -37,7 +37,6 @@ export default function WorkspaceSwitcher({ workspaces, activeSlug, onSwitch, on
     setConfirmingSlug(null);
   }
 
-  // Dismiss on outside click or Escape.
   useEffect(() => {
     if (!open) return;
     function onDocClick(e: MouseEvent) {
@@ -98,14 +97,14 @@ export default function WorkspaceSwitcher({ workspaces, activeSlug, onSwitch, on
         onClick={() => setOpen((v) => !v)}
       >
         <div className="workspace-trigger-label">
-          <span>Workspace</span>
+          <span>Território</span>
           <strong>{activeName}</strong>
         </div>
         <b className={`workspace-chev ${open ? 'up' : ''}`} aria-hidden="true">⌄</b>
       </button>
 
       {open && (
-        <div className="workspace-menu" aria-label="Workspaces">
+        <div className="workspace-menu" aria-label="Territórios disponíveis">
           <div className="workspace-options">
             {workspaces.map((w) => {
               const isActive = w.slug === activeSlug;
@@ -161,7 +160,7 @@ export default function WorkspaceSwitcher({ workspaces, activeSlug, onSwitch, on
               <input
                 autoFocus
                 value={nome}
-                placeholder="Nome do workspace"
+                placeholder="Nome do território"
                 maxLength={60}
                 onChange={(e) => setNome(e.target.value)}
                 disabled={busy}
@@ -186,7 +185,7 @@ export default function WorkspaceSwitcher({ workspaces, activeSlug, onSwitch, on
                 {icon('people')} Membros
               </button>
               <button type="button" className="workspace-new" onClick={() => { setCreating(true); setError(null); }}>
-                <span className="ws-plus" aria-hidden="true">＋</span> Novo workspace
+                <span className="ws-plus" aria-hidden="true">＋</span> Novo território
               </button>
             </>
           )}

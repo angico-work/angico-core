@@ -16,8 +16,6 @@ export interface AppContext {
   workspaceId: string;
 }
 
-// Turns a workspace slug ("coletivo-jardim-novo") into a readable label — only a
-// fallback for before the named workspace list has loaded.
 function workspaceLabel(workspaceId: string): string {
   return workspaceId
     .split(/[-_]/)
@@ -83,7 +81,6 @@ export default function AppShell() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authStatus]);
 
-  // Resolve the current member's full record within the active workspace.
   useEffect(() => {
     if (authStatus !== 'authenticated') return;
     let active = true;
@@ -119,7 +116,7 @@ export default function AppShell() {
 
   function switchWorkspace(slug: string) {
     if (slug === activeSlug) return;
-    setProfile(null); // drop the previous workspace's profile until it reloads
+    setProfile(null);
     setActiveSlug(slug);
     setSessionWorkspace(slug);
   }
@@ -137,7 +134,6 @@ export default function AppShell() {
   async function handleDeleteWorkspace(slug: string) {
     await deleteWorkspace(slug);
     setWorkspaces((prev) => prev.filter((w) => w.slug !== slug));
-    // If somehow removing the active one, fall back to the first remaining.
     if (slug === activeSlug) {
       const fallback = workspaces.find((w) => w.slug !== slug)?.slug ?? DEFAULT_WORKSPACE;
       switchWorkspace(fallback);
@@ -147,8 +143,6 @@ export default function AppShell() {
   const context: AppContext = { workspaceId: activeSlug };
   const activeName = workspaces.find((w) => w.slug === activeSlug)?.nome ?? workspaceLabel(activeSlug);
 
-  // Fall back to the session so the profile editor opens even before the full
-  // pessoa record (with telefone/foto) has loaded.
   const effectiveProfile: PessoaHit | null = profile ?? (session ? {
     id: session.pessoaId,
     workspaceId: activeSlug,
@@ -170,7 +164,6 @@ export default function AppShell() {
         onDeleteWorkspace={handleDeleteWorkspace}
         userName={effectiveProfile?.nome ?? session?.nome ?? 'Visitante'}
         userRole={session?.papel ?? 'Membro do território'}
-        userId={session?.angicoId}
         userFoto={effectiveProfile?.foto ?? null}
         open={sidebarOpen}
         onNavigate={() => setSidebarOpen(false)}

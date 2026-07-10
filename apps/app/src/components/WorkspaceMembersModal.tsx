@@ -5,8 +5,11 @@ import { icon } from '../lib/icons';
 import { addMember, listMembers, removeMember } from '../lib/api';
 import type { WorkspaceMember } from '../types';
 
-// OWNER is assigned automatically to the creator, so it isn't offered here.
 const ROLES = ['ADMIN', 'COORDINATOR', 'MAPPER', 'MEMBER', 'VIEWER'];
+const ROLE_LABELS: Record<string, string> = {
+  ADMIN: 'Administração', COORDINATOR: 'Coordenação', MAPPER: 'Registro de campo',
+  MEMBER: 'Participante', VIEWER: 'Leitura', OWNER: 'Responsável'
+};
 
 interface Props {
   slug: string;
@@ -61,7 +64,6 @@ export default function WorkspaceMembersModal({ slug, workspaceName, onClose }: 
     }
   }
 
-  // Portal to body so the fixed overlay escapes the sidebar's stacking context.
   return createPortal(
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-card" onClick={(e) => e.stopPropagation()}>
@@ -80,7 +82,7 @@ export default function WorkspaceMembersModal({ slug, workspaceName, onClose }: 
                   <strong>{m.displayName}</strong>
                   <span className="mono">@{m.actorId}</span>
                 </div>
-                <span className={`role-badge role-${m.role.toLowerCase()}`}>{m.role}</span>
+                <span className={`role-badge role-${m.role.toLowerCase()}`}>{ROLE_LABELS[m.role] ?? m.role}</span>
                 <button type="button" className="member-remove" title="Remover membro" aria-label={`Remover ${m.displayName}`} onClick={() => drop(m)}>
                   {icon('trash')}
                 </button>
@@ -103,7 +105,7 @@ export default function WorkspaceMembersModal({ slug, workspaceName, onClose }: 
           </div>
           <div className="member-add-row">
             <select value={role} onChange={(e) => setRole(e.target.value)} aria-label="Papel do membro">
-              {ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
+              {ROLES.map((r) => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
             </select>
             <button type="submit" className="primary-button" disabled={busy || !actorId.trim()}>
               {busy ? 'Adicionando…' : 'Adicionar'}

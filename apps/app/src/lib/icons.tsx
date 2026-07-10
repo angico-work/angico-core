@@ -1,9 +1,6 @@
 import type { ReactElement } from 'react';
 import type { IconName } from '../types';
 
-// One coherent line-icon set (24×24, currentColor, 1.75 stroke) replacing the
-// earlier unicode glyphs — they inherit color and size from context (nav, stat
-// cards, buttons, hero eyebrows) and read consistently across the whole app.
 const PATHS: Record<IconName, ReactElement> = {
   leaf: (
     <>

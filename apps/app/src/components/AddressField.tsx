@@ -11,8 +11,6 @@ interface Props {
   autoFocus?: boolean;
 }
 
-// A debounced address/city autocomplete backed by /api/geocoding/search.
-// Selecting a suggestion hands the full GeoResult (coords + city/UF) upward.
 export default function AddressField({ value, onChange, onSelect, placeholder, id, autoFocus }: Props) {
   const [results, setResults] = useState<GeoResult[]>([]);
   const [open, setOpen] = useState(false);

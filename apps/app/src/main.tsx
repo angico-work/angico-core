@@ -1,6 +1,12 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
+import '@fontsource/outfit/latin-400.css';
+import '@fontsource/outfit/latin-600.css';
+import '@fontsource/outfit/latin-700.css';
+import '@fontsource/source-sans-3/latin-400.css';
+import '@fontsource/source-sans-3/latin-600.css';
+import '@fontsource/spline-sans-mono/latin-500.css';
 import App from './App';
 import './styles.css';
 
@@ -17,13 +23,8 @@ createRoot(container).render(
   </StrictMode>
 );
 
-// Progressive Web App: register the service worker in production builds so the
-// app shell (and the last-seen território data) keep working offline. Skipped in
-// dev so it never caches the Vite module graph / breaks HMR.
 if (import.meta.env.PROD && 'serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js').catch(() => {
-      /* offline support is progressive enhancement — ignore registration errors */
-    });
+    navigator.serviceWorker.register('/sw.js').catch(() => undefined);
   });
 }

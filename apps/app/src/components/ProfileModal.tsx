@@ -2,7 +2,6 @@ import { useState, type ChangeEvent, type FormEvent } from 'react';
 import { updateProfile } from '../lib/api';
 import type { PessoaHit } from '../types';
 
-// Resize + compress client-side so the stored data URL stays small (~10-20KB).
 async function fileToDataUrl(file: File, max = 256): Promise<string> {
   const bitmap = await createImageBitmap(file);
   const scale = Math.min(1, max / Math.max(bitmap.width, bitmap.height));

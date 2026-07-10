@@ -1,68 +1,59 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import type { AppContext } from '../components/AppShell';
+import { EmptyState, ErrorState, LoadingState } from '../components/PageFeedback';
 import { loadDashboard } from '../lib/api';
-import { icon } from '../lib/icons';
 import type { DashboardData } from '../types';
-
-// Read-only views derived from the dashboard aggregation. Indicadores shows the
-// impact metrics; Relatórios shows a territory summary (export is future work).
 
 function useDashboard(workspaceId: string) {
   const [data, setData] = useState<DashboardData | null>(null);
-  useEffect(() => {
-    let active = true;
-    loadDashboard(workspaceId).then((d) => { if (active) setData(d); });
-    return () => { active = false; };
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const refresh = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      setData(await loadDashboard(workspaceId));
+    } catch (caught) {
+      setData(null);
+      setError(caught instanceof Error ? caught.message : 'Não foi possível carregar esta leitura.');
+    } finally {
+      setLoading(false);
+    }
   }, [workspaceId]);
-  return data;
+  useEffect(() => { void refresh(); }, [refresh]);
+  return { data, loading, error, refresh };
 }
 
 export function IndicadoresPage() {
   const { workspaceId } = useOutletContext<AppContext>();
-  const data = useDashboard(workspaceId);
+  const { data, loading, error, refresh } = useDashboard(workspaceId);
   return (
     <div className="page">
-      <div className="page-head">
-        <div>
-          <h1>Indicadores</h1>
-          <p>Métricas de impacto acumulado do território.</p>
-        </div>
-      </div>
-      <div className="entity-grid">
-        {(data?.impact ?? []).map((m) => (
-          <article className="entity-card" key={m.label} style={{ borderLeftColor: '#12a044' }}>
-            <div className="entity-card-head">
-              <strong style={{ fontSize: 28 }}>{icon(m.icon)} {m.value}</strong>
-            </div>
-            <span className="entity-meta">{m.label}</span>
-            <span className="entity-meta">{m.period}</span>
-          </article>
-        ))}
-      </div>
+      <header className="page-head"><div><span className="overline">Sinais de transformação</span><h1>Indicadores</h1><p>Medições existentes no território. Nenhum valor é estimado pela interface.</p></div></header>
+      {loading ? <LoadingState /> : error ? <ErrorState message={error} onRetry={() => void refresh()} /> : !data?.impact.length ? (
+        <EmptyState title="Ainda não há indicadores medidos" message="Resultados precisam ser registrados antes que uma medição possa aparecer aqui." />
+      ) : (
+        <section className="indicator-sheet"><header><span>Indicador</span><span>Período</span><span>Valor registrado</span></header>{data.impact.map((item) => <article key={item.label}><b>{item.label}</b><span>{item.period}</span><strong>{item.value}</strong></article>)}</section>
+      )}
     </div>
   );
 }
 
 export function RelatoriosPage() {
   const { workspaceId } = useOutletContext<AppContext>();
-  const data = useDashboard(workspaceId);
+  const { data, loading, error, refresh } = useDashboard(workspaceId);
   return (
-    <div className="page">
-      <div className="page-head">
-        <div>
-          <h1>Relatórios</h1>
-          <p>Síntese do território {data ? `· ${data.territory.name}` : ''}. Exportação em PDF chega em breve.</p>
-        </div>
-      </div>
-      <div className="entity-grid">
-        {(data?.stats ?? []).map((s) => (
-          <article className="entity-card" key={s.label} style={{ borderLeftColor: '#004B6C' }}>
-            <div className="entity-card-head"><strong style={{ fontSize: 28 }}>{s.value}</strong></div>
-            <span className="entity-meta">{s.label}</span>
-          </article>
-        ))}
-      </div>
+    <div className="page summary-page">
+      <header className="page-head"><div><span className="overline">Leitura atual</span><h1>Síntese do território</h1><p>Uma visão direta dos registros disponíveis agora. Nenhum arquivo foi gerado.</p></div></header>
+      {loading ? <LoadingState /> : error ? <ErrorState message={error} onRetry={() => void refresh()} /> : !data ? null : (
+        <section className="summary-document">
+          <header><span>Território</span><h2>{data.territory.name}</h2><p>{data.territory.subtitle}</p></header>
+          <div className="summary-ledger">{data.stats.map((stat) => <div key={stat.label}><dt>{stat.label}</dt><dd>{stat.value}</dd></div>)}</div>
+          <section><h3>Missões em curso</h3>{data.missions.length ? data.missions.map((mission) => <article key={mission.title}><b>{mission.title}</b><span>{mission.progress}% · {mission.actions} · {mission.participants}</span></article>) : <p>Nenhuma missão registrada.</p>}</section>
+          <footer>Esta síntese reflete apenas os registros retornados pelo Angico neste momento.</footer>
+        </section>
+      )}
     </div>
   );
 }

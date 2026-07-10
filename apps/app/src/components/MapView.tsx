@@ -4,15 +4,13 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import type { MapPoint } from '../types';
 
-// Tile source is configurable for deploy (swap providers / add a keyed URL via
-// VITE_MAP_TILE_URL); defaults to OpenStreetMap.
 const TILE_URL = import.meta.env.VITE_MAP_TILE_URL ?? 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
 
 const TYPE_COLOR: Record<string, string> = {
-  observacao: '#2c8fbd',
-  problema: '#f97316',
-  potencialidade: '#2aa84a',
-  mission: '#7c3aed'
+  observacao: '#0E7C86',
+  problema: '#C65D36',
+  potencialidade: '#35A86B',
+  mission: '#063F4D'
 };
 
 const TYPE_LABEL: Record<string, string> = {
@@ -31,8 +29,6 @@ function markerIcon(color: string): L.DivIcon {
   });
 }
 
-// The picker pin — a single draggable marker the user fine-tunes by dragging
-// or by clicking elsewhere on the map.
 const pickerIcon = L.divIcon({
   className: 'angico-pin angico-pin--picker',
   html: '<span></span>',
@@ -49,7 +45,6 @@ function ClickHandler({ onMapClick }: { onMapClick?: (lat: number, lng: number) 
   return null;
 }
 
-// Smoothly recenters the map whenever the controlled center/zoom change.
 function Recenter({ center, zoom }: { center: [number, number]; zoom: number }) {
   const map = useMap();
   useEffect(() => {
@@ -58,8 +53,6 @@ function Recenter({ center, zoom }: { center: [number, number]; zoom: number }) 
   return null;
 }
 
-// Fits the viewport to the data: a single point flies in, several points frame
-// to their bounds. Keeps the map honest — it always shows where the data is.
 function FitBounds({ points }: { points: MapPoint[] }) {
   const map = useMap();
   const key = points.map((p) => `${p.latitude},${p.longitude}`).join('|');
@@ -105,7 +98,7 @@ export default function MapView({
   fitToPoints
 }: Props) {
   return (
-    <MapContainer center={center} zoom={zoom} scrollWheelZoom style={{ height, width: '100%', borderRadius: 18 }}>
+      <MapContainer center={center} zoom={zoom} scrollWheelZoom style={{ height, width: '100%' }}>
       <TileLayer
         attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
         url={TILE_URL}

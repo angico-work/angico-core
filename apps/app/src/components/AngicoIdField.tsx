@@ -11,9 +11,6 @@ interface Props {
   placeholder?: string;
 }
 
-// Debounced autocomplete that links a território member to a real Angico
-// identity: it searches the people database by Angico ID or name and, on pick,
-// fills the handle (and prefills the name). Reuses the .address-field styles.
 export default function AngicoIdField({ workspaceId, value, onChange, onPick, id, placeholder }: Props) {
   const [results, setResults] = useState<PessoaHit[]>([]);
   const [open, setOpen] = useState(false);
