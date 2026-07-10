@@ -5,6 +5,11 @@ import com.angico.common.ClockProvider;
 import com.angico.core.memory.MemoryEventRepository;
 import com.angico.core.memory.MemoryObjectRepository;
 import com.angico.core.memory.StoredMemoryEvent;
+import com.angico.impacto.Indicador;
+import com.angico.impacto.IndicadorRepository;
+import com.angico.impacto.Medicao;
+import com.angico.impacto.MedicaoRepository;
+import com.angico.impacto.ResultadoRepository;
 import com.angico.missoes.Missao;
 import com.angico.missoes.MissaoRepository;
 import com.angico.observacoes.ObservacaoRepository;
@@ -14,12 +19,18 @@ import com.angico.potencialidades.PotencialidadeTerritorial;
 import com.angico.problemas.ProblemaRepository;
 import com.angico.problemas.ProblemaSocioambiental;
 import com.angico.workspaces.WorkspaceAuthorizationService;
+import com.angico.workspaces.WorkspaceRepository;
+import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.HashSet;
+import java.util.Set;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -32,9 +43,12 @@ import org.springframework.transaction.annotation.Transactional;
 public class GlimpseService {
 
     private static final String MEMORY_CLAIM =
-            "Cada dado do painel possui caminho para objeto, relação e evento no core do Angico.";
+            "Contagens operacionais e medições registradas permanecem separadas e rastreáveis.";
     private static final int MAX_ACTIVITIES = 8;
     private static final int MAX_MISSIONS = 6;
+    private static final int MAX_MEASUREMENTS = 8;
+    private static final DateTimeFormatter MEASUREMENT_DATE =
+            DateTimeFormatter.ofPattern("dd/MM/uuuu").withZone(ZoneOffset.UTC);
 
     private final MemoryObjectRepository objects;
     private final MemoryEventRepository events;
@@ -43,6 +57,10 @@ public class GlimpseService {
     private final PotencialidadeRepository potencialidades;
     private final MissaoRepository missoes;
     private final AcaoRepository acoes;
+    private final ResultadoRepository resultados;
+    private final IndicadorRepository indicadores;
+    private final MedicaoRepository medicoes;
+    private final WorkspaceRepository workspaces;
     private final ClockProvider clock;
     private final WorkspaceAuthorizationService authorizationService;
 
@@ -54,6 +72,10 @@ public class GlimpseService {
             PotencialidadeRepository potencialidades,
             MissaoRepository missoes,
             AcaoRepository acoes,
+            ResultadoRepository resultados,
+            IndicadorRepository indicadores,
+            MedicaoRepository medicoes,
+            WorkspaceRepository workspaces,
             ClockProvider clock,
             WorkspaceAuthorizationService authorizationService
     ) {
@@ -64,6 +86,10 @@ public class GlimpseService {
         this.potencialidades = potencialidades;
         this.missoes = missoes;
         this.acoes = acoes;
+        this.resultados = resultados;
+        this.indicadores = indicadores;
+        this.medicoes = medicoes;
+        this.workspaces = workspaces;
         this.clock = clock;
         this.authorizationService = authorizationService;
     }
@@ -76,10 +102,10 @@ public class GlimpseService {
 
         List<DashboardResponse.Stat> stats = List.of(
                 new DashboardResponse.Stat("Observações", count(workspaceId, "observacao"), "", "leaf"),
-                new DashboardResponse.Stat("Problemas Ativos", count(workspaceId, "problema"), "", "warning"),
-                new DashboardResponse.Stat("Missões em Andamento", count(workspaceId, "missao"), "", "target"),
-                new DashboardResponse.Stat("Jovens Engajados", count(workspaceId, "pessoa"), "", "people"),
-                new DashboardResponse.Stat("Potencialidades", count(workspaceId, "potencialidade"), "", "sprout")
+                new DashboardResponse.Stat("Problemas registrados", count(workspaceId, "problema"), "", "warning"),
+                new DashboardResponse.Stat("Missões registradas", count(workspaceId, "missao"), "", "target"),
+                new DashboardResponse.Stat("Ações registradas", acoes.countByWorkspaceId(workspaceId), "", "check"),
+                new DashboardResponse.Stat("Resultados registrados", resultados.countByWorkspaceId(workspaceId), "", "sprout")
         );
 
         List<DashboardResponse.Activity> activities = recent.stream()
@@ -165,12 +191,41 @@ public class GlimpseService {
     }
 
     private List<DashboardResponse.Impact> impact(String workspaceId) {
-        return List.of(
-                new DashboardResponse.Impact(String.valueOf(count(workspaceId, "observacao")), "Observações registradas", "acumulado", "leaf"),
-                new DashboardResponse.Impact(String.valueOf(count(workspaceId, "problema")), "Problemas mapeados", "acumulado", "warning"),
-                new DashboardResponse.Impact(String.valueOf(count(workspaceId, "missao")), "Missões mobilizadas", "acumulado", "target"),
-                new DashboardResponse.Impact(String.valueOf(acoes.countByWorkspaceId(workspaceId)), "Ações realizadas", "acumulado", "check")
-        );
+        List<DashboardResponse.Impact> measured = new ArrayList<>();
+        Set<Long> seenIndicators = new HashSet<>();
+        for (Medicao medicao : medicoes.findByWorkspaceIdOrderByCreatedAtDesc(workspaceId)) {
+            if (measured.size() == MAX_MEASUREMENTS
+                    || medicao.getIndicadorId() == null
+                    || !seenIndicators.add(medicao.getIndicadorId())) {
+                continue;
+            }
+            Indicador indicador = indicadores.findById(medicao.getIndicadorId())
+                    .filter(candidate -> workspaceId.equals(candidate.getWorkspaceId()))
+                    .orElse(null);
+            if (indicador == null || medicao.getValor() == null) {
+                continue;
+            }
+            String unit = medicao.getUnidade() == null || medicao.getUnidade().isBlank()
+                    ? indicador.getUnidade()
+                    : medicao.getUnidade();
+            String value = BigDecimal.valueOf(medicao.getValor()).stripTrailingZeros().toPlainString();
+            if (unit != null && !unit.isBlank()) {
+                value += " " + unit.strip();
+            }
+            Instant measuredAt = medicao.getMeasuredAt() == null
+                    ? medicao.getCreatedAt()
+                    : medicao.getMeasuredAt();
+            if (measuredAt == null) {
+                continue;
+            }
+            measured.add(new DashboardResponse.Impact(
+                    value,
+                    indicador.getNome(),
+                    MEASUREMENT_DATE.format(measuredAt),
+                    "target"
+            ));
+        }
+        return List.copyOf(measured);
     }
 
     private List<DashboardResponse.Category> categoryDistribution(List<ObservacaoTerritorial> observacoes) {
@@ -184,10 +239,15 @@ public class GlimpseService {
     }
 
     private DashboardResponse.Territory territory(String workspaceId) {
-        // Placeholder until the territórios module carries real names. Derives a
-        // readable label from the workspace id (e.g. "coletivo-jardim-novo").
-        return new DashboardResponse.Territory(workspaceId, humanize(workspaceId),
-                "Visão geral socioambiental do território");
+        return workspaces.findBySlug(workspaceId)
+                .map(workspace -> new DashboardResponse.Territory(
+                        workspaceId,
+                        workspace.getNome(),
+                        workspace.getDescricao() == null || workspace.getDescricao().isBlank()
+                                ? "Leitura operacional dos territórios deste workspace"
+                                : workspace.getDescricao()
+                ))
+                .orElseThrow(() -> new IllegalStateException("Workspace autorizado não encontrado."));
     }
 
     private static String humanizeStatus(String status) {
@@ -196,24 +256,6 @@ public class GlimpseService {
         }
         String lower = status.replace('_', ' ').toLowerCase();
         return Character.toUpperCase(lower.charAt(0)) + lower.substring(1);
-    }
-
-    private static String humanize(String slug) {
-        if (slug == null || slug.isBlank()) {
-            return "Território";
-        }
-        String[] parts = slug.split("[-_]");
-        StringBuilder sb = new StringBuilder();
-        for (String part : parts) {
-            if (part.isBlank()) {
-                continue;
-            }
-            if (sb.length() > 0) {
-                sb.append(' ');
-            }
-            sb.append(Character.toUpperCase(part.charAt(0))).append(part.substring(1));
-        }
-        return sb.toString();
     }
 
     private static String relativeTime(Instant from, Instant now) {
