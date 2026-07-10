@@ -2,11 +2,11 @@ package com.angico.common.idempotency;
 
 import com.angico.common.ClockProvider;
 import com.angico.common.ConflictException;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ArrayNode;
-import com.fasterxml.jackson.databind.node.ObjectNode;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.node.ArrayNode;
+import tools.jackson.databind.node.ObjectNode;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -51,7 +51,7 @@ public class IdempotencyService {
             byte[] canonical = objectMapper.writeValueAsBytes(sorted);
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
             return HexFormat.of().formatHex(digest.digest(canonical));
-        } catch (JsonProcessingException | NoSuchAlgorithmException exception) {
+        } catch (JacksonException | NoSuchAlgorithmException exception) {
             throw new IllegalStateException("Não foi possível calcular a identidade da requisição.", exception);
         }
     }
@@ -92,7 +92,7 @@ public class IdempotencyService {
         if (node.isObject()) {
             ObjectNode sorted = objectMapper.createObjectNode();
             var fieldNames = new TreeSet<String>();
-            node.fieldNames().forEachRemaining(fieldNames::add);
+            fieldNames.addAll(node.propertyNames());
             fieldNames.forEach(fieldName -> sorted.set(fieldName, sort(node.get(fieldName))));
             return sorted;
         }

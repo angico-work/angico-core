@@ -9,6 +9,9 @@ spring:
       max-request-size: ${ANGICO_UPLOAD_MAX_REQUEST_SIZE:8MB}
   jpa:
     open-in-view: false
+  jackson:
+    serialization:
+      fail-on-empty-beans: true
 server:
   port: ${SERVER_PORT:${PORT:8082}}
 

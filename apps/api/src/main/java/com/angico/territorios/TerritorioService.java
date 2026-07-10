@@ -16,9 +16,9 @@ import com.angico.observacoes.ObservacaoRepository;
 import com.angico.potencialidades.PotencialidadeRepository;
 import com.angico.problemas.ProblemaRepository;
 import com.angico.workspaces.WorkspaceAuthorizationService;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.core.JacksonException;
+import tools.jackson.core.type.TypeReference;
+import tools.jackson.databind.ObjectMapper;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -193,7 +193,7 @@ public class TerritorioService {
         }
         try {
             return objectMapper.writeValueAsString(values);
-        } catch (JsonProcessingException ex) {
+        } catch (JacksonException ex) {
             throw new IllegalArgumentException("boundingBox invalido.", ex);
         }
     }

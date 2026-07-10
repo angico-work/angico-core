@@ -2,8 +2,8 @@ package com.angico.core.memory;
 
 import com.angico.common.ClockProvider;
 import com.angico.core.ontology.OntologyService;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.ObjectMapper;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
@@ -187,7 +187,7 @@ public class JpaMemoryGateway implements MemoryGateway {
     private String serializePayload(MemoryEvent event) {
         try {
             return objectMapper.writeValueAsString(event.payload());
-        } catch (JsonProcessingException ex) {
+        } catch (JacksonException ex) {
             throw new IllegalArgumentException("Payload de memoria invalido.", ex);
         }
     }
