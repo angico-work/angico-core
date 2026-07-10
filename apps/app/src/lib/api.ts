@@ -6,14 +6,9 @@ import { emptyDashboard, demoDashboard } from '../data/fallbackDashboard';
 
 export const DEFAULT_WORKSPACE = 'coletivo-jardim-novo';
 
-// Production is deliberately same-origin: Vercel's /api function forwards to
-// the private upstream so SameSite=Lax session cookies remain first-party.
-// A direct origin override is accepted only by the local development server.
-export function resolveApiBase(isDev: boolean, configured?: string): string {
-  return isDev ? (configured ?? '').replace(/\/+$/, '') : '';
-}
-
-export const API_BASE = resolveApiBase(import.meta.env.DEV, import.meta.env.VITE_API_BASE_URL);
+// Browser requests are always same-origin. Vite proxies /api during local
+// development; Vercel's Function does the same in deployed environments.
+export const API_BASE = '';
 
 export function apiUrl(path: string): string {
   return `${API_BASE}${path}`;

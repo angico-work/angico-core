@@ -7,7 +7,7 @@ import {
   listWorkspaces,
   login,
   revalidateSession,
-  resolveApiBase
+  apiUrl
 } from './api';
 
 const session = {
@@ -50,9 +50,8 @@ describe('cookie session API', () => {
     expect(isAuthenticated()).toBe(true);
   });
 
-  it('forces production browser requests through the same-origin API proxy', () => {
-    expect(resolveApiBase(false, 'https://api.other-site.example')).toBe('');
-    expect(resolveApiBase(true, 'http://localhost:8082/')).toBe('http://localhost:8082');
+  it('keeps browser API requests relative in every environment', () => {
+    expect(apiUrl('/api/auth/me')).toBe('/api/auth/me');
   });
 
   it('adds credentials and the stored csrf token to mutations', async () => {

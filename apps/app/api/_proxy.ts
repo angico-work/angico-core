@@ -27,7 +27,10 @@ function parseApiOrigin(rawOrigin: string): URL {
     throw new Error('ANGICO_API_ORIGIN must be an absolute HTTP(S) origin');
   }
 
-  const hasUnsafeParts = !['http:', 'https:'].includes(origin.protocol)
+  const loopback = new Set(['localhost', '127.0.0.1', '::1', '[::1]']).has(origin.hostname);
+  const safeProtocol = origin.protocol === 'https:'
+    || (origin.protocol === 'http:' && loopback);
+  const hasUnsafeParts = !safeProtocol
     || Boolean(origin.username)
     || Boolean(origin.password)
     || (origin.pathname !== '/' && origin.pathname !== '')
@@ -40,6 +43,9 @@ function parseApiOrigin(rawOrigin: string): URL {
 }
 
 export function buildUpstreamUrl(requestUrl: URL, rawOrigin: string): string {
+  if (requestUrl.pathname !== '/api' && !requestUrl.pathname.startsWith('/api/')) {
+    throw new Error('Proxy requests must stay within /api');
+  }
   const origin = parseApiOrigin(rawOrigin);
   return new URL(`${requestUrl.pathname}${requestUrl.search}`, origin).toString();
 }
@@ -57,16 +63,22 @@ function requestHeaders(headers: Headers): Headers {
   const blocked = connectionScopedHeaders(headers);
   blocked.add('host');
   blocked.add('content-length');
+  blocked.add('forwarded');
   const result = new Headers();
   headers.forEach((value, name) => {
-    if (!blocked.has(name.toLowerCase())) result.append(name, value);
+    const normalized = name.toLowerCase();
+    if (!blocked.has(normalized) && !normalized.startsWith('x-forwarded-')) {
+      result.append(name, value);
+    }
   });
+  result.set('accept-encoding', 'identity');
   return result;
 }
 
 function responseHeaders(headers: Headers): Headers {
   const blocked = connectionScopedHeaders(headers);
   blocked.add('content-length');
+  blocked.add('content-encoding');
   const result = new Headers();
   headers.forEach((value, name) => {
     const normalized = name.toLowerCase();
@@ -79,6 +91,7 @@ function responseHeaders(headers: Headers): Headers {
   const cookies = headersWithSetCookie.getSetCookie?.()
     ?? (headers.get('set-cookie') ? [headers.get('set-cookie') as string] : []);
   for (const cookie of cookies) result.append('set-cookie', cookie);
+  result.set('cache-control', 'no-store');
   return result;
 }
 
@@ -95,7 +108,8 @@ export async function proxyRequest(
     method,
     headers: requestHeaders(request.headers),
     body,
-    redirect: 'manual'
+    redirect: 'manual',
+    signal: request.signal
   });
 
   const responseHasNoBody = method === 'HEAD'

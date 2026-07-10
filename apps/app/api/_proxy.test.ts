@@ -15,6 +15,7 @@ describe('same-origin API proxy', () => {
   it.each([
     ['javascript:alert(1)'],
     ['ftp://api.example'],
+    ['http://api.example'],
     ['https://user:secret@api.example'],
     ['https://api.example/base'],
     ['https://api.example?tenant=other'],
@@ -25,6 +26,13 @@ describe('same-origin API proxy', () => {
     );
   });
 
+  it('confines requests to the /api namespace', () => {
+    expect(() => buildUpstreamUrl(
+      new URL('https://app.example/internal/config'),
+      'https://api.example'
+    )).toThrow('/api');
+  });
+
   it('forwards cookies, CSRF and the exact body while removing hop-by-hop request headers', async () => {
     const upstreamFetch = vi.fn(async (_input: string | URL | Request, init?: RequestInit) => {
       const headers = new Headers(init?.headers);
@@ -32,6 +40,9 @@ describe('same-origin API proxy', () => {
       expect(headers.get('x-csrf-token')).toBe('csrf-token');
       expect(headers.get('connection')).toBeNull();
       expect(headers.get('host')).toBeNull();
+      expect(headers.get('forwarded')).toBeNull();
+      expect(headers.get('x-forwarded-host')).toBeNull();
+      expect(headers.get('accept-encoding')).toBe('identity');
       expect(init?.method).toBe('POST');
       expect(init?.body).toBeInstanceOf(ArrayBuffer);
       expect(new TextDecoder().decode(init?.body as ArrayBuffer)).toBe('{"nome":"Ipê"}');
@@ -44,6 +55,8 @@ describe('same-origin API proxy', () => {
         'x-csrf-token': 'csrf-token',
         connection: 'keep-alive',
         host: 'attacker.example',
+        forwarded: 'host=attacker.example',
+        'x-forwarded-host': 'attacker.example',
         'content-type': 'application/json'
       },
       body: '{"nome":"Ipê"}'
@@ -60,6 +73,7 @@ describe('same-origin API proxy', () => {
     const upstreamHeaders = new Headers({
       'content-type': 'application/json',
       connection: 'close',
+      'content-encoding': 'gzip',
       'x-request-id': 'request-123'
     });
     upstreamHeaders.append('set-cookie', 'ANGICO_SESSION=session; Path=/; HttpOnly; SameSite=Lax');
@@ -80,6 +94,8 @@ describe('same-origin API proxy', () => {
     expect(response.headers.get('content-type')).toBe('application/json');
     expect(response.headers.get('x-request-id')).toBe('request-123');
     expect(response.headers.get('connection')).toBeNull();
+    expect(response.headers.get('content-encoding')).toBeNull();
+    expect(response.headers.get('cache-control')).toBe('no-store');
     expect(response.headers.get('set-cookie')).toContain('ANGICO_SESSION=session');
     expect(response.headers.get('set-cookie')).toContain('PREFERENCE=compact');
   });

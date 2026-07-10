@@ -4,10 +4,7 @@ import { defineConfig } from 'vitest/config';
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), 'VITE_');
-  const apiBaseUrl = env.VITE_API_BASE_URL || '';
-  const proxyTarget = apiBaseUrl.startsWith('http')
-    ? apiBaseUrl
-    : 'http://localhost:8082';
+  const proxyTarget = env.VITE_DEV_API_PROXY_TARGET || 'http://localhost:8082';
 
   return {
     plugins: [react()],
