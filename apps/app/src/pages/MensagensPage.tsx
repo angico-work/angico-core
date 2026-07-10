@@ -1,14 +1,127 @@
-import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type FormEvent
+} from 'react';
 import { useOutletContext } from 'react-router-dom';
 import type { AppContext } from '../components/AppShell';
 import { EmptyState, ErrorState, LoadingState } from '../components/PageFeedback';
 import {
-  attachmentUrl, createConversa, getSession, listConversas, listMensagens, listTerritorios, sendMensagem
+  attachmentUrl,
+  createConversa,
+  getSession,
+  listConversas,
+  listMensagens,
+  listTerritorios,
+  markConversaRead,
+  searchMensagens
 } from '../lib/api';
-import type { Conversa, Mensagem, Territorio } from '../types';
+import { validateMessageFiles } from '../lib/messageFiles';
+import { startOnlinePolling } from '../lib/messagePolling';
+import {
+  cacheConversations,
+  cacheRemoteMessages,
+  clearMessageDraft,
+  getMessageAttachmentFile,
+  listLocalMessages,
+  loadCachedConversations,
+  loadMessageDraft,
+  saveMessageDraft,
+  type LocalMessage,
+  type LocalMessageAttachment,
+  type OutboxStatus
+} from '../lib/offlineStore';
+import { captureMessage, retryPendingMessages } from '../lib/offlineSync';
+import type {
+  Conversa,
+  Mensagem,
+  MensagemAnexo,
+  MensagemBusca,
+  Territorio
+} from '../types';
+
+function ownerFromSession(): string | undefined {
+  const session = getSession();
+  return session?.angicoId || (session ? `pessoa-${session.pessoaId}` : undefined);
+}
+
+function when(value: string): string {
+  return new Date(value).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
+}
+
+function contextLabel(type: string): string {
+  const labels: Record<string, string> = {
+    TERRITORIO: 'Território',
+    OBSERVACAO: 'Observação',
+    PROBLEMA: 'Problema',
+    POTENCIALIDADE: 'Potencialidade',
+    MISSAO: 'Missão',
+    ACAO: 'Ação',
+    RESULTADO: 'Resultado',
+    INDICADOR: 'Indicador'
+  };
+  return labels[type] ?? 'Contexto territorial';
+}
+
+function fileSignature(files: File[]): string {
+  return files.map((file) => `${file.name}:${file.size}:${file.type}:${file.lastModified}`).join('|');
+}
+
+const LOCAL_STATUS: Partial<Record<OutboxStatus, { label: string; tone: string }>> = {
+  QUEUED: { label: 'Na fila', tone: 'pending' },
+  SYNCING: { label: 'Enviando', tone: 'active' },
+  SYNCED: { label: 'Enviada', tone: 'ok' },
+  RETRYABLE_ERROR: { label: 'Falha temporária', tone: 'attention' },
+  CONFLICT: { label: 'Conflito', tone: 'attention' },
+  BLOCKED: { label: 'Sessão encerrada', tone: 'attention' },
+  ACTION_REQUIRED: { label: 'Revisão necessária', tone: 'attention' }
+};
+
+interface RemoteTimelineItem {
+  key: string;
+  kind: 'remote';
+  message: Mensagem;
+}
+
+interface LocalTimelineItem {
+  key: string;
+  kind: 'local';
+  message: LocalMessage;
+}
+
+type TimelineItem = RemoteTimelineItem | LocalTimelineItem;
+
+function mergeTimeline(remote: Mensagem[], local: LocalMessage[]): TimelineItem[] {
+  const items: TimelineItem[] = [];
+  const remoteClientIds = new Set(remote.map((message) => message.clientMessageId).filter(Boolean));
+  const remoteIds = new Set(remote.map((message) => message.id));
+  remote.forEach((message) => items.push({ key: `remote-${message.id}`, kind: 'remote', message }));
+  local.forEach((message) => {
+    if (message.remote) {
+      if (!remoteIds.has(message.remote.id)) {
+        items.push({ key: `remote-${message.remote.id}`, kind: 'remote', message: message.remote });
+      }
+      return;
+    }
+    if (!remoteClientIds.has(message.clientMessageId)) {
+      items.push({ key: `local-${message.clientMessageId}`, kind: 'local', message });
+    }
+  });
+  return items.sort((left, right) => {
+    const leftAt = left.kind === 'remote' ? left.message.occurredAt : left.message.occurredAt;
+    const rightAt = right.kind === 'remote' ? right.message.occurredAt : right.message.occurredAt;
+    return leftAt.localeCompare(rightAt);
+  });
+}
 
 function NewConversationDialog({ workspaceId, territories, onClose, onCreated }: {
-  workspaceId: string; territories: Territorio[]; onClose: () => void; onCreated: (conversation: Conversa) => void;
+  workspaceId: string;
+  territories: Territorio[];
+  onClose: () => void;
+  onCreated: (conversation: Conversa) => void;
 }) {
   const [title, setTitle] = useState('');
   const [territoryId, setTerritoryId] = useState(() => territories[0]?.id ?? 0);
@@ -21,9 +134,19 @@ function NewConversationDialog({ workspaceId, territories, onClose, onCreated }:
     if (!territoryId) return;
     setSubmitting(true);
     setError(null);
-    const refs = participants.split(/[,;\s]+/).map((value) => value.trim().replace(/^@/, '')).filter(Boolean);
+    const refs = participants
+      .split(/[,;\s]+/)
+      .map((value) => value.trim().replace(/^@/, ''))
+      .filter(Boolean);
     try {
-      onCreated(await createConversa({ workspaceId, territorioId: territoryId, titulo: title.trim(), participanteRefs: refs }));
+      onCreated(await createConversa({
+        workspaceId,
+        territorioId: territoryId,
+        contextEntityType: 'TERRITORIO',
+        contextEntityId: String(territoryId),
+        titulo: title.trim(),
+        participanteRefs: refs
+      }));
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Não foi possível criar a conversa.');
       setSubmitting(false);
@@ -31,131 +154,447 @@ function NewConversationDialog({ workspaceId, territories, onClose, onCreated }:
   }
 
   return (
-    <div className="modal-overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+    <div className="modal-overlay" role="presentation" onMouseDown={(event) => {
+      if (event.target === event.currentTarget) onClose();
+    }}>
       <section className="modal-card" role="dialog" aria-modal="true" aria-labelledby="conversation-title">
-        <header className="dialog-head"><div><span className="overline">Coordenação no território</span><h2 id="conversation-title">Nova conversa</h2></div><button type="button" className="icon-button" aria-label="Fechar" onClick={onClose}>×</button></header>
+        <header className="dialog-head">
+          <div><span className="overline">Coordenação no território</span><h2 id="conversation-title">Nova conversa</h2></div>
+          <button type="button" className="icon-button" aria-label="Fechar" onClick={onClose}>×</button>
+        </header>
         <form onSubmit={submit}>
-          <div className="field"><label htmlFor="conversation-name">Assunto</label><input id="conversation-name" required value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Ex.: Organização do mutirão" /></div>
-          <div className="field"><label htmlFor="conversation-territory">Território relacionado</label><select id="conversation-territory" value={territoryId} onChange={(event) => setTerritoryId(Number(event.target.value))}>{territories.map((territory) => <option key={territory.id} value={territory.id}>{territory.nome}{territory.cidade ? ` · ${territory.cidade}` : ''}</option>)}</select></div>
-          <div className="field"><label htmlFor="conversation-participants">Participantes <span>opcional</span></label><input id="conversation-participants" value={participants} onChange={(event) => setParticipants(event.target.value)} placeholder="@maria, @cooperativa" /><small>Use identidades Angico separadas por vírgula.</small></div>
+          <div className="field">
+            <label htmlFor="conversation-name">Assunto</label>
+            <input id="conversation-name" required value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Ex.: Organização do mutirão" />
+          </div>
+          <div className="field">
+            <label htmlFor="conversation-territory">Território relacionado</label>
+            <select id="conversation-territory" value={territoryId} onChange={(event) => setTerritoryId(Number(event.target.value))}>
+              {territories.map((territory) => (
+                <option key={territory.id} value={territory.id}>{territory.nome}{territory.cidade ? ` · ${territory.cidade}` : ''}</option>
+              ))}
+            </select>
+          </div>
+          <div className="field">
+            <label htmlFor="conversation-participants">Participantes <span>opcional</span></label>
+            <input id="conversation-participants" value={participants} onChange={(event) => setParticipants(event.target.value)} placeholder="@maria, @cooperativa" />
+            <small>Use identidades Angico separadas por vírgula.</small>
+          </div>
           {error && <div className="form-error" role="alert">{error}</div>}
-          <footer className="dialog-actions"><button type="button" className="ghost-button" onClick={onClose}>Cancelar</button><button type="submit" className="primary-button" disabled={submitting || !territoryId}>{submitting ? 'Criando…' : 'Criar conversa'}</button></footer>
+          <footer className="dialog-actions">
+            <button type="button" className="ghost-button" onClick={onClose}>Cancelar</button>
+            <button type="submit" className="primary-button" disabled={submitting || !territoryId}>{submitting ? 'Criando…' : 'Criar conversa'}</button>
+          </footer>
         </form>
       </section>
     </div>
   );
 }
 
-function when(value: string): string {
-  return new Date(value).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
+function LocalAttachmentLink({ attachment }: { attachment: LocalMessageAttachment }) {
+  const [url, setUrl] = useState<string>();
+  useEffect(() => {
+    let objectUrl: string | undefined;
+    void getMessageAttachmentFile(attachment.blobKey).then((file) => {
+      if (file && typeof URL.createObjectURL === 'function') {
+        objectUrl = URL.createObjectURL(file);
+        setUrl(objectUrl);
+      }
+    });
+    return () => {
+      if (objectUrl && typeof URL.revokeObjectURL === 'function') URL.revokeObjectURL(objectUrl);
+    };
+  }, [attachment.blobKey]);
+
+  return url ? (
+    <a href={url} download={attachment.name}>
+      {attachment.name}<small>{Math.ceil(attachment.size / 1024)} KB · salvo localmente</small>
+    </a>
+  ) : (
+    <span className="local-attachment">
+      {attachment.name}<small>{Math.ceil(attachment.size / 1024)} KB · salvo localmente</small>
+    </span>
+  );
+}
+
+function SelectedFile({ file, onRemove }: { file: File; onRemove: () => void }) {
+  const [preview, setPreview] = useState<string>();
+  useEffect(() => {
+    if (!file.type.startsWith('image/') || typeof URL.createObjectURL !== 'function') return;
+    const url = URL.createObjectURL(file);
+    setPreview(url);
+    return () => URL.revokeObjectURL(url);
+  }, [file]);
+  return (
+    <article className="selected-file">
+      {preview && <img src={preview} alt="" />}
+      <div><b>{file.name}</b><small>{Math.ceil(file.size / 1024)} KB · salvo localmente</small></div>
+      <button type="button" aria-label={`Remover ${file.name}`} onClick={onRemove}>×</button>
+    </article>
+  );
 }
 
 export default function MensagensPage() {
   const { workspaceId } = useOutletContext<AppContext>();
+  const ownerId = ownerFromSession();
+  const meId = getSession()?.pessoaId ?? null;
   const [conversations, setConversations] = useState<Conversa[]>([]);
   const [territories, setTerritories] = useState<Territorio[]>([]);
   const [activeId, setActiveId] = useState<number | null>(null);
-  const [messages, setMessages] = useState<Mensagem[]>([]);
+  const [timeline, setTimeline] = useState<TimelineItem[]>([]);
   const [draft, setDraft] = useState('');
   const [files, setFiles] = useState<File[]>([]);
+  const [draftKey, setDraftKey] = useState<string>();
+  const [draftState, setDraftState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [loading, setLoading] = useState(true);
+  const [usingCache, setUsingCache] = useState(false);
   const [messageLoading, setMessageLoading] = useState(false);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [messageError, setMessageError] = useState<string | null>(null);
   const [showNew, setShowNew] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searching, setSearching] = useState(false);
+  const [searchResults, setSearchResults] = useState<MensagemBusca[]>([]);
+  const [searchError, setSearchError] = useState<string | null>(null);
   const streamRef = useRef<HTMLDivElement>(null);
-  const meId = getSession()?.pessoaId ?? null;
+  const savedFilesSignature = useRef('');
 
-  const refreshConversations = useCallback(async () => {
-    setLoading(true);
+  const active = useMemo(
+    () => conversations.find((conversation) => conversation.id === activeId) ?? null,
+    [activeId, conversations]
+  );
+
+  const refreshConversations = useCallback(async (background = false) => {
+    if (!ownerId) {
+      setError('Entre novamente para abrir as conversas deste aparelho.');
+      setLoading(false);
+      return;
+    }
+    if (!background) setLoading(true);
     setError(null);
     try {
-      const [conversationList, territoryList] = await Promise.all([listConversas(workspaceId), listTerritorios(workspaceId)]);
+      let conversationList: Conversa[];
+      if (navigator.onLine) {
+        conversationList = await listConversas(workspaceId);
+        await cacheConversations(ownerId, workspaceId, conversationList);
+        setUsingCache(false);
+        try {
+          setTerritories(await listTerritorios(workspaceId));
+        } catch {
+          setTerritories([]);
+        }
+      } else {
+        conversationList = await loadCachedConversations(ownerId, workspaceId);
+        setTerritories([]);
+        setUsingCache(true);
+      }
       setConversations(conversationList);
-      setTerritories(territoryList);
-      setActiveId((current) => current && conversationList.some((entry) => entry.id === current) ? current : conversationList[0]?.id ?? null);
+      setActiveId((current) => current && conversationList.some((entry) => entry.id === current)
+        ? current
+        : conversationList[0]?.id ?? null);
+      if (!navigator.onLine && conversationList.length === 0) {
+        setError('Nenhuma conversa confirmada está salva neste aparelho.');
+      }
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Não foi possível carregar as conversas.');
+      const cached = await loadCachedConversations(ownerId, workspaceId);
+      if (cached.length > 0) {
+        setConversations(cached);
+        setActiveId((current) => current && cached.some((entry) => entry.id === current)
+          ? current
+          : cached[0].id);
+        setUsingCache(true);
+      } else {
+        setError(caught instanceof Error ? caught.message : 'Não foi possível carregar as conversas.');
+      }
     } finally {
-      setLoading(false);
+      if (!background) setLoading(false);
     }
-  }, [workspaceId]);
+  }, [ownerId, workspaceId]);
 
-  useEffect(() => { void refreshConversations(); }, [refreshConversations]);
+  const refreshMessages = useCallback(async (conversationId: number, markRead: boolean) => {
+    if (!ownerId) return;
+    const local = await listLocalMessages(ownerId, workspaceId, conversationId);
+    let remote: Mensagem[] = [];
+    let readFailed = false;
+    if (navigator.onLine) {
+      try {
+        remote = await listMensagens(conversationId);
+        await cacheRemoteMessages(ownerId, workspaceId, conversationId, remote);
+        if (markRead) {
+          try {
+            await markConversaRead(conversationId);
+            setConversations((current) => current.map((conversation) => (
+              conversation.id === conversationId ? { ...conversation, unreadCount: 0 } : conversation
+            )));
+          } catch {
+            readFailed = true;
+          }
+        }
+      } catch (caught) {
+        setMessageError(caught instanceof Error ? caught.message : 'Não foi possível atualizar as mensagens.');
+      }
+    }
+    const refreshedLocal = remote.length > 0
+      ? await listLocalMessages(ownerId, workspaceId, conversationId)
+      : local;
+    setTimeline(mergeTimeline(remote, refreshedLocal));
+    if (!readFailed && remote.length > 0) setMessageError(null);
+  }, [ownerId, workspaceId]);
+
   useEffect(() => {
-    if (activeId == null) { setMessages([]); return; }
+    void refreshConversations();
+  }, [refreshConversations]);
+
+  useEffect(() => {
+    if (activeId == null || !ownerId) {
+      setTimeline([]);
+      return;
+    }
+    let activeEffect = true;
     setMessageLoading(true);
     setMessageError(null);
-    void listMensagens(activeId).then(setMessages).catch((caught) => {
-      setMessages([]);
-      setMessageError(caught instanceof Error ? caught.message : 'Não foi possível carregar as mensagens.');
-    }).finally(() => setMessageLoading(false));
-  }, [activeId]);
-  useEffect(() => { streamRef.current?.scrollTo({ top: streamRef.current.scrollHeight }); }, [messages]);
+    void refreshMessages(activeId, true).finally(() => {
+      if (activeEffect) setMessageLoading(false);
+    });
+    const stop = startOnlinePolling(async () => {
+      await refreshMessages(activeId, false);
+      await refreshConversations(true);
+    });
+    return () => {
+      activeEffect = false;
+      stop();
+    };
+  }, [activeId, ownerId, refreshConversations, refreshMessages]);
 
-  const active = conversations.find((conversation) => conversation.id === activeId) ?? null;
+  useEffect(() => {
+    if (activeId == null || !ownerId) return;
+    const key = `${ownerId}:${workspaceId}:${activeId}`;
+    setDraftKey(undefined);
+    setDraft('');
+    setFiles([]);
+    setDraftState('idle');
+    savedFilesSignature.current = '';
+    let activeEffect = true;
+    void loadMessageDraft(ownerId, workspaceId, activeId).then((saved) => {
+      if (!activeEffect) return;
+      setDraft(saved?.body ?? '');
+      setFiles(saved?.attachments ?? []);
+      savedFilesSignature.current = fileSignature(saved?.attachments ?? []);
+      setDraftState(saved && (saved.body || saved.attachments.length) ? 'saved' : 'idle');
+      setDraftKey(key);
+    });
+    return () => { activeEffect = false; };
+  }, [activeId, ownerId, workspaceId]);
+
+  useEffect(() => {
+    if (activeId == null || !ownerId || draftKey !== `${ownerId}:${workspaceId}:${activeId}`) return;
+    const timer = window.setTimeout(() => {
+      if (!draft.trim() && files.length === 0) {
+        void clearMessageDraft(ownerId, workspaceId, activeId).then(() => setDraftState('idle'));
+        return;
+      }
+      setDraftState('saving');
+      const nextFilesSignature = fileSignature(files);
+      const filesChanged = nextFilesSignature !== savedFilesSignature.current;
+      void saveMessageDraft(ownerId, workspaceId, activeId, draft, filesChanged ? files : undefined)
+        .then(() => {
+          savedFilesSignature.current = nextFilesSignature;
+          setDraftState('saved');
+        })
+        .catch((caught) => {
+          setDraftState('error');
+          setMessageError(caught instanceof Error ? caught.message : 'Não foi possível salvar o rascunho.');
+        });
+    }, 400);
+    return () => window.clearTimeout(timer);
+  }, [activeId, draft, draftKey, files, ownerId, workspaceId]);
+
+  useEffect(() => {
+    const stream = streamRef.current;
+    if (stream && typeof stream.scrollTo === 'function') {
+      stream.scrollTo({ top: stream.scrollHeight });
+    }
+  }, [timeline]);
 
   async function handleSend(event: FormEvent) {
     event.preventDefault();
-    if (activeId == null || (!draft.trim() && files.length === 0)) return;
+    if (activeId == null || !ownerId || (!draft.trim() && files.length === 0)) return;
     setSending(true);
     setMessageError(null);
     try {
-      const sent = await sendMensagem(activeId, draft, files);
-      setMessages((current) => [...current, sent]);
+      await captureMessage({ workspaceId, conversationId: activeId, body: draft, attachments: files });
+      await clearMessageDraft(ownerId, workspaceId, activeId);
       setDraft('');
       setFiles([]);
-      await refreshConversations();
+      savedFilesSignature.current = '';
+      setDraftState('idle');
+      await refreshMessages(activeId, false);
+      if (navigator.onLine) await refreshConversations(true);
     } catch (caught) {
-      setMessageError(caught instanceof Error ? caught.message : 'Não foi possível enviar.');
+      setMessageError(caught instanceof Error ? caught.message : 'Não foi possível guardar a mensagem.');
     } finally {
       setSending(false);
     }
   }
 
+  async function retryMessages() {
+    if (!ownerId) return;
+    setSending(true);
+    setMessageError(null);
+    try {
+      await retryPendingMessages(ownerId, workspaceId);
+      if (activeId != null) await refreshMessages(activeId, false);
+    } catch (caught) {
+      setMessageError(caught instanceof Error ? caught.message : 'Não foi possível reenviar as mensagens.');
+    } finally {
+      setSending(false);
+    }
+  }
+
+  async function handleSearch(event: FormEvent) {
+    event.preventDefault();
+    if (!searchQuery.trim()) {
+      setSearchResults([]);
+      return;
+    }
+    if (!navigator.onLine) {
+      setSearchError('A busca no histórico precisa de conexão. O conteúdo salvo continua disponível abaixo.');
+      return;
+    }
+    setSearching(true);
+    setSearchError(null);
+    try {
+      setSearchResults(await searchMensagens(workspaceId, searchQuery));
+    } catch (caught) {
+      setSearchError(caught instanceof Error ? caught.message : 'Não foi possível buscar nas conversas.');
+    } finally {
+      setSearching(false);
+    }
+  }
+
+  function selectFiles(next: File[]) {
+    try {
+      validateMessageFiles(next);
+      setFiles(next);
+      setMessageError(null);
+    } catch (caught) {
+      setMessageError(caught instanceof Error ? caught.message : 'Anexo inválido.');
+    }
+  }
+
+  const hasRetryable = timeline.some((item) => item.kind === 'local'
+    && ['RETRYABLE_ERROR', 'BLOCKED'].includes(item.message.syncStatus));
+
   return (
     <div className="page messages-page">
-      <header className="page-head">
-        <div><span className="overline">Coordenação coletiva</span><h1>Conversas</h1><p>Trocas relacionadas a territórios reais. Mensagens enviadas ficam na memória operacional.</p></div>
-        <button className="primary-button" disabled={territories.length === 0} onClick={() => setShowNew(true)}>Nova conversa</button>
+      <header className="page-head messages-head">
+        <div>
+          <span className="overline">Coordenação coletiva</span>
+          <h1>Conversas</h1>
+          <p>Trocas ligadas ao trabalho real. O que for enviado entra na memória operacional.</p>
+        </div>
+        <button className="primary-button" disabled={!navigator.onLine || territories.length === 0} onClick={() => setShowNew(true)}>Nova conversa</button>
       </header>
 
-      {loading ? <LoadingState label="Carregando conversas…" /> : error ? <ErrorState message={error} onRetry={() => void refreshConversations()} /> : territories.length === 0 ? (
-        <EmptyState title="Nenhum território disponível" message="Uma conversa precisa estar ligada a um território existente. Cadastre esse contexto antes de conversar." />
+      <form className="message-search" role="search" onSubmit={handleSearch}>
+        <label htmlFor="message-search">Buscar nas conversas</label>
+        <div>
+          <input id="message-search" type="search" value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="Assunto, mensagem, pessoa ou contexto" />
+          <button type="submit" className="secondary-button" disabled={searching}>{searching ? 'Buscando…' : 'Buscar'}</button>
+        </div>
+        {searchError && <small role="alert">{searchError}</small>}
+      </form>
+
+      {searchResults.length > 0 && (
+        <section className="message-search-results" aria-label="Resultados da busca">
+          <header><b>{searchResults.length} resultado{searchResults.length === 1 ? '' : 's'}</b><button type="button" onClick={() => setSearchResults([])}>Fechar</button></header>
+          {searchResults.map((result, index) => (
+            <button type="button" key={`${result.conversaId}-${result.mensagemId ?? index}`} onClick={() => {
+              setActiveId(result.conversaId);
+              setSearchResults([]);
+            }}>
+              <b>{result.titulo}</b>
+              {result.corpo && <p>{result.corpo}</p>}
+              <span>{result.senderNome ?? 'Conversa'} · {contextLabel(result.contextEntityType)}</span>
+            </button>
+          ))}
+        </section>
+      )}
+
+      {usingCache && <div className="offline-message-note" role="status"><b>Dados salvos neste aparelho</b><span>Novas mensagens serão enviadas quando a conexão voltar.</span></div>}
+
+      {loading ? <LoadingState label="Carregando conversas…" /> : error && conversations.length === 0 ? (
+        <ErrorState message={error} onRetry={() => void refreshConversations()} />
       ) : conversations.length === 0 ? (
-        <EmptyState title="Nenhuma conversa iniciada" message="Crie uma conversa para coordenar uma ação ou missão no território." action={<button className="secondary-button" onClick={() => setShowNew(true)}>Nova conversa</button>} />
+        <EmptyState
+          title={territories.length === 0 ? 'Nenhuma conversa disponível' : 'Nenhuma conversa iniciada'}
+          message={navigator.onLine ? 'Crie uma conversa ligada a um território existente.' : 'Conecte este aparelho uma vez para guardar as conversas autorizadas.'}
+          action={territories.length > 0 ? <button className="secondary-button" onClick={() => setShowNew(true)}>Nova conversa</button> : undefined}
+        />
       ) : (
         <div className="message-layout">
           <aside className="thread-list" aria-label="Conversas">
             {conversations.map((conversation) => (
               <button type="button" key={conversation.id} className={conversation.id === activeId ? 'active' : ''} onClick={() => setActiveId(conversation.id)}>
-                <b>{conversation.titulo}</b><span>Atualizada {when(conversation.updatedAt)}</span>
+                <b>{conversation.titulo}</b>
+                <span>{contextLabel(conversation.contextEntityType)} · atualizada {when(conversation.updatedAt)}</span>
+                {conversation.unreadCount > 0 && <em>{conversation.unreadCount} {conversation.unreadCount === 1 ? 'nova' : 'novas'}</em>}
               </button>
             ))}
           </aside>
           <section className="chat-panel">
             {active && (
               <>
-                <header className="chat-head"><div><span className="overline">Conversa ativa</span><h2>{active.titulo}</h2></div><span>{active.status}</span></header>
+                <header className="chat-head">
+                  <div><span className="overline">{contextLabel(active.contextEntityType)} relacionado</span><h2>{active.titulo}</h2></div>
+                  <span>{navigator.onLine ? 'Conectado' : 'Trabalho offline'}</span>
+                </header>
                 <div className="message-stream" ref={streamRef}>
-                  {messageLoading ? <LoadingState label="Carregando mensagens…" /> : messageError && messages.length === 0 ? <ErrorState message={messageError} /> : messages.length === 0 ? <EmptyState title="A conversa ainda está vazia" message="Envie a primeira mensagem quando houver algo a coordenar." /> : messages.map((message) => {
-                    const mine = meId != null && message.senderPessoaId === meId;
+                  {messageLoading ? <LoadingState label="Carregando mensagens…" /> : timeline.length === 0 ? (
+                    <EmptyState title="A conversa ainda está vazia" message="Envie a primeira mensagem quando houver algo a coordenar." />
+                  ) : timeline.map((item) => {
+                    if (item.kind === 'remote') {
+                      const message = item.message;
+                      const mine = meId != null && message.senderPessoaId === meId;
+                      return (
+                        <article key={item.key} className={`message-bubble ${mine ? 'mine' : ''}`}>
+                          <header><b>{mine ? 'Você' : message.senderNome ?? 'Participante'}</b><time dateTime={message.occurredAt}>{when(message.occurredAt)}</time></header>
+                          {message.corpo && <p>{message.corpo}</p>}
+                          {message.anexos.length > 0 && <RemoteAttachments attachments={message.anexos} />}
+                          <footer className="message-provenance"><span>Enviada</span><time dateTime={message.recordedAt}>registrada {when(message.recordedAt)}</time></footer>
+                        </article>
+                      );
+                    }
+                    const message = item.message;
+                    const status = LOCAL_STATUS[message.syncStatus] ?? { label: 'Salva localmente', tone: 'pending' };
                     return (
-                      <article key={message.id} className={`message-bubble ${mine ? 'mine' : ''}`}>
-                        <header><b>{mine ? 'Você' : message.senderNome ?? 'Participante'}</b><time dateTime={message.createdAt}>{when(message.createdAt)}</time></header>
-                        {message.corpo && <p>{message.corpo}</p>}
-                        {message.anexos.length > 0 && <div className="attachment-list">{message.anexos.map((attachment) => <a key={attachment.id} href={attachmentUrl(attachment.id)} target="_blank" rel="noreferrer">{attachment.originalFilename}<small>{Math.ceil(attachment.sizeBytes / 1024)} KB</small></a>)}</div>}
+                      <article key={item.key} className="message-bubble mine local-message">
+                        <header><b>Você</b><time dateTime={message.occurredAt}>{when(message.occurredAt)}</time></header>
+                        {message.body && <p>{message.body}</p>}
+                        {message.attachments.length > 0 && <div className="attachment-list">{message.attachments.map((attachment) => <LocalAttachmentLink key={attachment.blobKey} attachment={attachment} />)}</div>}
+                        <footer className={`message-provenance ${status.tone}`}><span>{status.label}</span><small>{message.lastError}</small></footer>
                       </article>
                     );
                   })}
                 </div>
                 <form className="message-composer" onSubmit={handleSend}>
-                  {files.length > 0 && <div className="selected-files">{files.map((file) => <span key={`${file.name}-${file.size}`}>{file.name}</span>)}</div>}
-                  {messageError && messages.length > 0 && <div className="form-error" role="alert">{messageError}</div>}
+                  {files.length > 0 && <div className="selected-files">{files.map((file, index) => (
+                    <SelectedFile key={`${file.name}-${file.size}-${index}`} file={file} onRemove={() => setFiles((current) => current.filter((_, fileIndex) => fileIndex !== index))} />
+                  ))}</div>}
+                  {messageError && <div className="form-error" role="alert">{messageError}</div>}
+                  <div className="draft-state" role="status">
+                    {draftState === 'saving' && 'Salvando rascunho…'}
+                    {draftState === 'saved' && 'Rascunho salvo neste aparelho'}
+                    {draftState === 'error' && 'Rascunho não salvo'}
+                  </div>
                   <label htmlFor="message-draft">Mensagem</label>
                   <textarea id="message-draft" rows={3} value={draft} onChange={(event) => setDraft(event.target.value)} placeholder="Escreva apenas o que precisa ficar registrado…" />
-                  <footer><label className="ghost-button">Anexar evidência<input type="file" multiple hidden onChange={(event) => setFiles(Array.from(event.target.files ?? []))} /></label><button type="submit" className="primary-button" disabled={sending || (!draft.trim() && files.length === 0)}>{sending ? 'Enviando…' : 'Enviar mensagem'}</button></footer>
+                  <footer>
+                    <label className="ghost-button">Anexar evidência<input type="file" accept="image/jpeg,image/png,image/webp,application/pdf,text/plain" multiple hidden onChange={(event) => selectFiles(Array.from(event.target.files ?? []))} /></label>
+                    <button type="submit" className="primary-button" disabled={sending || (!draft.trim() && files.length === 0)}>{sending ? 'Guardando…' : navigator.onLine ? 'Enviar mensagem' : 'Guardar na fila'}</button>
+                  </footer>
+                  {hasRetryable && navigator.onLine && <button type="button" className="message-retry" disabled={sending} onClick={() => void retryMessages()}>Tentar reenviar mensagens pendentes</button>}
                 </form>
               </>
             )}
@@ -163,7 +602,28 @@ export default function MensagensPage() {
         </div>
       )}
 
-      {showNew && <NewConversationDialog workspaceId={workspaceId} territories={territories} onClose={() => setShowNew(false)} onCreated={(conversation) => { setShowNew(false); setConversations((current) => [conversation, ...current]); setActiveId(conversation.id); }} />}
+      {showNew && <NewConversationDialog
+        workspaceId={workspaceId}
+        territories={territories}
+        onClose={() => setShowNew(false)}
+        onCreated={(conversation) => {
+          setShowNew(false);
+          setConversations((current) => [conversation, ...current]);
+          setActiveId(conversation.id);
+        }}
+      />}
+    </div>
+  );
+}
+
+function RemoteAttachments({ attachments }: { attachments: MensagemAnexo[] }) {
+  return (
+    <div className="attachment-list">
+      {attachments.map((attachment) => (
+        <a key={attachment.id} href={attachmentUrl(attachment.id)} target="_blank" rel="noreferrer">
+          {attachment.originalFilename}<small>{Math.ceil(attachment.sizeBytes / 1024)} KB</small>
+        </a>
+      ))}
     </div>
   );
 }
