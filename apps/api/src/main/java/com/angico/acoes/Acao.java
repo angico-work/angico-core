@@ -7,10 +7,6 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import java.time.Instant;
 
-/**
- * Uma ação concreta executada como parte de uma missão. É o passo de execução
- * do fluxo territorial: o que foi efetivamente feito, por quem e em que estado.
- */
 @Entity
 public class Acao {
 

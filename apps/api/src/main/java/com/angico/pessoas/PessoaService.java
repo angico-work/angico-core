@@ -34,16 +34,10 @@ public class PessoaService {
         this.authorizationService = authorizationService;
     }
 
-    /**
-     * Registra uma pessoa e a inscreve na memória do território (objeto +
-     * evento). Persistência e memória commitam juntas na mesma transação.
-     */
     @Transactional
     public PessoaResponse registrar(PessoaRequest request) {
         String workspaceId = authorizationService.requireAuthorizedWorkspace(request.workspaceId());
         String angicoId = safeNormalize(request.angicoId());
-        // Link to the real identity: if this Angico ID is already part of the
-        // território, reuse that person instead of creating a duplicate.
         if (angicoId != null) {
             var existing = pessoaRepository
                     .findByWorkspaceIdAndAngicoIdIgnoreCase(workspaceId, angicoId);
@@ -84,7 +78,6 @@ public class PessoaService {
                 .toList();
     }
 
-    /** Powers the Angico-ID autocomplete on the "Nova pessoa" form. */
     @Transactional(readOnly = true)
     public List<PessoaResponse> search(String workspaceId, String q) {
         String authorized = authorizationService.requireAuthorizedWorkspace(workspaceId);
@@ -97,7 +90,6 @@ public class PessoaService {
                 .toList();
     }
 
-    /** Updates the current pessoa's editable profile fields (nome, telefone, foto). */
     @Transactional
     public PessoaResponse updateCurrent(PessoaUpdateRequest request) {
         Long pessoaId = currentActorProvider.currentPessoaId()
@@ -117,8 +109,6 @@ public class PessoaService {
         return PessoaResponse.from(pessoaRepository.save(pessoa));
     }
 
-    // Tolerant normalization: a malformed handle should never block adding a
-    // person — we simply drop the link rather than failing the whole request.
     private String safeNormalize(String rawAngicoId) {
         try {
             return AngicoIdNormalizer.normalizeOptional(rawAngicoId);

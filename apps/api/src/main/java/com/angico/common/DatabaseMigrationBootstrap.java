@@ -10,11 +10,6 @@ import org.springframework.beans.factory.SmartInitializingSingleton;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
-/**
- * Transitional bootstrap for databases whose base schema is still managed by
- * Hibernate. EntityManagerFactory is injected deliberately: its initialization
- * completes the non-destructive schema update before versioned constraints run.
- */
 @Component
 @ConditionalOnProperty(name = "angico.database.migrations-enabled", havingValue = "true")
 public class DatabaseMigrationBootstrap implements SmartInitializingSingleton {
@@ -32,7 +27,6 @@ public class DatabaseMigrationBootstrap implements SmartInitializingSingleton {
 
     @Override
     public void afterSingletonsInstantiated() {
-        // Touching the metamodel documents and verifies the ordering dependency.
         entityManagerFactory.getMetamodel();
         String vendor = databaseVendor();
         Flyway.configure()

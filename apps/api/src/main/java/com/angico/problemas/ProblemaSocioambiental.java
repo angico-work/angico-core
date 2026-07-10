@@ -7,11 +7,6 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import java.time.Instant;
 
-/**
- * Um problema socioambiental: o que a comunidade reconhece como uma questão a
- * ser enfrentada no território. Costuma nascer a partir de uma ou mais
- * observações e segue o fluxo compreender → priorizar → agir → medir.
- */
 @Entity
 public class ProblemaSocioambiental {
 

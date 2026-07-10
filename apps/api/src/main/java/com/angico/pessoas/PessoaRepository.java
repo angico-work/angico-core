@@ -29,7 +29,6 @@ public interface PessoaRepository extends JpaRepository<Pessoa, Long> {
 
     Optional<Pessoa> findByAuthTokenHash(String authTokenHash);
 
-    // Workspace-scoped lookups used by the mensagens module to resolve participants.
     @Query("""
             select p from Pessoa p
             where p.workspaceId = :workspaceId
@@ -47,8 +46,6 @@ public interface PessoaRepository extends JpaRepository<Pessoa, Long> {
 
     Optional<Pessoa> findByWorkspaceIdAndEmailIgnoreCase(String workspaceId, String email);
 
-    // Angico-ID-aware lookup for the "Nova pessoa" autocomplete: matches the
-    // typed text against either the Angico ID or the name, scoped to the workspace.
     @Query("select p from Pessoa p where p.workspaceId = :ws and ("
             + "lower(coalesce(p.angicoId, '')) like lower(concat('%', :q, '%')) "
             + "or lower(p.nome) like lower(concat('%', :q, '%'))) order by p.nome asc")

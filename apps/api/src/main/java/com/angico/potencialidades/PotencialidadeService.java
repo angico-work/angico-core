@@ -32,11 +32,6 @@ public class PotencialidadeService {
         this.referenceValidator = referenceValidator;
     }
 
-    /**
-     * Registra uma potencialidade e a inscreve na memória do território (objeto +
-     * evento + relação com o território). Persistência e memória commitam
-     * juntas na mesma transação.
-     */
     @Transactional
     public PotencialidadeResponse registrar(PotencialidadeCreateRequest request) {
         String workspaceId = authorizationService.requireAuthorizedWorkspace(request.workspaceId());

@@ -4,10 +4,6 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 import java.time.Instant;
 
-/**
- * Payload to register a new observação. Only categoria/titulo are strictly
- * required; the rest enrich the record and the território's memory.
- */
 public record ObservacaoCreateRequest(
         @NotBlank String workspaceId,
         String territorioId,

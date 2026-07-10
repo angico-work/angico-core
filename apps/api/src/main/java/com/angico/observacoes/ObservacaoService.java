@@ -48,11 +48,6 @@ public class ObservacaoService {
         this.transactions = new TransactionTemplate(transactionManager);
     }
 
-    /**
-     * Registra uma observação e a inscreve na memória do território (objeto +
-     * evento + relação com o território). Persistência e memória commitam
-     * juntas na mesma transação.
-     */
     public ObservacaoResponse registrar(ObservacaoCreateRequest request) {
         return registrar(request, null);
     }

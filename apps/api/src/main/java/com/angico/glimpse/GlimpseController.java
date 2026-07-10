@@ -6,10 +6,6 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-/**
- * Read-only território views consumed by the web client:
- * dashboard overview, map points, and the memória timeline.
- */
 @RestController
 @RequestMapping("/api/glimpse")
 public class GlimpseController {

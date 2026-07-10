@@ -8,10 +8,6 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Lob;
 import java.time.Instant;
 
-/**
- * Uma pessoa do território: jovem mapeador, mentor ou participante que se
- * engaja no fluxo de observação e ação local.
- */
 @Entity
 public class Pessoa {
 
@@ -30,12 +26,10 @@ public class Pessoa {
     @Column(nullable = false)
     private Instant createdAt;
 
-    // Nullable legacy identity columns remain for data compatibility.
     private String email;
 
     private String angicoId;
 
-    // Contact + avatar, editable from the in-app profile editor.
     private String telefone;
 
     @Lob

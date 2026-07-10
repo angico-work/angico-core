@@ -41,7 +41,6 @@ public class PessoaController {
         return pessoaService.search(workspaceId, q);
     }
 
-    // Updates the currently authenticated pessoa (the in-app profile editor).
     @PutMapping("/me")
     public PessoaResponse updateMe(@RequestBody PessoaUpdateRequest request) {
         return pessoaService.updateCurrent(request);

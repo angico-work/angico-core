@@ -11,8 +11,6 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class WorkspaceService {
 
-    // The workspace the web app ships with — seeded so the switcher is never
-    // empty and the existing território's data keeps a readable name.
     private static final String DEFAULT_SLUG = "coletivo-jardim-novo";
     private static final String DEFAULT_NOME = "Coletivo Jardim Novo";
 
@@ -110,7 +108,6 @@ public class WorkspaceService {
     @Transactional
     public void remover(String slug) {
         if (DEFAULT_SLUG.equals(slug)) {
-            // ApiExceptionHandler maps IllegalArgumentException -> HTTP 400.
             throw new IllegalArgumentException("O workspace inicial não pode ser removido.");
         }
         accessService.requireManage(slug);
@@ -119,8 +116,6 @@ public class WorkspaceService {
             workspaceRepository.delete(workspace);
         });
     }
-
-    // --- Members --------------------------------------------------------------
 
     public List<WorkspaceMemberResponse> membros(String slug) {
         authorizationService.requireMember(slug);
@@ -173,22 +168,18 @@ public class WorkspaceService {
         memberRepository.findByIdAndWorkspaceId(memberId, slug).ifPresent(memberRepository::delete);
     }
 
-    // --- Helpers --------------------------------------------------------------
-
     private void assertWorkspaceExists(String slug) {
         if (workspaceRepository.findBySlug(slug).isEmpty()) {
             throw new IllegalArgumentException("Workspace não encontrado: " + slug);
         }
     }
 
-    /** Guarantees the shipped workspace exists so the list is never empty. */
     private void ensureDefault() {
         if (!workspaceRepository.existsBySlug(DEFAULT_SLUG)) {
             workspaceRepository.save(new Workspace(DEFAULT_SLUG, DEFAULT_NOME, null, clock.now()));
         }
     }
 
-    /** Appends -2, -3, … until the slug is free, so names can repeat safely. */
     private String uniqueSlug(String base) {
         String root = base.isBlank() ? "workspace" : base;
         String candidate = root;
@@ -199,8 +190,6 @@ public class WorkspaceService {
         return candidate;
     }
 
-    // "Horta Comunitária 2" -> "horta-comunitaria-2": accent-folded, lowercased,
-    // every run of non-alphanumerics collapsed to a single hyphen.
     static String slugify(String input) {
         String folded = Normalizer.normalize(input, Normalizer.Form.NFD)
                 .replaceAll("\\p{M}", "");

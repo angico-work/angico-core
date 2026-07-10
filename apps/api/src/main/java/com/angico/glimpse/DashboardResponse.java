@@ -2,10 +2,6 @@ package com.angico.glimpse;
 
 import java.util.List;
 
-/**
- * Aggregated read-model for the territory dashboard. Shape mirrors the web
- * client's DashboardData (apps/app/src/types.ts) so it renders directly.
- */
 public record DashboardResponse(
         String workspaceId,
         Territory territory,

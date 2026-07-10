@@ -9,11 +9,6 @@ import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
 import java.time.Instant;
 
-/**
- * Uma observação territorial: o registro bruto que um jovem/morador faz do que
- * acontece no território. É o ponto de partida do fluxo
- * observar → registrar → compreender → priorizar → agir → medir.
- */
 @Entity
 @Table(uniqueConstraints = @UniqueConstraint(
         name = "uk_observacao_workspace_client_mutation",

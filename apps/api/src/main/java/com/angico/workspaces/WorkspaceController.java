@@ -45,8 +45,6 @@ public class WorkspaceController {
         workspaceService.remover(slug);
     }
 
-    // --- Members --------------------------------------------------------------
-
     @GetMapping("/{slug}/members")
     public List<WorkspaceMemberResponse> membros(@PathVariable String slug) {
         return workspaceService.membros(slug);

@@ -36,11 +36,6 @@ import java.util.Set;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-/**
- * Builds the território read-models from real data: stat counts come straight
- * from the memory graph (memory_object by entityType), the map from geolocated
- * objetos, and the memória timeline from the event log. Nothing is mocked.
- */
 @Service
 public class GlimpseService {
 
@@ -135,7 +130,6 @@ public class GlimpseService {
         );
     }
 
-    /** Geolocated objetos for the territory map. */
     @Transactional(readOnly = true)
     public List<MapPoint> mapPoints(String workspaceId) {
         workspaceId = authorizationService.requireAuthorizedWorkspace(workspaceId);
@@ -161,7 +155,6 @@ public class GlimpseService {
         return points;
     }
 
-    /** The território's living memory: most recent events first. */
     @Transactional(readOnly = true)
     public List<MemoriaEvent> memoria(String workspaceId) {
         workspaceId = authorizationService.requireAuthorizedWorkspace(workspaceId);
