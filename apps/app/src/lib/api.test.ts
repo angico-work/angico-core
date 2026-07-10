@@ -3,6 +3,7 @@ import {
   createEntity,
   getSession,
   isAuthenticated,
+  loadDashboard,
   listEntities,
   listWorkspaces,
   login,
@@ -88,10 +89,22 @@ describe('cookie session API', () => {
     localStorage.setItem('angico.session', JSON.stringify(session));
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response(401, { detail: 'expired' })));
 
-    await listEntities('/api/observacoes', 'workspace-a');
+    await expect(listEntities('/api/observacoes', 'workspace-a')).rejects.toThrow('sessão');
 
     expect(getSession()).toBeNull();
     expect(isAuthenticated()).toBe(false);
+  });
+
+  it('reports a failed module request instead of presenting it as an empty list', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response(503, { detail: 'indisponível' })));
+
+    await expect(listEntities('/api/observacoes', 'workspace-a')).rejects.toThrow('indisponível');
+  });
+
+  it('does not replace an unavailable dashboard with sample numbers', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('offline')));
+
+    await expect(loadDashboard('workspace-a')).rejects.toThrow('painel');
   });
 
   it('revalidates persisted metadata through the cookie-backed me endpoint', async () => {

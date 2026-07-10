@@ -2,7 +2,6 @@ import type {
   DashboardData, ObservacaoInput, Observacao, MapPoint, MemoriaEvent, GeoResult,
   GeoSearchResponse, PessoaHit, Conversa, Mensagem, Territorio, Workspace, WorkspaceMember
 } from '../types';
-import { emptyDashboard, demoDashboard } from '../data/fallbackDashboard';
 
 export const DEFAULT_WORKSPACE = 'coletivo-jardim-novo';
 
@@ -13,11 +12,6 @@ export const API_BASE = '';
 export function apiUrl(path: string): string {
   return `${API_BASE}${path}`;
 }
-
-// Demo data is shown only in local dev, or in a deploy that explicitly opts in
-// with VITE_USE_DEMO_DATA=true (e.g. a public demo instance). Production
-// defaults to off, so real deployments never render fabricated numbers.
-export const USE_DEMO_DATA = import.meta.env.DEV || import.meta.env.VITE_USE_DEMO_DATA === 'true';
 
 // --- Auth session -----------------------------------------------------------
 
@@ -172,11 +166,12 @@ export async function loadDashboard(workspaceId = DEFAULT_WORKSPACE): Promise<Da
       headers: requestHeaders()
     });
     if (!response.ok) {
-      throw new Error('API indisponível');
+      throw new Error(await readError(response, 'Não foi possível carregar o painel do território.'));
     }
     return (await response.json()) as DashboardData;
-  } catch {
-    return USE_DEMO_DATA ? demoDashboard : emptyDashboard;
+  } catch (error) {
+    if (error instanceof Error && error.message !== 'offline') throw error;
+    throw new Error('Não foi possível carregar o painel do território.');
   }
 }
 
@@ -198,10 +193,11 @@ export async function loadMapPoints(workspaceId = DEFAULT_WORKSPACE): Promise<Ma
     const r = await apiFetch(apiUrl(`/api/glimpse/map?workspaceId=${encodeURIComponent(workspaceId)}`), {
       headers: requestHeaders()
     });
-    if (!r.ok) throw new Error();
+    if (!r.ok) throw new Error(await readError(r, 'Não foi possível carregar os pontos do mapa.'));
     return (await r.json()) as MapPoint[];
-  } catch {
-    return [];
+  } catch (error) {
+    if (error instanceof Error && !(error instanceof TypeError)) throw error;
+    throw new Error('Não foi possível carregar os pontos do mapa.');
   }
 }
 
@@ -351,10 +347,11 @@ export async function loadMemoria(workspaceId = DEFAULT_WORKSPACE): Promise<Memo
     const r = await apiFetch(apiUrl(`/api/glimpse/memoria?workspaceId=${encodeURIComponent(workspaceId)}`), {
       headers: requestHeaders()
     });
-    if (!r.ok) throw new Error();
+    if (!r.ok) throw new Error(await readError(r, 'Não foi possível carregar a memória do território.'));
     return (await r.json()) as MemoriaEvent[];
-  } catch {
-    return [];
+  } catch (error) {
+    if (error instanceof Error && !(error instanceof TypeError)) throw error;
+    throw new Error('Não foi possível carregar a memória do território.');
   }
 }
 
@@ -366,10 +363,16 @@ export async function listEntities<T = Record<string, unknown>>(
     const r = await apiFetch(apiUrl(`${path}?workspaceId=${encodeURIComponent(workspaceId)}`), {
       headers: requestHeaders()
     });
-    if (!r.ok) throw new Error();
+    if (!r.ok) {
+      if (r.status === 401) {
+        throw new Error('Sua sessão expirou. Entre novamente para continuar.');
+      }
+      throw new Error(await readError(r, 'Não foi possível carregar os registros.'));
+    }
     return (await r.json()) as T[];
-  } catch {
-    return [];
+  } catch (error) {
+    if (error instanceof Error && !(error instanceof TypeError)) throw error;
+    throw new Error('Não foi possível carregar os registros. Verifique a conexão e tente novamente.');
   }
 }
 

@@ -1,5 +1,4 @@
 import { Navigate, Route, Routes } from 'react-router-dom';
-import WelcomePage from './pages/WelcomePage';
 import LoginPage from './pages/LoginPage';
 import AppShell from './components/AppShell';
 import DashboardPage from './pages/DashboardPage';
@@ -8,11 +7,17 @@ import ModulePage from './pages/ModulePage';
 import MemoriaPage from './pages/MemoriaPage';
 import MensagensPage from './pages/MensagensPage';
 import { IndicadoresPage, RelatoriosPage } from './pages/SummaryPages';
+import { hasFreshOfflineSession, isAuthenticated } from './lib/api';
+
+function EntryRoute() {
+  const destination = isAuthenticated() || hasFreshOfflineSession() ? '/app' : '/login';
+  return <Navigate to={destination} replace />;
+}
 
 export default function App() {
   return (
     <Routes>
-      <Route path="/" element={<WelcomePage />} />
+      <Route path="/" element={<EntryRoute />} />
       <Route path="/login" element={<LoginPage />} />
       <Route path="/app" element={<AppShell />}>
         <Route index element={<DashboardPage />} />
@@ -28,7 +33,7 @@ export default function App() {
         <Route path="memoria" element={<MemoriaPage />} />
         <Route path="relatorios" element={<RelatoriosPage />} />
       </Route>
-      <Route path="*" element={<Navigate to="/" replace />} />
+      <Route path="*" element={<EntryRoute />} />
     </Routes>
   );
 }
