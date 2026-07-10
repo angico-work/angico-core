@@ -137,6 +137,10 @@ describe('offline synchronization', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
 
     localStorage.setItem('angico.session', JSON.stringify(session));
+    await expect(retryBlockedObservations('ana.sp', 'territorio-a')).rejects.toThrow('validada');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    localStorage.setItem('angico.session.validatedAt', new Date().toISOString());
     await retryBlockedObservations('ana.sp', 'territorio-a');
 
     expect(fetchMock).toHaveBeenCalledTimes(2);

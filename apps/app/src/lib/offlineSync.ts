@@ -1,5 +1,5 @@
 import type { Observacao, ObservacaoInput } from '../types';
-import { apiFetch, apiUrl, getSession, isAuthenticated } from './api';
+import { apiFetch, apiUrl, getSession, hasFreshOfflineSession, isAuthenticated } from './api';
 import {
   claimOutboxEntry,
   enqueueObservation,
@@ -144,8 +144,8 @@ export async function syncPendingObservations(filter: SyncFilter = {}): Promise<
 }
 
 export async function retryBlockedObservations(ownerId: string, workspaceId: string): Promise<SyncSummary> {
-  if (!isAuthenticated()) {
-    throw new Error('Entre novamente antes de tentar enviar registros bloqueados.');
+  if (!isAuthenticated() || !hasFreshOfflineSession()) {
+    throw new Error('Entre novamente com uma sessão validada antes de tentar enviar registros bloqueados.');
   }
   await requeueBlockedOutbox(ownerId, workspaceId);
   return syncPendingObservations({ ownerId, workspaceId });
