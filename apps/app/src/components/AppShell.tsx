@@ -5,8 +5,10 @@ import Topbar from './Topbar';
 import ProfileModal from './ProfileModal';
 import {
   DEFAULT_WORKSPACE, createWorkspace, deleteWorkspace, getProfile, getSession,
-  isAuthenticated, listWorkspaces, logout, revalidateSession, setSessionWorkspace
+  hasFreshOfflineSession, isAuthenticated, listWorkspaces, logout, revalidateSession,
+  setSessionWorkspace
 } from '../lib/api';
+import { startSyncEngine } from '../lib/offlineSync';
 import type { PessoaHit, Workspace } from '../types';
 
 export interface AppContext {
@@ -30,7 +32,7 @@ export default function AppShell() {
   const [showProfile, setShowProfile] = useState(false);
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [authStatus, setAuthStatus] = useState<'checking' | 'authenticated' | 'anonymous'>(
-    isAuthenticated() ? 'checking' : 'anonymous'
+    isAuthenticated() || hasFreshOfflineSession() ? 'checking' : 'anonymous'
   );
   const session = getSession();
   const [activeSlug, setActiveSlug] = useState(session?.workspaceId ?? DEFAULT_WORKSPACE);
@@ -39,11 +41,18 @@ export default function AppShell() {
     let active = true;
     const unauthorized = () => setAuthStatus('anonymous');
     window.addEventListener('angico:unauthorized', unauthorized);
-    if (isAuthenticated()) {
+    if (getSession()) {
+      if (!navigator.onLine && hasFreshOfflineSession()) {
+        setAuthStatus('authenticated');
+        return () => {
+          active = false;
+          window.removeEventListener('angico:unauthorized', unauthorized);
+        };
+      }
       revalidateSession().then((validated) => {
         if (active) setAuthStatus(validated ? 'authenticated' : 'anonymous');
       }).catch(() => {
-        if (active) setAuthStatus('anonymous');
+        if (active) setAuthStatus(hasFreshOfflineSession() ? 'authenticated' : 'anonymous');
       });
     }
     return () => {
@@ -51,6 +60,11 @@ export default function AppShell() {
       window.removeEventListener('angico:unauthorized', unauthorized);
     };
   }, []);
+
+  useEffect(() => {
+    if (authStatus !== 'authenticated') return;
+    return startSyncEngine();
+  }, [authStatus]);
 
   useEffect(() => {
     if (authStatus !== 'authenticated') return;
@@ -152,6 +166,8 @@ export default function AppShell() {
       {sidebarOpen && <div className="sidebar-backdrop" onClick={() => setSidebarOpen(false)} />}
       <Topbar
         workspaceLabel={activeName}
+        workspaceId={activeSlug}
+        ownerId={session?.angicoId || (session ? `pessoa-${session.pessoaId}` : undefined)}
         onToggleSidebar={() => setSidebarOpen((v) => !v)}
         onWorkspaceClick={() => setShowProfile(true)}
       />

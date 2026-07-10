@@ -1,7 +1,8 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import type { AppContext } from '../components/AppShell';
-import { createEntity, listEntities } from '../lib/api';
+import { createEntity, getSession, listEntities } from '../lib/api';
+import { listLocalObservations } from '../lib/offlineStore';
 import AngicoIdField from '../components/AngicoIdField';
 import NewEntityModal, { type EntityType } from '../components/NewEntityModal';
 import { MODULE_CONFIGS, type ModuleConfig } from './moduleConfigs';
@@ -95,12 +96,31 @@ export default function ModulePage({ configKey }: { configKey: string }) {
 
   function refresh() {
     setLoading(true);
-    void listEntities<Item>(config.path, workspaceId).then((data) => {
+    void listEntities<Item>(config.path, workspaceId).then(async (data) => {
+      if (configKey !== 'observacoes') return data;
+      const session = getSession();
+      const ownerId = session?.angicoId || (session ? `pessoa-${session.pessoaId}` : undefined);
+      if (!ownerId) return data;
+      const local = await listLocalObservations(ownerId, workspaceId);
+      const pending = local
+        .filter((record) => record.syncStatus !== 'SYNCED')
+        .map<Item>((record) => ({
+          ...record.data,
+          id: `local-${record.clientMutationId}`,
+          status: record.syncStatus,
+          syncStatus: record.syncStatus
+        }));
+      return [...pending, ...data];
+    }).then((data) => {
       setItems(data);
       setLoading(false);
     });
   }
   useEffect(refresh, [config.path, workspaceId]);
+  useEffect(() => {
+    window.addEventListener('angico:sync-state', refresh);
+    return () => window.removeEventListener('angico:sync-state', refresh);
+  });
 
   return (
     <div className="page">

@@ -1,8 +1,11 @@
 import { useEffect, useState } from 'react';
 import { icon } from '../lib/icons';
+import { getSyncState, type SyncState } from '../lib/offlineSync';
 
 interface Props {
   workspaceLabel: string;
+  workspaceId: string;
+  ownerId?: string;
   onToggleSidebar: () => void;
   onWorkspaceClick: () => void;
 }
@@ -30,15 +33,54 @@ function useOnline(): boolean {
   return online;
 }
 
-export default function Topbar({ workspaceLabel, onToggleSidebar, onWorkspaceClick }: Props) {
+const EMPTY_SYNC_STATE: SyncState = {
+  pending: 0,
+  syncing: 0,
+  conflicts: 0,
+  blocked: 0,
+  actionRequired: 0
+};
+
+function syncLabel(online: boolean, state: SyncState): string {
+  const attention = state.conflicts + state.blocked + state.actionRequired;
+  if (attention > 0) return `${attention} para revisar`;
+  if (state.syncing > 0) return `Sincronizando ${state.syncing}`;
+  if (state.pending > 0) return `${state.pending} pendente${state.pending > 1 ? 's' : ''}`;
+  return online ? 'Em dia' : 'Offline';
+}
+
+export default function Topbar({ workspaceLabel, workspaceId, ownerId, onToggleSidebar, onWorkspaceClick }: Props) {
   const online = useOnline();
+  const [syncState, setSyncState] = useState<SyncState>(EMPTY_SYNC_STATE);
+
+  useEffect(() => {
+    let active = true;
+    const refresh = () => {
+      if (!ownerId) {
+        setSyncState(EMPTY_SYNC_STATE);
+        return;
+      }
+      void getSyncState(ownerId, workspaceId).then((state) => {
+        if (active) setSyncState(state);
+      });
+    };
+    refresh();
+    window.addEventListener('angico:sync-state', refresh);
+    return () => {
+      active = false;
+      window.removeEventListener('angico:sync-state', refresh);
+    };
+  }, [ownerId, workspaceId]);
+
+  const needsAttention = syncState.conflicts + syncState.blocked + syncState.actionRequired > 0;
+  const syncClass = needsAttention ? 'has-issue' : online ? 'is-on' : 'is-off';
   return (
     <header className="topbar">
       <button className="sidebar-toggle" aria-label="Abrir menu" onClick={onToggleSidebar}>☰</button>
       <div className="search-box"><span>{icon('search')}</span><input aria-label="Buscar" placeholder="Buscar no Angico..." /><kbd>⌘ K</kbd></div>
       <div className="top-actions">
         <div className="top-action"><span>{icon('bell')}</span>Notificações</div>
-        <div className={`top-action sync-status ${online ? 'is-on' : 'is-off'}`}><span>{icon('cloud')}</span><div>Conexão<small className={online ? 'is-online' : 'is-offline'}>{online ? '✓ Online' : 'Offline'}</small></div></div>
+        <div className={`top-action sync-status ${syncClass}`}><span>{icon('cloud')}</span><div>Sincronização<small>{syncLabel(online, syncState)}</small></div></div>
         <div className="top-action"><span>{icon('help')}</span></div>
         <button type="button" className="workspace-profile" onClick={onWorkspaceClick} title="Perfil e conta">
           <div className="workspace-avatar">{initials(workspaceLabel)}</div>

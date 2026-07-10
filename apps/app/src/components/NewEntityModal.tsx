@@ -1,5 +1,7 @@
 import { useState, type CSSProperties, type FormEvent } from 'react';
 import { createEntity, reverseGeocode, resolveCoords, getSession } from '../lib/api';
+import { captureObservation } from '../lib/offlineSync';
+import type { ObservacaoInput } from '../types';
 import type { GeoResult } from '../types';
 import AddressField from './AddressField';
 import MapView from './MapView';
@@ -127,7 +129,11 @@ export default function NewEntityModal({ workspaceId, initialType = 'observacao'
       body.severidade = nivel;
     }
     try {
-      await createEntity(meta.endpoint, body);
+      if (type === 'observacao') {
+        await captureObservation(body as unknown as ObservacaoInput);
+      } else {
+        await createEntity(meta.endpoint, body);
+      }
       onCreated();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erro inesperado');

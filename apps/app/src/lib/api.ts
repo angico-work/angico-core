@@ -22,6 +22,8 @@ export const USE_DEMO_DATA = import.meta.env.DEV || import.meta.env.VITE_USE_DEM
 // --- Auth session -----------------------------------------------------------
 
 const SESSION_KEY = 'angico.session';
+const SESSION_VALIDATED_KEY = 'angico.session.validatedAt';
+const OFFLINE_SESSION_LEASE_MS = 7 * 24 * 60 * 60 * 1000;
 
 export interface AuthSession {
   pessoaId: number;
@@ -54,14 +56,22 @@ export function isAuthenticated(): boolean {
   return Boolean(session && Date.parse(session.expiresAt) > Date.now());
 }
 
-function saveSession(session: AuthSession): AuthSession {
+function saveSession(session: AuthSession, validated = false): AuthSession {
   localStorage.setItem(SESSION_KEY, JSON.stringify(session, (key, value) => key === 'token' ? undefined : value));
+  if (validated) localStorage.setItem(SESSION_VALIDATED_KEY, new Date().toISOString());
   return session;
 }
 
 export function clearSession(): void {
   localStorage.removeItem(SESSION_KEY);
+  localStorage.removeItem(SESSION_VALIDATED_KEY);
   localStorage.removeItem('angico_session');
+}
+
+export function hasFreshOfflineSession(): boolean {
+  if (!getSession()) return false;
+  const validatedAt = Date.parse(localStorage.getItem(SESSION_VALIDATED_KEY) ?? '');
+  return Number.isFinite(validatedAt) && Date.now() - validatedAt <= OFFLINE_SESSION_LEASE_MS;
 }
 
 // Switches the active workspace and persists it on the session, so a refresh
@@ -113,7 +123,7 @@ export async function login(email: string, password: string): Promise<AuthSessio
   if (!response.ok) {
     throw new Error(await readError(response, 'Não foi possível entrar. Verifique suas credenciais.'));
   }
-  return saveSession((await response.json()) as AuthSession);
+  return saveSession((await response.json()) as AuthSession, true);
 }
 
 export interface RegisterInput {
@@ -132,7 +142,7 @@ export async function register(input: RegisterInput): Promise<AuthSession> {
   if (!response.ok) {
     throw new Error(await readError(response, 'Não foi possível criar a conta.'));
   }
-  return saveSession((await response.json()) as AuthSession);
+  return saveSession((await response.json()) as AuthSession, true);
 }
 
 export async function logout(): Promise<void> {
@@ -148,7 +158,7 @@ export async function revalidateSession(): Promise<AuthSession | null> {
   if (!getSession()) return null;
   const response = await apiFetch(apiUrl('/api/auth/me'));
   if (!response.ok) return null;
-  return saveSession((await response.json()) as AuthSession);
+  return saveSession((await response.json()) as AuthSession, true);
 }
 
 // --- Territory data ---------------------------------------------------------
