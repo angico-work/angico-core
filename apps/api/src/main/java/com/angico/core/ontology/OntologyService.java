@@ -63,6 +63,8 @@ public class OntologyService {
             new RelationRule(MISSAO, "COMPOSTA_POR", ACAO),
             new RelationRule(PESSOA, "RESPONSAVEL_POR", ACAO),
             new RelationRule(ACAO, "PRODUZ", RESULTADO),
+            new RelationRule(ACAO, "GERA", EVIDENCIA),
+            new RelationRule(EVIDENCIA, "SUSTENTA", RESULTADO),
             new RelationRule(INDICADOR, "MEDE", RESULTADO),
             new RelationRule(MEDICAO, "REFERE_SE_A", INDICADOR),
             new RelationRule(POTENCIALIDADE, "EXISTE_EM", TERRITORIO),
