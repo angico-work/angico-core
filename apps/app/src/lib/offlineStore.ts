@@ -1,8 +1,9 @@
 import { deleteDB, openDB, type DBSchema, type IDBPDatabase } from 'idb';
-import type { Observacao, ObservacaoInput } from '../types';
+import type { Mensagem, Observacao, ObservacaoInput } from '../types';
+import { validateMessageFiles } from './messageFiles';
 
 const DATABASE_NAME = 'angico-operational-data';
-const DATABASE_VERSION = 1;
+const DATABASE_VERSION = 2;
 const DEVICE_KEY = 'angico.deviceId';
 
 export type OutboxStatus =
@@ -22,13 +23,11 @@ export interface OfflineObservationInput extends ObservacaoInput {
   deviceId: string;
 }
 
-export interface OutboxEntry {
+interface OutboxBase {
   id: string;
-  operation: 'CREATE_OBSERVATION';
   ownerId: string;
   workspaceId: string;
   localEntityKey: string;
-  body: OfflineObservationInput;
   status: OutboxStatus;
   attemptCount: number;
   createdAt: string;
@@ -37,6 +36,35 @@ export interface OutboxEntry {
   leaseUntil?: string;
   lastError?: string;
 }
+
+export interface ObservationOutboxEntry extends OutboxBase {
+  operation: 'CREATE_OBSERVATION';
+  body: OfflineObservationInput;
+}
+
+export interface LocalMessageAttachment {
+  blobKey: string;
+  name: string;
+  type: string;
+  size: number;
+}
+
+export interface OfflineMessageInput {
+  workspaceId: string;
+  conversationId: number;
+  body: string;
+  clientMessageId: string;
+  occurredAt: string;
+  deviceId: string;
+  attachments: LocalMessageAttachment[];
+}
+
+export interface MessageOutboxEntry extends OutboxBase {
+  operation: 'MESSAGE_SEND';
+  body: OfflineMessageInput;
+}
+
+export type OutboxEntry = ObservationOutboxEntry | MessageOutboxEntry;
 
 export interface LocalObservation {
   key: string;
@@ -47,6 +75,12 @@ export interface LocalObservation {
   syncStatus: OutboxStatus;
   remote?: Observacao;
   updatedAt: string;
+}
+
+interface MessageDraftValue {
+  conversationId: number;
+  body: string;
+  attachments: LocalMessageAttachment[];
 }
 
 interface DraftRecord {
@@ -62,9 +96,32 @@ interface BlobRecord {
   key: string;
   ownerId: string;
   workspaceId: string;
-  blob: Blob;
+  bytes: ArrayBuffer;
   name: string;
   type: string;
+  updatedAt: string;
+}
+
+export interface LocalMessage {
+  key: string;
+  ownerId: string;
+  workspaceId: string;
+  conversationId: number;
+  clientMessageId: string;
+  body: string;
+  occurredAt: string;
+  deviceId: string;
+  attachments: LocalMessageAttachment[];
+  syncStatus: OutboxStatus;
+  lastError?: string;
+  remote?: Mensagem;
+  updatedAt: string;
+}
+
+export interface MessageDraft {
+  body: string;
+  attachments: File[];
+  updatedAt: string;
 }
 
 export interface SyncMetadata {
@@ -89,6 +146,14 @@ interface OfflineSchema extends DBSchema {
     value: LocalObservation;
     indexes: {
       'by-owner-workspace': [string, string];
+    };
+  };
+  messages: {
+    key: string;
+    value: LocalMessage;
+    indexes: {
+      'by-owner-workspace': [string, string];
+      'by-owner-workspace-conversation': [string, string, number];
     };
   };
   drafts: {
@@ -120,21 +185,32 @@ function database(): Promise<IDBPDatabase<OfflineSchema>> {
   if (!databasePromise) {
     databasePromise = openDB<OfflineSchema>(DATABASE_NAME, DATABASE_VERSION, {
       upgrade(db) {
-        const outbox = db.createObjectStore('outbox', { keyPath: 'id' });
-        outbox.createIndex('by-owner-workspace', ['ownerId', 'workspaceId']);
-        outbox.createIndex('by-status', 'status');
-
-        const entities = db.createObjectStore('entities', { keyPath: 'key' });
-        entities.createIndex('by-owner-workspace', ['ownerId', 'workspaceId']);
-
-        const drafts = db.createObjectStore('drafts', { keyPath: 'key' });
-        drafts.createIndex('by-owner-workspace', ['ownerId', 'workspaceId']);
-
-        const blobs = db.createObjectStore('blobs', { keyPath: 'key' });
-        blobs.createIndex('by-owner-workspace', ['ownerId', 'workspaceId']);
-
-        const syncMeta = db.createObjectStore('syncMeta', { keyPath: 'key' });
-        syncMeta.createIndex('by-owner-workspace', ['ownerId', 'workspaceId']);
+        if (!db.objectStoreNames.contains('outbox')) {
+          const outbox = db.createObjectStore('outbox', { keyPath: 'id' });
+          outbox.createIndex('by-owner-workspace', ['ownerId', 'workspaceId']);
+          outbox.createIndex('by-status', 'status');
+        }
+        if (!db.objectStoreNames.contains('entities')) {
+          const entities = db.createObjectStore('entities', { keyPath: 'key' });
+          entities.createIndex('by-owner-workspace', ['ownerId', 'workspaceId']);
+        }
+        if (!db.objectStoreNames.contains('drafts')) {
+          const drafts = db.createObjectStore('drafts', { keyPath: 'key' });
+          drafts.createIndex('by-owner-workspace', ['ownerId', 'workspaceId']);
+        }
+        if (!db.objectStoreNames.contains('blobs')) {
+          const blobs = db.createObjectStore('blobs', { keyPath: 'key' });
+          blobs.createIndex('by-owner-workspace', ['ownerId', 'workspaceId']);
+        }
+        if (!db.objectStoreNames.contains('syncMeta')) {
+          const syncMeta = db.createObjectStore('syncMeta', { keyPath: 'key' });
+          syncMeta.createIndex('by-owner-workspace', ['ownerId', 'workspaceId']);
+        }
+        if (!db.objectStoreNames.contains('messages')) {
+          const messages = db.createObjectStore('messages', { keyPath: 'key' });
+          messages.createIndex('by-owner-workspace', ['ownerId', 'workspaceId']);
+          messages.createIndex('by-owner-workspace-conversation', ['ownerId', 'workspaceId', 'conversationId']);
+        }
       }
     });
   }
@@ -158,6 +234,18 @@ export function getDeviceId(): string {
 
 function entityKey(ownerId: string, workspaceId: string, clientMutationId: string): string {
   return JSON.stringify([ownerId, workspaceId, clientMutationId]);
+}
+
+function localMessageKey(ownerId: string, workspaceId: string, clientMessageId: string): string {
+  return JSON.stringify(['message', ownerId, workspaceId, clientMessageId]);
+}
+
+function messageDraftKey(ownerId: string, workspaceId: string, conversationId: number): string {
+  return JSON.stringify(['message-draft', ownerId, workspaceId, conversationId]);
+}
+
+function messageBlobKey(ownerId: string, workspaceId: string, id = randomId()): string {
+  return JSON.stringify(['message-blob', ownerId, workspaceId, id]);
 }
 
 function syncMetadataKey(ownerId: string, workspaceId: string): string {
@@ -199,7 +287,7 @@ export async function enqueueObservation(
     syncStatus: 'QUEUED',
     updatedAt: now
   };
-  const operation: OutboxEntry = {
+  const operation: ObservationOutboxEntry = {
     id: clientMutationId,
     operation: 'CREATE_OBSERVATION',
     ownerId,
@@ -222,6 +310,207 @@ export async function enqueueObservation(
   ]);
   announceChange();
   return body;
+}
+
+async function attachmentRecords(
+  ownerId: string,
+  workspaceId: string,
+  files: File[],
+  now: string
+): Promise<{ references: LocalMessageAttachment[]; records: BlobRecord[] }> {
+  validateMessageFiles(files);
+  const records = await Promise.all(files.map(async (file) => {
+    const key = messageBlobKey(ownerId, workspaceId);
+    return {
+      key,
+      ownerId,
+      workspaceId,
+      bytes: await file.arrayBuffer(),
+      name: file.name,
+      type: file.type,
+      updatedAt: now
+    } satisfies BlobRecord;
+  }));
+  return {
+    references: records.map((record) => ({
+      blobKey: record.key,
+      name: record.name,
+      type: record.type,
+      size: record.bytes.byteLength
+    })),
+    records
+  };
+}
+
+export async function saveMessageDraft(
+  ownerId: string,
+  workspaceId: string,
+  conversationId: number,
+  body: string,
+  files?: File[]
+): Promise<void> {
+  requirePartition(ownerId, workspaceId);
+  if (!Number.isSafeInteger(conversationId) || conversationId <= 0) {
+    throw new Error('A conversa é obrigatória para salvar o rascunho.');
+  }
+  const db = await database();
+  const key = messageDraftKey(ownerId, workspaceId, conversationId);
+  const existing = await db.get('drafts', key);
+  const previous = existing?.kind === 'MESSAGE' ? existing.value as MessageDraftValue : undefined;
+  const now = new Date().toISOString();
+  const replacement = files ? await attachmentRecords(ownerId, workspaceId, files, now) : undefined;
+  const tx = db.transaction(['drafts', 'blobs'], 'readwrite');
+  if (replacement) {
+    await Promise.all([
+      ...(previous?.attachments ?? []).map((attachment) => tx.objectStore('blobs').delete(attachment.blobKey)),
+      ...replacement.records.map((record) => tx.objectStore('blobs').put(record))
+    ]);
+  }
+  await tx.objectStore('drafts').put({
+    key,
+    ownerId,
+    workspaceId,
+    kind: 'MESSAGE',
+    value: {
+      conversationId,
+      body,
+      attachments: replacement?.references ?? previous?.attachments ?? []
+    } satisfies MessageDraftValue,
+    updatedAt: now
+  });
+  await tx.done;
+  announceChange();
+}
+
+export async function loadMessageDraft(
+  ownerId: string,
+  workspaceId: string,
+  conversationId: number
+): Promise<MessageDraft | undefined> {
+  requirePartition(ownerId, workspaceId);
+  const db = await database();
+  const record = await db.get('drafts', messageDraftKey(ownerId, workspaceId, conversationId));
+  if (!record || record.kind !== 'MESSAGE') return undefined;
+  const value = record.value as MessageDraftValue;
+  const attachments = (await Promise.all(value.attachments.map(async (attachment) => {
+    const stored = await db.get('blobs', attachment.blobKey);
+    return stored
+      ? new File([stored.bytes], stored.name, { type: stored.type, lastModified: Date.parse(stored.updatedAt) })
+      : undefined;
+  }))).filter((file): file is File => Boolean(file));
+  return { body: value.body, attachments, updatedAt: record.updatedAt };
+}
+
+export async function clearMessageDraft(
+  ownerId: string,
+  workspaceId: string,
+  conversationId: number
+): Promise<void> {
+  requirePartition(ownerId, workspaceId);
+  const db = await database();
+  const key = messageDraftKey(ownerId, workspaceId, conversationId);
+  const record = await db.get('drafts', key);
+  const value = record?.kind === 'MESSAGE' ? record.value as MessageDraftValue : undefined;
+  const tx = db.transaction(['drafts', 'blobs'], 'readwrite');
+  await Promise.all([
+    tx.objectStore('drafts').delete(key),
+    ...(value?.attachments ?? []).map((attachment) => tx.objectStore('blobs').delete(attachment.blobKey))
+  ]);
+  await tx.done;
+  announceChange();
+}
+
+export async function enqueueMessage(
+  input: { workspaceId: string; conversationId: number; body: string; attachments: File[] },
+  ownerId: string
+): Promise<OfflineMessageInput> {
+  requirePartition(ownerId, input.workspaceId);
+  if (!Number.isSafeInteger(input.conversationId) || input.conversationId <= 0) {
+    throw new Error('A conversa é obrigatória para enviar a mensagem.');
+  }
+  if (!input.body.trim() && input.attachments.length === 0) {
+    throw new Error('Escreva uma mensagem ou adicione um anexo.');
+  }
+  const clientMessageId = randomId();
+  const now = new Date().toISOString();
+  const storedAttachments = await attachmentRecords(ownerId, input.workspaceId, input.attachments, now);
+  const body: OfflineMessageInput = {
+    workspaceId: input.workspaceId,
+    conversationId: input.conversationId,
+    body: input.body.trim(),
+    clientMessageId,
+    occurredAt: now,
+    deviceId: getDeviceId(),
+    attachments: storedAttachments.references
+  };
+  const key = localMessageKey(ownerId, input.workspaceId, clientMessageId);
+  const local: LocalMessage = {
+    key,
+    ownerId,
+    workspaceId: input.workspaceId,
+    conversationId: input.conversationId,
+    clientMessageId,
+    body: body.body,
+    occurredAt: now,
+    deviceId: body.deviceId,
+    attachments: storedAttachments.references,
+    syncStatus: 'QUEUED',
+    updatedAt: now
+  };
+  const operation: MessageOutboxEntry = {
+    id: clientMessageId,
+    operation: 'MESSAGE_SEND',
+    ownerId,
+    workspaceId: input.workspaceId,
+    localEntityKey: key,
+    body,
+    status: 'QUEUED',
+    attemptCount: 0,
+    createdAt: now,
+    updatedAt: now,
+    nextAttemptAt: now
+  };
+  const db = await database();
+  const tx = db.transaction(['messages', 'outbox', 'blobs'], 'readwrite');
+  await Promise.all([
+    tx.objectStore('messages').add(local),
+    tx.objectStore('outbox').add(operation),
+    ...storedAttachments.records.map((record) => tx.objectStore('blobs').add(record))
+  ]);
+  await tx.done;
+  announceChange();
+  return body;
+}
+
+export async function getLocalMessage(
+  ownerId: string,
+  workspaceId: string,
+  clientMessageId: string
+): Promise<LocalMessage | undefined> {
+  const db = await database();
+  return db.get('messages', localMessageKey(ownerId, workspaceId, clientMessageId));
+}
+
+export async function listLocalMessages(
+  ownerId: string,
+  workspaceId: string,
+  conversationId: number
+): Promise<LocalMessage[]> {
+  const db = await database();
+  const messages = await db.getAllFromIndex(
+    'messages',
+    'by-owner-workspace-conversation',
+    [ownerId, workspaceId, conversationId]
+  );
+  return messages.sort((a, b) => a.occurredAt.localeCompare(b.occurredAt));
+}
+
+export async function getMessageAttachmentFile(blobKey: string): Promise<File | undefined> {
+  const db = await database();
+  const stored = await db.get('blobs', blobKey);
+  return stored
+    ? new File([stored.bytes], stored.name, { type: stored.type, lastModified: Date.parse(stored.updatedAt) })
+    : undefined;
 }
 
 export async function listOutbox(ownerId: string, workspaceId?: string): Promise<OutboxEntry[]> {
@@ -280,10 +569,11 @@ export async function clearOfflineOwner(
   }
 
   const db = await database();
-  const tx = db.transaction(['outbox', 'entities', 'drafts', 'blobs', 'syncMeta'], 'readwrite');
-  const [outbox, entities, drafts, blobs, syncMeta] = await Promise.all([
+  const tx = db.transaction(['outbox', 'entities', 'messages', 'drafts', 'blobs', 'syncMeta'], 'readwrite');
+  const [outbox, entities, messages, drafts, blobs, syncMeta] = await Promise.all([
     tx.objectStore('outbox').getAll(),
     tx.objectStore('entities').getAll(),
+    tx.objectStore('messages').getAll(),
     tx.objectStore('drafts').getAll(),
     tx.objectStore('blobs').getAll(),
     tx.objectStore('syncMeta').getAll()
@@ -291,6 +581,7 @@ export async function clearOfflineOwner(
   await Promise.all([
     ...outbox.filter((entry) => entry.ownerId === ownerId).map((entry) => tx.objectStore('outbox').delete(entry.id)),
     ...entities.filter((entry) => entry.ownerId === ownerId).map((entry) => tx.objectStore('entities').delete(entry.key)),
+    ...messages.filter((entry) => entry.ownerId === ownerId).map((entry) => tx.objectStore('messages').delete(entry.key)),
     ...drafts.filter((entry) => entry.ownerId === ownerId).map((entry) => tx.objectStore('drafts').delete(entry.key)),
     ...blobs.filter((entry) => entry.ownerId === ownerId).map((entry) => tx.objectStore('blobs').delete(entry.key)),
     ...syncMeta.filter((entry) => entry.ownerId === ownerId).map((entry) => tx.objectStore('syncMeta').delete(entry.key))
@@ -331,12 +622,11 @@ export async function claimOutboxEntry(id: string, now = new Date()): Promise<Ou
 export async function markOutboxStatus(
   id: string,
   status: OutboxStatus,
-  options: { message?: string; nextAttemptAt?: string; remote?: Observacao } = {}
+  options: { message?: string; nextAttemptAt?: string; remote?: Observacao | Mensagem } = {}
 ): Promise<void> {
   const db = await database();
-  const tx = db.transaction(['outbox', 'entities'], 'readwrite');
+  const tx = db.transaction(['outbox', 'entities', 'messages', 'blobs'], 'readwrite');
   const outboxStore = tx.objectStore('outbox');
-  const entityStore = tx.objectStore('entities');
   const entry = await outboxStore.get(id);
   if (!entry) {
     await tx.done;
@@ -351,14 +641,35 @@ export async function markOutboxStatus(
     lastError: options.message,
     leaseUntil: undefined
   });
-  const local = await entityStore.get(entry.localEntityKey);
-  if (local) {
-    await entityStore.put({
-      ...local,
-      syncStatus: status,
-      remote: options.remote ?? local.remote,
-      updatedAt: now
-    });
+  if (entry.operation === 'CREATE_OBSERVATION') {
+    const entityStore = tx.objectStore('entities');
+    const local = await entityStore.get(entry.localEntityKey);
+    if (local) {
+      await entityStore.put({
+        ...local,
+        syncStatus: status,
+        remote: options.remote as Observacao | undefined ?? local.remote,
+        updatedAt: now
+      });
+    }
+  } else {
+    const messageStore = tx.objectStore('messages');
+    const local = await messageStore.get(entry.localEntityKey);
+    if (local) {
+      const remote = options.remote as Mensagem | undefined;
+      await messageStore.put({
+        ...local,
+        syncStatus: status,
+        lastError: options.message,
+        remote: remote ?? local.remote,
+        updatedAt: now
+      });
+      if (status === 'SYNCED' && remote) {
+        await Promise.all(local.attachments.map((attachment) => (
+          tx.objectStore('blobs').delete(attachment.blobKey)
+        )));
+      }
+    }
   }
   await tx.done;
   announceChange();
@@ -404,6 +715,10 @@ export async function reviseObservation(
   if (!original || original.ownerId !== ownerId || original.workspaceId !== workspaceId) {
     tx.abort();
     throw new Error('O registro não pertence a esta pessoa e a este território.');
+  }
+  if (original.operation !== 'CREATE_OBSERVATION') {
+    tx.abort();
+    throw new Error('A operação não é um registro territorial revisável.');
   }
   if (!REVIEWABLE_STATUSES.includes(original.status)) {
     tx.abort();

@@ -2,6 +2,7 @@ import type {
   DashboardData, ObservacaoInput, Observacao, MapPoint, MemoriaEvent, GeoResult,
   GeoSearchResponse, PessoaHit, Conversa, Mensagem, MensagemBusca, Territorio, Workspace, WorkspaceMember
 } from '../types';
+import { validateMessageFiles } from './messageFiles';
 
 export const DEFAULT_WORKSPACE = 'coletivo-jardim-novo';
 
@@ -399,14 +400,7 @@ export async function sendMensagem(
   attachments: File[] = [],
   metadata?: MessageSendMetadata
 ): Promise<Mensagem> {
-  const maxFileBytes = 2 * 1024 * 1024;
-  const maxAggregateBytes = 3.75 * 1024 * 1024;
-  if (attachments.some((file) => file.size > maxFileBytes)) {
-    throw new Error('Cada anexo deve ter no máximo 2 MB.');
-  }
-  if (attachments.reduce((total, file) => total + file.size, 0) > maxAggregateBytes) {
-    throw new Error('O total dos anexos deve ter no máximo 3,75 MB.');
-  }
+  validateMessageFiles(attachments);
   const form = new FormData();
   if (corpo.trim()) form.append('corpo', corpo.trim());
   if (metadata) {

@@ -4,14 +4,21 @@ import type { ObservacaoInput } from '../types';
 import {
   clearOfflineOwner,
   discardOutboxEntry,
+  clearMessageDraft,
+  enqueueMessage,
   enqueueObservation,
+  getLocalMessage,
   getLocalObservation,
+  getMessageAttachmentFile,
   getSyncMetadata,
   getOfflineOwnerState,
+  listLocalMessages,
+  loadMessageDraft,
   listOutbox,
   markOutboxStatus,
   recordSyncAttempt,
   reviseObservation,
+  saveMessageDraft,
   resetOfflineDatabase
 } from './offlineStore';
 
@@ -156,5 +163,98 @@ describe('offline observation store', () => {
       lastSuccessAt: second.toISOString()
     });
     expect(await getSyncMetadata('bia.sp', 'territorio-a')).toBeUndefined();
+  });
+
+  it('restores a message draft and its attachments only in the matching partition', async () => {
+    const attachment = new File(['relato de campo'], 'relato.txt', { type: 'text/plain' });
+
+    await saveMessageDraft('ana.sp', 'territorio-a', 12, 'Revisar com o grupo.', [attachment]);
+
+    const restored = await loadMessageDraft('ana.sp', 'territorio-a', 12);
+    expect(restored).toMatchObject({ body: 'Revisar com o grupo.' });
+    expect(restored?.attachments).toHaveLength(1);
+    expect(restored?.attachments[0]).toMatchObject({ name: 'relato.txt', type: 'text/plain', size: 15 });
+    expect(await restored?.attachments[0].text()).toBe('relato de campo');
+    expect(await loadMessageDraft('bia.sp', 'territorio-a', 12)).toBeUndefined();
+    expect(await loadMessageDraft('ana.sp', 'territorio-b', 12)).toBeUndefined();
+    expect(await loadMessageDraft('ana.sp', 'territorio-a', 13)).toBeUndefined();
+  });
+
+  it('can clear one persisted draft without touching another conversation', async () => {
+    await saveMessageDraft('ana.sp', 'territorio-a', 12, 'Primeiro');
+    await saveMessageDraft('ana.sp', 'territorio-a', 13, 'Segundo');
+
+    await clearMessageDraft('ana.sp', 'territorio-a', 12);
+
+    expect(await loadMessageDraft('ana.sp', 'territorio-a', 12)).toBeUndefined();
+    expect(await loadMessageDraft('ana.sp', 'territorio-a', 13)).toMatchObject({ body: 'Segundo' });
+  });
+
+  it('persists an offline message, its blob and its fixed operation atomically', async () => {
+    const file = new File(['imagem'], 'nascente.png', { type: 'image/png' });
+
+    const queued = await enqueueMessage({
+      workspaceId: 'territorio-a',
+      conversationId: 12,
+      body: 'Registro da nascente.',
+      attachments: [file]
+    }, 'ana.sp');
+
+    const outbox = await listOutbox('ana.sp', 'territorio-a');
+    const local = await getLocalMessage('ana.sp', 'territorio-a', queued.clientMessageId);
+    expect(outbox).toHaveLength(1);
+    expect(outbox[0]).toMatchObject({
+      id: queued.clientMessageId,
+      operation: 'MESSAGE_SEND',
+      ownerId: 'ana.sp',
+      workspaceId: 'territorio-a',
+      status: 'QUEUED',
+      body: {
+        conversationId: 12,
+        clientMessageId: queued.clientMessageId,
+        deviceId: queued.deviceId,
+        occurredAt: queued.occurredAt,
+        body: 'Registro da nascente.'
+      }
+    });
+    expect(local).toMatchObject({
+      conversationId: 12,
+      clientMessageId: queued.clientMessageId,
+      syncStatus: 'QUEUED',
+      attachments: [{ name: 'nascente.png', type: 'image/png', size: 6 }]
+    });
+    const stored = await getMessageAttachmentFile(local!.attachments[0].blobKey);
+    expect(stored).toMatchObject({ name: 'nascente.png', type: 'image/png', size: 6 });
+    expect(await stored?.text()).toBe('imagem');
+  });
+
+  it('keeps local message timelines isolated by owner, workspace and conversation', async () => {
+    await enqueueMessage({ workspaceId: 'territorio-a', conversationId: 12, body: 'Ana A', attachments: [] }, 'ana.sp');
+    await enqueueMessage({ workspaceId: 'territorio-a', conversationId: 13, body: 'Ana B', attachments: [] }, 'ana.sp');
+    await enqueueMessage({ workspaceId: 'territorio-b', conversationId: 12, body: 'Ana C', attachments: [] }, 'ana.sp');
+    await enqueueMessage({ workspaceId: 'territorio-a', conversationId: 12, body: 'Bia A', attachments: [] }, 'bia.sp');
+
+    expect(await listLocalMessages('ana.sp', 'territorio-a', 12)).toHaveLength(1);
+    expect(await listLocalMessages('ana.sp', 'territorio-a', 13)).toHaveLength(1);
+    expect(await listLocalMessages('ana.sp', 'territorio-b', 12)).toHaveLength(1);
+    expect(await listLocalMessages('bia.sp', 'territorio-a', 12)).toHaveLength(1);
+  });
+
+  it('removes drafts, messages and blobs with an explicitly confirmed owner cleanup', async () => {
+    await saveMessageDraft('ana.sp', 'territorio-a', 12, 'Rascunho', [
+      new File(['rascunho'], 'rascunho.txt', { type: 'text/plain' })
+    ]);
+    const queued = await enqueueMessage({
+      workspaceId: 'territorio-a', conversationId: 12, body: 'Na fila', attachments: [
+        new File(['fila'], 'fila.txt', { type: 'text/plain' })
+      ]
+    }, 'ana.sp');
+    const blobKey = (await getLocalMessage('ana.sp', 'territorio-a', queued.clientMessageId))!.attachments[0].blobKey;
+
+    await clearOfflineOwner('ana.sp', { discardPending: true });
+
+    expect(await listLocalMessages('ana.sp', 'territorio-a', 12)).toEqual([]);
+    expect(await loadMessageDraft('ana.sp', 'territorio-a', 12)).toBeUndefined();
+    expect(await getMessageAttachmentFile(blobKey)).toBeUndefined();
   });
 });

@@ -4,6 +4,7 @@ import {
   getSyncMetadata,
   listOutbox,
   reviseObservation,
+  type ObservationOutboxEntry,
   type OutboxEntry,
   type OutboxStatus,
   type SyncMetadata
@@ -34,6 +35,21 @@ const REVIEWABLE: OutboxStatus[] = ['CONFLICT', 'ACTION_REQUIRED'];
 
 function when(value: string): string {
   return new Date(value).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
+}
+
+function isObservationEntry(entry: OutboxEntry): entry is ObservationOutboxEntry {
+  return entry.operation === 'CREATE_OBSERVATION';
+}
+
+function entryTitle(entry: OutboxEntry): string {
+  if (isObservationEntry(entry)) return entry.body.titulo;
+  return entry.body.body || `Mensagem com ${entry.body.attachments.length} anexo(s)`;
+}
+
+function entryContext(entry: OutboxEntry): string {
+  if (isObservationEntry(entry)) return entry.body.localizacao || entry.body.categoria;
+  const count = entry.body.attachments.length;
+  return count > 0 ? `Conversa · ${count} anexo${count === 1 ? '' : 's'}` : 'Conversa';
 }
 
 interface RevisionDraft {
@@ -89,7 +105,7 @@ export default function SyncCenter({ ownerId, workspaceId, online, onClose }: Pr
     }
   }
 
-  function openReview(entry: OutboxEntry) {
+  function openReview(entry: ObservationOutboxEntry) {
     setReviewingId(entry.id);
     setRevision({
       titulo: entry.body.titulo,
@@ -195,8 +211,8 @@ export default function SyncCenter({ ownerId, workspaceId, online, onClose }: Pr
                   <div className="sync-entry-copy">
                     <span className={`status-dot ${status.tone}`} aria-hidden="true" />
                     <div>
-                      <b>{entry.body.titulo}</b>
-                      <p>{entry.body.localizacao || entry.body.categoria}</p>
+                      <b>{entryTitle(entry)}</b>
+                      <p>{entryContext(entry)}</p>
                       {entry.lastError && <small>{entry.lastError}</small>}
                     </div>
                   </div>
@@ -204,7 +220,7 @@ export default function SyncCenter({ ownerId, workspaceId, online, onClose }: Pr
                     <strong className={status.tone}>{status.label}</strong>
                     <span>{status.detail}</span>
                     <time dateTime={entry.updatedAt}>{when(entry.updatedAt)}</time>
-                    {REVIEWABLE.includes(entry.status) && !isReviewing && (
+                    {isObservationEntry(entry) && REVIEWABLE.includes(entry.status) && !isReviewing && (
                       <button
                         type="button"
                         className="secondary-button compact-button"
@@ -216,7 +232,7 @@ export default function SyncCenter({ ownerId, workspaceId, online, onClose }: Pr
                     )}
                   </div>
                 </div>
-                {isReviewing && (
+                {isObservationEntry(entry) && isReviewing && (
                   <form className="sync-review-form" onSubmit={saveRevision}>
                     <p>Uma nova versão será criada. O conteúdo original continuará no histórico local.</p>
                     <div className="field-row">
