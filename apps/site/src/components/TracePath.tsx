@@ -53,20 +53,14 @@ export default function TracePath() {
 
         <ol className="trace-list" aria-label="Percurso do impacto socioambiental">
           {traceSteps.map((step, index) => (
-            <li id={`etapa-${step.id}`} key={step.id} style={{ '--step': index } as CSSProperties}>
-              <a
-                href={`#etapa-${step.id}`}
-                aria-label={`${index + 1}. ${step.title}`}
-                aria-describedby={`descricao-${step.id}`}
-              >
+            <li key={step.id} style={{ '--step': index } as CSSProperties}>
+              <div className="trace-step">
                 <span className="trace-node" aria-hidden="true">
                   {String(index + 1).padStart(2, '0')}
                 </span>
                 <span className="trace-name">{step.title}</span>
-                <span id={`descricao-${step.id}`} className="trace-description">
-                  {step.description}
-                </span>
-              </a>
+                <span className="trace-description">{step.description}</span>
+              </div>
             </li>
           ))}
         </ol>

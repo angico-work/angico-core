@@ -380,13 +380,11 @@ form button:hover {
   animation-delay: calc(130ms + var(--step) * 75ms);
 }
 
-.trace-list a {
+.trace-step {
   display: flex;
   min-height: 100%;
   flex-direction: column;
   align-items: flex-start;
-  color: inherit;
-  text-decoration: none;
 }
 
 .trace-node {
@@ -419,13 +417,6 @@ form button:hover {
   color: color-mix(in srgb, var(--fibra) 68%, transparent);
   font-size: 0.84rem;
   line-height: 1.45;
-}
-
-.trace-list a:hover .trace-node,
-.trace-list a:focus-visible .trace-node,
-.trace-list li:target .trace-node {
-  background: var(--folha);
-  color: var(--grafite);
 }
 
 .trace-participants {
@@ -630,6 +621,27 @@ textarea {
 form button {
   justify-self: start;
   padding-inline: 22px;
+}
+
+form button:disabled {
+  border-color: color-mix(in srgb, var(--mata) 68%, var(--fibra));
+  background: color-mix(in srgb, var(--mata) 68%, var(--fibra));
+  cursor: wait;
+}
+
+.form-feedback {
+  max-width: 46ch;
+  margin: -4px 0 0;
+  color: var(--grafite);
+  line-height: 1.5;
+}
+
+.form-feedback-success {
+  color: var(--mata);
+}
+
+.form-feedback-error {
+  color: #963b25;
 }
 
 .contact-unavailable {
