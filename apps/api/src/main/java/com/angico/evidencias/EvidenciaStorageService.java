@@ -19,7 +19,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.core.io.PathResource;
+import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.Resource;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
@@ -106,7 +106,7 @@ public class EvidenciaStorageService {
                 || !Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) {
             throw new IllegalArgumentException("Arquivo de evidência não encontrado.");
         }
-        return new PathResource(path);
+        return new FileSystemResource(path);
     }
 
     public void delete(StoredEvidence stored) {

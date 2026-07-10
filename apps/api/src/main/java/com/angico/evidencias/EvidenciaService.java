@@ -1,6 +1,7 @@
 package com.angico.evidencias;
 
 import com.angico.common.ClockProvider;
+import com.angico.common.ConflictException;
 import com.angico.core.ontology.OntologyService;
 import com.angico.workspaces.WorkspaceAuthorizationService;
 import com.angico.workspaces.WorkspaceReferenceValidator;
@@ -11,6 +12,7 @@ import java.util.Locale;
 import java.util.Set;
 import java.util.regex.Pattern;
 import org.springframework.core.io.Resource;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
@@ -67,9 +69,7 @@ public class EvidenciaService {
         String safeDeviceId = optionalOfflineId(deviceId, "deviceId");
         String safeMutationId = optionalOfflineId(clientMutationId, "clientMutationId");
 
-        EvidenciaStorageService.StoredEvidence stored = file == null || file.isEmpty()
-                ? null
-                : storage.store(file);
+        EvidenciaStorageService.StoredEvidence stored = file == null ? null : storage.store(file);
         registerRollbackCleanup(stored);
 
         Evidencia evidence = new Evidencia(
@@ -87,7 +87,11 @@ public class EvidenciaService {
         if (stored != null) {
             evidence.attach(stored);
         }
-        evidence = evidenciaRepository.saveAndFlush(evidence);
+        try {
+            evidence = evidenciaRepository.saveAndFlush(evidence);
+        } catch (DataIntegrityViolationException exception) {
+            throw new ConflictException("clientMutationId já foi usado neste workspace.");
+        }
         publisher.publish(evidence);
         return EvidenciaMetadataResponse.from(evidence);
     }

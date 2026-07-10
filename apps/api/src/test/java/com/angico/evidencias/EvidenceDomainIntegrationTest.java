@@ -152,6 +152,8 @@ class EvidenceDomainIntegrationTest {
                 new MockMultipartFile("file", "../segredo.txt", "text/plain", "texto".getBytes()), 400);
         createEvidence(workspaceA, "OBSERVACAO", observation(workspaceA, "Local 2").getId(), "MIME falso",
                 new MockMultipartFile("file", "falso.png", "image/png", "texto".getBytes()), 400);
+        createEvidence(workspaceA, "OBSERVACAO", observation(workspaceA, "Local 3").getId(), "Arquivo vazio",
+                new MockMultipartFile("file", "vazio.txt", "text/plain", new byte[0]), 400);
 
         assertEquals(0, evidenciaRepository.findByWorkspaceIdOrderByRecordedAtDesc(workspaceA).size());
     }
@@ -177,6 +179,17 @@ class EvidenceDomainIntegrationTest {
         assertEquals(fileCountBefore, regularFileCount(UPLOAD_ROOT));
     }
 
+    @Test
+    void duplicateClientMutationReturnsConflictWithoutCreatingAnotherEvidence() throws Exception {
+        ObservacaoTerritorial observation = observation(workspaceA, "Mutação repetida");
+        String mutation = "evidence-duplicate-" + IDS.incrementAndGet();
+
+        createMetadataEvidence(observation.getId(), mutation, 201);
+        createMetadataEvidence(observation.getId(), mutation, 409);
+
+        assertEquals(1, evidenciaRepository.findByWorkspaceIdOrderByRecordedAtDesc(workspaceA).size());
+    }
+
     private org.springframework.test.web.servlet.ResultActions createEvidence(
             String workspaceId,
             String subjectType,
@@ -200,6 +213,18 @@ class EvidenceDomainIntegrationTest {
             request.file(file);
         }
         return mvc.perform(request).andExpect(status().is(expectedStatus));
+    }
+
+    private void createMetadataEvidence(Long observationId, String mutation, int expectedStatus) throws Exception {
+        mvc.perform(multipart("/api/evidencias")
+                        .param("workspaceId", workspaceA)
+                        .param("subjectType", "OBSERVACAO")
+                        .param("subjectId", String.valueOf(observationId))
+                        .param("title", "Evidência idempotente")
+                        .param("clientMutationId", mutation)
+                        .cookie(session.cookie())
+                        .header("X-CSRF-Token", session.csrfToken()))
+                .andExpect(status().is(expectedStatus));
     }
 
     private ObservacaoTerritorial observation(String workspaceId, String title) {
