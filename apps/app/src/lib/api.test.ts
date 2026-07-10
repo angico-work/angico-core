@@ -7,7 +7,8 @@ import {
   listWorkspaces,
   login,
   revalidateSession,
-  apiUrl
+  apiUrl,
+  sendMensagem
 } from './api';
 
 const session = {
@@ -119,5 +120,28 @@ describe('cookie session API', () => {
 
     expect(getSession()).toBeNull();
     expect(localStorage.getItem('angico.session')).toBeNull();
+  });
+
+  it('rejects attachments that exceed the API per-file limit before upload', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(response(200, {}));
+    vi.stubGlobal('fetch', fetchMock);
+    const oversized = new File(
+      [new Uint8Array(2 * 1024 * 1024 + 1)],
+      'oversized.pdf',
+      { type: 'application/pdf' }
+    );
+
+    await expect(sendMensagem(1, '', [oversized])).rejects.toThrow('2 MB');
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('keeps aggregate attachments below the same-origin function payload ceiling', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(response(200, {}));
+    vi.stubGlobal('fetch', fetchMock);
+    const first = new File([new Uint8Array(2 * 1024 * 1024)], 'first.pdf');
+    const second = new File([new Uint8Array(2 * 1024 * 1024)], 'second.pdf');
+
+    await expect(sendMensagem(1, '', [first, second])).rejects.toThrow('3,75 MB');
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });

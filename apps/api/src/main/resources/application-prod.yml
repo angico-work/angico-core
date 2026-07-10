@@ -6,6 +6,9 @@ spring:
     url: ${ANGICO_DB_URL}
     username: ${ANGICO_DB_USER}
     password: ${ANGICO_DB_PASSWORD}
+  servlet:
+    multipart:
+      max-request-size: ${ANGICO_UPLOAD_MAX_REQUEST_SIZE:4MB}
   jpa:
     hibernate:
       ddl-auto: update

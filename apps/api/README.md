@@ -16,7 +16,10 @@ A autenticação é obrigatória por padrão. O usuário de demonstração só �
 
 ```bash
 mvn test
+scripts/smoke-prod-postgres.sh
 ```
+
+O segundo comando é o gate opcional de produção: requer Docker, cria PostgreSQL efêmero, inicia o JAR com perfil `prod` sobre banco vazio e confirma a sequência Flyway `0,1,2`.
 
 O endpoint de saúde está disponível em `GET /health`.
 
@@ -45,3 +48,7 @@ HAVING count(*) > 1;
 ```
 
 Esse regime é transicional: depois de gerar e revisar uma baseline completa do schema, a meta é voltar `ddl-auto` para `validate`. Não execute migrations contra `apps/api/data` durante testes. A suíte usa bancos H2 isolados em memória e também prova boot do perfil `prod` sobre banco vazio.
+
+## Uploads em produção
+
+O Blueprint monta o disco persistente `angico-uploads` em `/app/uploads`; apenas arquivos gravados nesse caminho sobrevivem a restart e redeploy. O request multipart de produção é limitado a `4MB`, abaixo do teto de `4.5MB` da Vercel Function. Cada arquivo continua limitado a `2MB`, e o cliente limita o agregado a `3,75MB` para reservar o overhead do multipart.

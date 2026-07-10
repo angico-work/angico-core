@@ -4,6 +4,10 @@ services:
     runtime: docker
     rootDir: apps/api
     plan: starter
+    disk:
+      name: angico-uploads
+      mountPath: /app/uploads
+      sizeGB: 1
     envVars:
       - key: SPRING_PROFILES_ACTIVE
         value: prod
@@ -28,9 +32,11 @@ services:
       - key: ANGICO_SEED_DEMO_LEADER_PASSWORD
         sync: false
       - key: ANGICO_UPLOAD_DIR
-        value: /opt/render/project/src/uploads
+        value: /app/uploads
       - key: ANGICO_UPLOAD_MAX_BYTES
         value: "2097152"
+      - key: ANGICO_UPLOAD_MAX_REQUEST_SIZE
+        value: 4MB
       - key: ANGICO_GEOCODER_PROVIDER
         value: nominatim
       - key: ANGICO_GEOCODER_USER_AGENT

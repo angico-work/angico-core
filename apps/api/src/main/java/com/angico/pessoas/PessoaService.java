@@ -5,6 +5,7 @@ import com.angico.common.CurrentActorProvider;
 import com.angico.common.UnauthorizedException;
 import com.angico.workspaces.WorkspaceAuthorizationService;
 import java.util.List;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -49,6 +50,10 @@ public class PessoaService {
             if (existing.isPresent()) {
                 return PessoaResponse.from(existing.get());
             }
+            pessoaRepository.findByAngicoIdIgnoreCase(angicoId).ifPresent(person -> {
+                throw new IllegalArgumentException(
+                        "Angico ID já está associado a uma pessoa de outro workspace.");
+            });
         }
 
         Pessoa pessoa = new Pessoa(
@@ -60,7 +65,12 @@ public class PessoaService {
         );
         pessoa.setAngicoId(angicoId);
 
-        Pessoa saved = pessoaRepository.save(pessoa);
+        Pessoa saved;
+        try {
+            saved = pessoaRepository.saveAndFlush(pessoa);
+        } catch (DataIntegrityViolationException exception) {
+            throw new IllegalArgumentException("Angico ID já está associado a outra pessoa.");
+        }
         pessoaMemoryPublisher.publicarEngajada(saved);
         return PessoaResponse.from(saved);
     }

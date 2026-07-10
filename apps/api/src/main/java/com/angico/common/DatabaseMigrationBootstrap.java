@@ -37,10 +37,7 @@ public class DatabaseMigrationBootstrap implements SmartInitializingSingleton {
         String vendor = databaseVendor();
         Flyway.configure()
                 .dataSource(dataSource)
-                .locations(
-                        "classpath:db/migration/common",
-                        "classpath:db/migration/" + vendor
-                )
+                .locations("classpath:db/migration/" + vendor)
                 .baselineOnMigrate(true)
                 .baselineVersion(MigrationVersion.fromVersion("0"))
                 .cleanDisabled(true)

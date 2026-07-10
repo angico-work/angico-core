@@ -33,7 +33,7 @@ class IdentityMigrationTest {
 
         Flyway.configure()
                 .dataSource(url, "sa", "")
-                .locations("classpath:db/migration/common", "classpath:db/migration/h2")
+                .locations("classpath:db/migration/h2")
                 .baselineOnMigrate(true)
                 .baselineVersion(MigrationVersion.fromVersion("0"))
                 .cleanDisabled(true)

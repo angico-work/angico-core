@@ -15,10 +15,10 @@ BEGIN
 END
 $$;
 
-CREATE UNIQUE INDEX IF NOT EXISTS uk_pessoa_email_normalized
+CREATE UNIQUE INDEX IF NOT EXISTS uk_pessoa_email_canonical_v2
     ON pessoa (lower(btrim(email)))
     WHERE email IS NOT NULL AND btrim(email) <> '';
 
-CREATE UNIQUE INDEX IF NOT EXISTS uk_pessoa_angico_id_normalized
+CREATE UNIQUE INDEX IF NOT EXISTS uk_pessoa_angico_id_canonical_v2
     ON pessoa (lower(regexp_replace(btrim(angico_id), '^@', '')))
     WHERE angico_id IS NOT NULL AND btrim(angico_id) <> '';

@@ -46,6 +46,8 @@ class SecurityDefaultsTest {
         assertEquals(true, property(prodSources, "angico.auth.cookie-secure"));
         assertEquals("update", property(devSources, "spring.jpa.hibernate.ddl-auto"));
         assertEquals("update", property(prodSources, "spring.jpa.hibernate.ddl-auto"));
+        assertEquals("${ANGICO_UPLOAD_MAX_REQUEST_SIZE:4MB}",
+                property(prodSources, "spring.servlet.multipart.max-request-size"));
         assertEquals("${ANGICO_FLYWAY_ENABLED:true}",
                 property(prodSources, "angico.database.migrations-enabled"));
         assertEquals("${ANGICO_ALLOWED_ORIGINS}", property(prodSources, "angico.allowed-origins"));
@@ -54,8 +56,9 @@ class SecurityDefaultsTest {
     @Test
     void productionMigrationsAreAdditiveAndVendorSpecific() throws IOException {
         List<ClassPathResource> migrations = List.of(
-                new ClassPathResource("db/migration/common/V1__session_table.sql"),
+                new ClassPathResource("db/migration/postgresql/V1__session_and_identity_constraints.sql"),
                 new ClassPathResource("db/migration/postgresql/V2__identity_constraints.sql"),
+                new ClassPathResource("db/migration/h2/V1__session_table.sql"),
                 new ClassPathResource("db/migration/h2/V2__identity_constraints.sql")
         );
         assertTrue(migrations.stream().allMatch(ClassPathResource::exists));
@@ -95,6 +98,17 @@ class SecurityDefaultsTest {
         assertTrue(render.contains("value: prod"));
         assertTrue(render.contains("key: ANGICO_PUBLIC_REGISTRATION"));
         assertTrue(render.contains("key: ANGICO_FLYWAY_ENABLED\n        value: \"true\""));
+        assertTrue(render.contains("mountPath: /app/uploads"));
+        assertTrue(render.contains("key: ANGICO_UPLOAD_DIR\n        value: /app/uploads"));
+        assertTrue(render.contains("key: ANGICO_UPLOAD_MAX_REQUEST_SIZE\n        value: 4MB"));
+    }
+
+    @Test
+    void postgresqlProductionSmokeTestIsReproducible() {
+        Path script = Files.exists(Path.of("scripts/smoke-prod-postgres.sh"))
+                ? Path.of("scripts/smoke-prod-postgres.sh")
+                : Path.of("apps/api/scripts/smoke-prod-postgres.sh");
+        assertTrue(Files.isExecutable(script));
     }
 
     private int occurrences(String value, String needle) {

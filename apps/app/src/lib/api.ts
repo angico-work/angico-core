@@ -401,6 +401,14 @@ export async function listMensagens(conversaId: number): Promise<Mensagem[]> {
 // Multipart send (text + optional image/file attachments). Do NOT set
 // Content-Type — the browser adds the multipart boundary.
 export async function sendMensagem(conversaId: number, corpo: string, attachments: File[] = []): Promise<Mensagem> {
+  const maxFileBytes = 2 * 1024 * 1024;
+  const maxAggregateBytes = 3.75 * 1024 * 1024;
+  if (attachments.some((file) => file.size > maxFileBytes)) {
+    throw new Error('Cada anexo deve ter no máximo 2 MB.');
+  }
+  if (attachments.reduce((total, file) => total + file.size, 0) > maxAggregateBytes) {
+    throw new Error('O total dos anexos deve ter no máximo 3,75 MB.');
+  }
   const form = new FormData();
   if (corpo.trim()) form.append('corpo', corpo.trim());
   attachments.forEach((file) => form.append('attachments', file));

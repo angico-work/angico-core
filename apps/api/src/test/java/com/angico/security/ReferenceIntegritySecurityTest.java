@@ -235,6 +235,18 @@ class ReferenceIntegritySecurityTest {
                 .andExpect(status().isForbidden());
     }
 
+    @Test
+    void existingGlobalAngicoIdCannotFallThroughToAConstraintFailure() throws Exception {
+        long before = pessoaRepository.count();
+
+        mvc.perform(authenticatedPost("/api/pessoas", """
+                        {"workspaceId":"%s","nome":"Identidade duplicada","angicoId":"%s"}
+                        """.formatted(workspaceA, pessoaB.getAngicoId())))
+                .andExpect(status().isBadRequest());
+
+        assertEquals(before, pessoaRepository.count());
+    }
+
     private void assertPrincipalAuthor(String path, String body) throws Exception {
         mvc.perform(authenticatedPost(path, body))
                 .andExpect(status().isCreated())
