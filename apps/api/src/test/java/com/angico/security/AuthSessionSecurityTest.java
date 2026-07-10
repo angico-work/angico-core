@@ -8,6 +8,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 import com.angico.auth.PasswordHasher;
 import com.angico.auth.AuthSessionRepository;
@@ -20,6 +21,7 @@ import com.angico.workspaces.WorkspaceRepository;
 import jakarta.servlet.http.Cookie;
 import java.time.Instant;
 import java.time.Duration;
+import java.sql.Timestamp;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -30,6 +32,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
+import org.springframework.jdbc.core.JdbcTemplate;
 
 @SpringBootTest(properties = {
         "spring.datasource.url=jdbc:h2:mem:auth-security;MODE=PostgreSQL;DB_CLOSE_DELAY=-1",
@@ -63,6 +66,9 @@ class AuthSessionSecurityTest {
 
     @Autowired
     private AuthSessionRepository sessionRepository;
+
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
 
     private String email;
     private String workspaceId;
@@ -237,6 +243,26 @@ class AuthSessionSecurityTest {
         org.junit.jupiter.api.Assertions.assertTrue(
                 !expiresAt.isBefore(before.plus(Duration.ofHours(12)))
                         && !expiresAt.isAfter(after.plus(Duration.ofHours(12))));
+    }
+
+    @Test
+    void persistedExpiredSessionIsRejectedAndRevoked() throws Exception {
+        SessionCredentials credentials = login();
+        Long pessoaId = pessoaRepository.findByEmailIgnoreCase(email).orElseThrow().getId();
+        var session = sessionRepository.findAll().stream()
+                .filter(candidate -> candidate.getPessoaId().equals(pessoaId))
+                .max(java.util.Comparator.comparing(com.angico.auth.AuthSession::getId))
+                .orElseThrow();
+        jdbcTemplate.update(
+                "UPDATE auth_session SET expires_at = ? WHERE id = ?",
+                Timestamp.from(Instant.now().minusSeconds(1)),
+                session.getId()
+        );
+
+        mvc.perform(get("/api/auth/me").cookie(credentials.cookie()))
+                .andExpect(status().isUnauthorized());
+
+        assertNotNull(sessionRepository.findById(session.getId()).orElseThrow().getRevokedAt());
     }
 
     private SessionCredentials login() throws Exception {

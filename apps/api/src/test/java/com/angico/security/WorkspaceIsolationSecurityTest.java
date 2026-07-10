@@ -3,8 +3,12 @@ package com.angico.security;
 import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.not;
 import static org.hamcrest.Matchers.hasItem;
+import static org.hamcrest.Matchers.containsString;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -25,6 +29,7 @@ import com.angico.workspaces.WorkspaceMemberRepository;
 import com.angico.workspaces.WorkspaceRepository;
 import jakarta.servlet.http.Cookie;
 import java.time.Instant;
+import java.nio.charset.StandardCharsets;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.BeforeEach;
@@ -32,10 +37,13 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
+import org.springframework.http.HttpHeaders;
+import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 
@@ -215,6 +223,102 @@ class WorkspaceIsolationSecurityTest {
                                 """.formatted(workspaceB, territorio.getId())))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.workspaceId").value(workspaceB));
+    }
+
+    @Test
+    void participantCanListReadSendAndDownloadAttachment() throws Exception {
+        Territorio territorio = createTerritorio(workspaceA, "Território participante");
+        MvcResult created = mvc.perform(post("/api/mensagens/conversas")
+                        .cookie(memberA.cookie())
+                        .header("X-CSRF-Token", memberA.csrfToken())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"workspaceId":"%s","territorioId":%d,"titulo":"Conversa participante",\
+                                 "participanteIds":[],"participanteRefs":[]}
+                                """.formatted(workspaceA, territorio.getId())))
+                .andExpect(status().isOk())
+                .andReturn();
+        Number conversaId = com.jayway.jsonpath.JsonPath.read(
+                created.getResponse().getContentAsString(), "$.id");
+
+        assertConversationOperations(conversaId.longValue(), pessoaA, memberA);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"OWNER", "ADMIN"})
+    void privilegedMemberCanListReadSendAndDownloadWithoutParticipantRelation(String role) throws Exception {
+        int id = IDS.incrementAndGet();
+        Pessoa privileged = createPerson(
+                workspaceA,
+                role.toLowerCase() + "." + id,
+                role.toLowerCase() + "-" + id + "@example.test",
+                role,
+                true
+        );
+        SessionCredentials credentials = login(privileged);
+        Territorio territorio = createTerritorio(workspaceA, "Território " + role);
+        Conversa conversa = new Conversa();
+        conversa.setWorkspaceId(workspaceA);
+        conversa.setTerritorioId(territorio.getId());
+        conversa.setTitulo("Conversa " + role);
+        conversa.setCreatedByPessoaId(pessoaA.getId());
+        conversa.setStatus("ATIVA");
+        conversa.setCreatedAt(Instant.now());
+        conversa.setUpdatedAt(Instant.now());
+        conversa = conversaRepository.save(conversa);
+
+        assertConversationOperations(conversa.getId(), privileged, credentials);
+    }
+
+    private void assertConversationOperations(
+            long conversaId,
+            Pessoa actor,
+            SessionCredentials credentials
+    ) throws Exception {
+        byte[] attachment = "evidência autorizada".getBytes(StandardCharsets.UTF_8);
+        MockMultipartFile file = new MockMultipartFile(
+                "attachments", "evidence.txt", "text/plain", attachment);
+        MvcResult sent = mvc.perform(multipart(
+                        "/api/mensagens/conversas/{id}/mensagens", conversaId)
+                        .file(file)
+                        .param("corpo", "Mensagem autorizada")
+                        .cookie(credentials.cookie())
+                        .header("X-CSRF-Token", credentials.csrfToken()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.senderPessoaId").value(actor.getId()))
+                .andExpect(jsonPath("$.anexos", hasSize(1)))
+                .andReturn();
+        Number attachmentId = com.jayway.jsonpath.JsonPath.read(
+                sent.getResponse().getContentAsString(), "$.anexos[0].id");
+
+        mvc.perform(get("/api/mensagens/conversas")
+                        .param("workspaceId", workspaceA)
+                        .cookie(credentials.cookie()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[*].id", hasItem((int) conversaId)));
+        mvc.perform(get("/api/mensagens/conversas/{id}", conversaId)
+                        .cookie(credentials.cookie()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.mensagens[0].corpo").value("Mensagem autorizada"));
+        mvc.perform(get("/api/mensagens/conversas/{id}/mensagens", conversaId)
+                        .cookie(credentials.cookie()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].corpo").value("Mensagem autorizada"));
+        mvc.perform(get("/api/mensagens/anexos/{id}", attachmentId.longValue())
+                        .cookie(credentials.cookie()))
+                .andExpect(status().isOk())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.TEXT_PLAIN))
+                .andExpect(header().string(HttpHeaders.CONTENT_DISPOSITION, containsString("evidence.txt")))
+                .andExpect(content().bytes(attachment));
+    }
+
+    private Territorio createTerritorio(String workspaceId, String nome) {
+        Territorio territorio = new Territorio();
+        territorio.setWorkspaceId(workspaceId);
+        territorio.setNome(nome);
+        territorio.setCreatedAt(Instant.now());
+        territorio.setUpdatedAt(Instant.now());
+        return territorioRepository.save(territorio);
     }
 
     private Pessoa createPerson(

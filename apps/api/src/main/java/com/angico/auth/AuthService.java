@@ -124,16 +124,28 @@ public class AuthService {
         );
     }
 
+    @Transactional
     public Optional<SessionPrincipal> authenticateSession(String rawToken) {
         if (rawToken == null || rawToken.isBlank()) {
             return Optional.empty();
         }
         String csrfToken = csrfTokenFor(rawToken);
-        return sessionRepository.findByTokenHashAndRevokedAtIsNullAndExpiresAtAfter(hashToken(rawToken), Instant.now())
-                .filter(session -> secureEquals(session.getCsrfTokenHash(), hashToken(csrfToken)))
-                .flatMap(session -> pessoaRepository.findById(session.getPessoaId())
+        Instant now = Instant.now();
+        Optional<AuthSession> persisted = sessionRepository.findByTokenHash(hashToken(rawToken));
+        if (persisted.isEmpty() || persisted.get().getRevokedAt() != null) {
+            return Optional.empty();
+        }
+        AuthSession session = persisted.get();
+        if (!session.getExpiresAt().isAfter(now)) {
+            session.revoke(now);
+            sessionRepository.save(session);
+            return Optional.empty();
+        }
+        return Optional.of(session)
+                .filter(candidate -> secureEquals(candidate.getCsrfTokenHash(), hashToken(csrfToken)))
+                .flatMap(candidate -> pessoaRepository.findById(candidate.getPessoaId())
                         .filter(pessoa -> "ATIVA".equalsIgnoreCase(pessoa.getStatus()))
-                        .map(pessoa -> new SessionPrincipal(pessoa, session, csrfToken)));
+                        .map(pessoa -> new SessionPrincipal(pessoa, candidate, csrfToken)));
     }
 
     public AuthResponse currentSession(Long sessionId, String csrfToken) {
