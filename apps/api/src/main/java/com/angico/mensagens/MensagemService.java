@@ -349,7 +349,6 @@ public class MensagemService {
             clientMessageId = idempotencyKey;
         }
         String deviceId = normalizeDeviceId(rawDeviceId);
-        Instant occurredAt = requestedOccurredAt == null ? clock.now() : requestedOccurredAt;
         List<AttachmentFingerprint> attachmentFingerprints = fingerprintAttachments(attachments);
         MessagePayload payload = new MessagePayload(
                 conversaId,
@@ -361,7 +360,7 @@ public class MensagemService {
                 normalizeOptional(linkedEntityId),
                 clientMessageId,
                 deviceId,
-                occurredAt.toString(),
+                requestedOccurredAt == null ? null : requestedOccurredAt.toString(),
                 attachmentFingerprints
         );
         String requestHash = idempotencyKey == null
@@ -442,7 +441,9 @@ public class MensagemService {
         mensagem.setClientMessageId(clientMessageId);
         mensagem.setDeviceId(payload.deviceId());
         mensagem.setStatus("ENVIADA");
-        mensagem.setOccurredAt(Instant.parse(payload.occurredAt()));
+        mensagem.setOccurredAt(payload.occurredAt() == null
+                ? recordedAt
+                : Instant.parse(payload.occurredAt()));
         mensagem.setRecordedAt(recordedAt);
         mensagem.setCreatedAt(recordedAt);
         mensagem = mensagemRepository.save(mensagem);

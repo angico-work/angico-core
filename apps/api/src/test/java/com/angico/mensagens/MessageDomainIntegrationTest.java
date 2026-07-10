@@ -184,6 +184,37 @@ class MessageDomainIntegrationTest {
     }
 
     @Test
+    void replayWithoutOccurredAtKeepsTheOriginalServerTimestamp() throws Exception {
+        long conversationId = createConversation("Resposta perdida", ownerSession);
+        String clientMessageId = "message-" + IDS.incrementAndGet();
+
+        MvcResult first = mvc.perform(multipart("/api/mensagens/conversas/{id}/mensagens", conversationId)
+                        .param("corpo", "Mensagem sem horário do cliente")
+                        .param("clientMessageId", clientMessageId)
+                        .header("Idempotency-Key", clientMessageId)
+                        .header("X-CSRF-Token", ownerSession.csrfToken())
+                        .cookie(ownerSession.cookie()))
+                .andExpect(status().isOk())
+                .andReturn();
+        Number firstId = com.jayway.jsonpath.JsonPath.read(
+                first.getResponse().getContentAsString(), "$.id");
+        String firstOccurredAt = com.jayway.jsonpath.JsonPath.read(
+                first.getResponse().getContentAsString(), "$.occurredAt");
+
+        mvc.perform(multipart("/api/mensagens/conversas/{id}/mensagens", conversationId)
+                        .param("corpo", "Mensagem sem horário do cliente")
+                        .param("clientMessageId", clientMessageId)
+                        .header("Idempotency-Key", clientMessageId)
+                        .header("X-CSRF-Token", ownerSession.csrfToken())
+                        .cookie(ownerSession.cookie()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(firstId.longValue()))
+                .andExpect(jsonPath("$.occurredAt").value(firstOccurredAt));
+
+        assertEquals(1, mensagemRepository.countByWorkspaceId(workspaceId));
+    }
+
+    @Test
     void readReceiptChangesOnlyTheCurrentParticipantsUnreadCounter() throws Exception {
         long conversationId = createConversation("Coordenação do viveiro", ownerSession);
         sendMessage(
