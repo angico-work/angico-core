@@ -33,11 +33,6 @@ public class ProblemaService {
         this.referenceValidator = referenceValidator;
     }
 
-    /**
-     * Registra um problema socioambiental e o inscreve na memória do território
-     * (objeto + evento + eventual relação com a observação de origem).
-     * Persistência e memória commitam juntas na mesma transação.
-     */
     @Transactional
     public ProblemaResponse registrar(ProblemaRequest request) {
         String workspaceId = authorizationService.requireAuthorizedWorkspace(request.workspaceId());

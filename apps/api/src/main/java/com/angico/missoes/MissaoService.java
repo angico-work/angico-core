@@ -33,11 +33,6 @@ public class MissaoService {
         this.referenceValidator = referenceValidator;
     }
 
-    /**
-     * Registra uma missão e a inscreve na memória do território (objeto +
-     * evento + relações com problema/responsável). Persistência e memória
-     * commitam juntas na mesma transação.
-     */
     @Transactional
     public MissaoResponse registrar(MissaoRequest request) {
         String workspaceId = authorizationService.requireAuthorizedWorkspace(request.workspaceId());

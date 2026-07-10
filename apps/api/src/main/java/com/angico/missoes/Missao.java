@@ -7,10 +7,6 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import java.time.Instant;
 
-/**
- * Uma missão: uma frente de ação que o território assume para responder a um
- * problema priorizado. Carrega progresso e pode ser liderada por alguém.
- */
 @Entity
 public class Missao {
 

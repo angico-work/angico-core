@@ -9,11 +9,6 @@ import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
 import java.time.Instant;
 
-/**
- * A person's membership in a workspace, with a role that drives access control.
- * The {@code actorId} is the member's Angico ID (the human identity used across
- * the platform); {@code displayName} is denormalized for listing without a join.
- */
 @Entity
 @Table(name = "workspace_member", uniqueConstraints =
         @UniqueConstraint(name = "uk_member_workspace_actor", columnNames = {"workspaceId", "actorId"}))

@@ -23,7 +23,6 @@ import java.util.Optional;
 import java.util.function.Function;
 import org.springframework.stereotype.Service;
 
-/** Resolves payload references before a cross-entity memory relation is saved. */
 @Service
 public class WorkspaceReferenceValidator {
 

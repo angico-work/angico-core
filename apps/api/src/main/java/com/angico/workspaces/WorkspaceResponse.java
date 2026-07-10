@@ -25,7 +25,6 @@ public record WorkspaceResponse(
                 workspace.getEstado(),
                 workspace.getCenterLatitude(),
                 workspace.getCenterLongitude(),
-                // older rows predate these columns — default rather than emit null
                 workspace.getStatus() == null ? "ACTIVE" : workspace.getStatus(),
                 workspace.getCreatedBy(),
                 workspace.getCreatedAt(),
