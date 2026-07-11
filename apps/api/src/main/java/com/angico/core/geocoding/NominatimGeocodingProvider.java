@@ -48,12 +48,12 @@ public class NominatimGeocodingProvider implements GeocodingProvider {
         try {
             List<GeocodingResult> photonResults = photonSearch(query, countryParam);
             if (!photonResults.isEmpty()) {
-                LOG.debug("Photon answered '{}' with {} result(s)", query, photonResults.size());
+                LOG.debug("Photon answered with {} result(s)", photonResults.size());
                 return photonResults;
             }
-            LOG.warn("Photon returned 0 results for '{}'; falling back to Nominatim", query);
+            LOG.debug("Photon returned no results; falling back to Nominatim");
         } catch (RuntimeException ex) {
-            LOG.warn("Photon search failed for '{}' ({}); falling back to Nominatim", query, ex.toString());
+            LOG.warn("Photon search failed ({}); falling back to Nominatim", ex.getClass().getSimpleName());
         }
 
         String encodedQuery = encode(query);
@@ -65,7 +65,7 @@ public class NominatimGeocodingProvider implements GeocodingProvider {
         JsonNode root = request(uri);
         List<GeocodingResult> results = new ArrayList<>();
         root.forEach(node -> results.add(toResult(node)));
-        LOG.debug("Nominatim answered '{}' with {} result(s)", query, results.size());
+        LOG.debug("Nominatim answered with {} result(s)", results.size());
         return results;
     }
 
