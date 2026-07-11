@@ -70,6 +70,7 @@ export default function MensagensPage() {
   const streamRef = useRef<HTMLDivElement>(null);
   const savedFilesSignature = useRef('');
   const draftSaveTimer = useRef<number | undefined>(undefined);
+  const draftSaveGeneration = useRef(0);
   const activeConversationRef = useRef<number | null>(activeId);
   const activeWorkspaceRef = useRef(workspaceId);
   activeConversationRef.current = activeId;
@@ -247,11 +248,15 @@ export default function MensagensPage() {
       || !ownerId
       || sending
       || draftKey !== `${ownerId}:${workspaceId}:${activeId}`) return;
+    const generation = ++draftSaveGeneration.current;
+    const stillCurrent = () => draftSaveGeneration.current === generation
+      && activeWorkspaceRef.current === workspaceId
+      && activeConversationRef.current === activeId;
     const timer = window.setTimeout(() => {
       if (!draft.trim() && files.length === 0) {
         void clearMessageDraft(ownerId, workspaceId, activeId)
-          .then(() => setDraftState('idle'))
-          .catch(() => setDraftState('error'));
+          .then(() => { if (stillCurrent()) setDraftState('idle'); })
+          .catch(() => { if (stillCurrent()) setDraftState('error'); });
         return;
       }
       setDraftState('saving');
@@ -259,10 +264,12 @@ export default function MensagensPage() {
       const filesChanged = nextFilesSignature !== savedFilesSignature.current;
       void saveMessageDraft(ownerId, workspaceId, activeId, draft, filesChanged ? files : undefined)
         .then(() => {
+          if (!stillCurrent()) return;
           savedFilesSignature.current = nextFilesSignature;
           setDraftState('saved');
         })
         .catch((caught) => {
+          if (!stillCurrent()) return;
           setDraftState('error');
           setMessageError(caught instanceof Error ? caught.message : 'Não foi possível salvar o rascunho.');
         });
@@ -270,6 +277,7 @@ export default function MensagensPage() {
     draftSaveTimer.current = timer;
     return () => {
       window.clearTimeout(timer);
+      if (draftSaveGeneration.current === generation) draftSaveGeneration.current += 1;
       if (draftSaveTimer.current === timer) draftSaveTimer.current = undefined;
     };
   }, [activeId, draft, draftKey, files, ownerId, sending, workspaceId]);

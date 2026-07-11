@@ -1,5 +1,5 @@
 import '@testing-library/jest-dom/vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import AddressField from './AddressField';
 import { searchGeocoding } from '../lib/api';
@@ -36,5 +36,13 @@ describe('AddressField keyboard access', () => {
 
     expect(onSelect).toHaveBeenCalledWith(expect.objectContaining({ city: 'Recife' }));
     view.unmount();
+  });
+
+  it('reports a failed search and clears the busy state', async () => {
+    vi.mocked(searchGeocoding).mockRejectedValue(new TypeError('sem conexão'));
+    render(<AddressField id="place" value="Várzea" onChange={() => undefined} onSelect={() => undefined} />);
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Não foi possível buscar endereços');
+    await waitFor(() => expect(screen.getByRole('combobox')).toHaveAttribute('aria-busy', 'false'));
   });
 });

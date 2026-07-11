@@ -17,7 +17,8 @@ import {
   clearMessageDraft,
   getMessageAttachmentFile,
   listLocalMessages,
-  loadMessageDraft
+  loadMessageDraft,
+  saveMessageDraft
 } from '../lib/offlineStore';
 import { captureMessage } from '../lib/offlineSync';
 import { startOnlinePolling } from '../lib/messagePolling';
@@ -184,6 +185,23 @@ describe('MensagensPage', () => {
     expect(await screen.findByDisplayValue('Confirmar horário do mutirão.')).toBeInTheDocument();
     expect(screen.getByText('ata.txt')).toBeInTheDocument();
     expect(screen.getByText('Rascunho salvo neste aparelho')).toBeInTheDocument();
+  });
+
+  it('ignores completion of a draft save from the previous workspace', async () => {
+    const pendingSave = deferred<void>();
+    vi.mocked(saveMessageDraft).mockReturnValueOnce(pendingSave.promise);
+    const view = renderPage('territorio-a');
+    const editor = await screen.findByLabelText('Mensagem');
+    fireEvent.change(editor, { target: { value: 'Rascunho do território A' } });
+    await waitFor(() => expect(saveMessageDraft).toHaveBeenCalledWith(
+      'stable-owner', 'territorio-a', 12, 'Rascunho do território A', undefined
+    ));
+
+    vi.mocked(listConversas).mockResolvedValue([]);
+    view.rerender(<PageUnderTest workspaceId="territorio-b" />);
+    pendingSave.resolve();
+
+    await waitFor(() => expect(screen.queryByText('Rascunho salvo neste aparelho')).not.toBeInTheDocument());
   });
 
   it('keeps an offline send visible in the queue after the atomic capture succeeds', async () => {

@@ -15,6 +15,7 @@ export default function AddressField({ value, onChange, onSelect, placeholder, i
   const [results, setResults] = useState<GeoResult[]>([]);
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [active, setActive] = useState(-1);
   const boxRef = useRef<HTMLDivElement>(null);
   const justSelected = useRef(false);
@@ -31,16 +32,30 @@ export default function AddressField({ value, onChange, onSelect, placeholder, i
     if (q.length < 3) {
       setResults([]);
       setOpen(false);
+      setLoading(false);
+      setError(null);
       return;
     }
     const ctrl = new AbortController();
     setLoading(true);
+    setError(null);
     const timer = setTimeout(async () => {
-      const found = await searchGeocoding(q, ctrl.signal);
-      setResults(found);
-      setActive(-1);
-      setOpen(true);
-      setLoading(false);
+      try {
+        const found = await searchGeocoding(q, ctrl.signal);
+        if (ctrl.signal.aborted) return;
+        setResults(found);
+        setActive(-1);
+        setOpen(true);
+      } catch (caught) {
+        if (ctrl.signal.aborted) return;
+        setResults([]);
+        setOpen(false);
+        setError(caught instanceof Error
+          ? `Não foi possível buscar endereços. ${caught.message}`
+          : 'Não foi possível buscar endereços.');
+      } finally {
+        if (!ctrl.signal.aborted) setLoading(false);
+      }
     }, 350);
     return () => {
       clearTimeout(timer);
@@ -102,6 +117,7 @@ export default function AddressField({ value, onChange, onSelect, placeholder, i
         aria-busy={loading}
       />
       {loading && <span className="address-field__spinner" aria-hidden="true" />}
+      {error && <span className="address-field__error" role="alert">{error}</span>}
       {open && results.length > 0 && (
         <ul id={listboxId} className="address-field__menu" role="listbox">
           {results.map((r, i) => (
