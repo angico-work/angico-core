@@ -1,4 +1,4 @@
-const CACHE = 'angico-cache-v5';
+const CACHE = 'angico-cache-__ANGICO_BUILD_REVISION__';
 const ASSET_MANIFEST = '/asset-manifest.json';
 const APP_SHELL = ['/', '/index.html', '/manifest.webmanifest', '/angico-icone.png'];
 
@@ -10,7 +10,7 @@ function manifestPrecacheUrls(manifest) {
     if (typeof value !== 'string') return;
     const url = new URL(value, self.location.origin);
     if (url.origin !== self.location.origin || url.pathname.startsWith('/api/')) return;
-    if (!url.pathname.endsWith('.js') && !url.pathname.endsWith('.css')) return;
+    if (!/\.(?:js|css|woff2?)$/.test(url.pathname)) return;
     urls.add(`${url.pathname}${url.search}`);
   }
 

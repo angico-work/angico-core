@@ -56,7 +56,7 @@ describe('service worker privacy policy', () => {
     await installPromise;
 
     expect(fetchMock).toHaveBeenCalledWith('/asset-manifest.json', { cache: 'no-store' });
-    expect(cacheOpen).toHaveBeenCalledWith('angico-cache-v5');
+    expect(cacheOpen).toHaveBeenCalledWith('angico-cache-__ANGICO_BUILD_REVISION__');
     expect(cacheAddAll).toHaveBeenCalledOnce();
     expect(new Set(cacheAddAll.mock.calls[0][0])).toEqual(new Set([
       '/',
@@ -69,7 +69,8 @@ describe('service worker privacy policy', () => {
       '/assets/shared-B2.css',
       '/assets/map-C3.js',
       '/assets/map-C3.css',
-      '/assets/nested-D4.js'
+      '/assets/nested-D4.js',
+      '/assets/font-A1.woff2'
     ]));
     expect(skipWaiting).toHaveBeenCalledOnce();
   });
