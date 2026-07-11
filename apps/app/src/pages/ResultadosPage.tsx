@@ -18,7 +18,9 @@ function ResultDialog({ workspaceId, actions, requestedActionId, onClose, onCrea
   onCreated: (result: Resultado) => void;
 }) {
   const requested = Number(requestedActionId);
-  const [actionId, setActionId] = useState(actions.some((action) => action.id === requested) ? requested : actions[0]?.id ?? 0);
+  const [actionId, setActionId] = useState(requestedActionId !== null
+    ? (actions.some((action) => action.id === requested) ? requested : 0)
+    : actions[0]?.id ?? 0);
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [occurredAt, setOccurredAt] = useState('');

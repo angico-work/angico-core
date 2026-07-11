@@ -40,16 +40,20 @@ const usage = {
   actorId: 'ana.sp'
 } satisfies RecursoUso;
 
-function renderPage() {
-  return render(
+function Page({ workspaceId }: { workspaceId: string }) {
+  return (
     <MemoryRouter initialEntries={['/recursos']}>
       <Routes>
-        <Route element={<Outlet context={{ workspaceId: 'workspace-a' }} />}>
+        <Route element={<Outlet context={{ workspaceId }} />}>
           <Route path="/recursos" element={<RecursosPage />} />
         </Route>
       </Routes>
     </MemoryRouter>
   );
+}
+
+function renderPage(workspaceId = 'workspace-a') {
+  return render(<Page workspaceId={workspaceId} />);
 }
 
 describe('RecursosPage', () => {
@@ -97,5 +101,15 @@ describe('RecursosPage', () => {
       descricao: undefined
     }));
     expect(vi.mocked(createRecurso).mock.calls[0][0]).not.toHaveProperty('actorId');
+  });
+
+  it('closes a resource modal when the active workspace changes', async () => {
+    const view = renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Registrar uso de Enxada' }));
+    expect(screen.getByRole('dialog', { name: 'Registrar uso de Enxada' })).toBeInTheDocument();
+
+    view.rerender(<Page workspaceId="workspace-b" />);
+
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Registrar uso de Enxada' })).not.toBeInTheDocument());
   });
 });

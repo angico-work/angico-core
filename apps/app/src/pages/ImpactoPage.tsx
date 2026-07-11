@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
 import { useOutletContext, useSearchParams } from 'react-router-dom';
 import type { AppContext } from '../components/AppShell';
 import ModalDialog from '../components/ModalDialog';
@@ -106,7 +106,9 @@ function MeasurementDialog({ workspaceId, indicators, requestedIndicatorId, onCl
   onCreated: (measurement: Medicao) => void;
 }) {
   const requested = Number(requestedIndicatorId);
-  const initial = indicators.find((indicator) => indicator.id === requested) ?? indicators[0];
+  const initial = requestedIndicatorId !== null
+    ? indicators.find((indicator) => indicator.id === requested)
+    : indicators[0];
   const [indicatorId, setIndicatorId] = useState(initial?.id ?? 0);
   const [value, setValue] = useState('');
   const [unit, setUnit] = useState(initial?.unidade ?? '');
@@ -218,6 +220,17 @@ export default function ImpactoPage() {
     setSearchParams({ create: kind });
   };
   const visibleCount = tab === 'indicadores' ? indicators.length : measurements.length;
+  const panelId = tab === 'indicadores' ? 'impact-indicators-panel' : 'impact-measurements-panel';
+  const tabId = tab === 'indicadores' ? 'impact-indicators-tab' : 'impact-measurements-tab';
+
+  function moveTab(current: ImpactTab, event: KeyboardEvent<HTMLButtonElement>) {
+    if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+    event.preventDefault();
+    setTab(current === 'indicadores' ? 'medicoes' : 'indicadores');
+    requestAnimationFrame(() => document.getElementById(
+      current === 'indicadores' ? 'impact-measurements-tab' : 'impact-indicators-tab'
+    )?.focus());
+  }
 
   return (
     <div className="page operational-page">
@@ -227,26 +240,28 @@ export default function ImpactoPage() {
       </header>
 
       <div className="record-tabs" role="tablist" aria-label="Leitura de impacto">
-        <button type="button" role="tab" aria-selected={tab === 'indicadores'} onClick={() => setTab('indicadores')}>Indicadores</button>
-        <button type="button" role="tab" aria-selected={tab === 'medicoes'} onClick={() => setTab('medicoes')}>Medições</button>
+        <button id="impact-indicators-tab" type="button" role="tab" aria-selected={tab === 'indicadores'} aria-controls="impact-indicators-panel" tabIndex={tab === 'indicadores' ? 0 : -1} onKeyDown={(event) => moveTab('indicadores', event)} onClick={() => setTab('indicadores')}>Indicadores</button>
+        <button id="impact-measurements-tab" type="button" role="tab" aria-selected={tab === 'medicoes'} aria-controls="impact-measurements-panel" tabIndex={tab === 'medicoes' ? 0 : -1} onKeyDown={(event) => moveTab('medicoes', event)} onClick={() => setTab('medicoes')}>Medições</button>
       </div>
 
       {loading && <LoadingState label="Carregando indicadores e medições…" />}
       {error && <ErrorState message={error} onRetry={() => void refresh()} />}
       {!loading && !error && visibleCount === 0 && (
-        <EmptyState
-          title={tab === 'indicadores' ? 'Nenhum indicador cadastrado' : 'Nenhuma medição registrada'}
-          message={tab === 'indicadores' ? 'Defina o primeiro sinal que será acompanhado no território.' : 'Registre o primeiro valor observado para um indicador existente.'}
-          action={<button className="secondary-button" type="button" onClick={() => openCreation(tab === 'indicadores' ? 'indicador' : 'medicao')}>{tab === 'indicadores' ? 'Novo indicador' : 'Nova medição'}</button>}
-        />
+        <section role="tabpanel" id={panelId} aria-labelledby={tabId}>
+          <EmptyState
+            title={tab === 'indicadores' ? 'Nenhum indicador cadastrado' : 'Nenhuma medição registrada'}
+            message={tab === 'indicadores' ? 'Defina o primeiro sinal que será acompanhado no território.' : 'Registre o primeiro valor observado para um indicador existente.'}
+            action={<button className="secondary-button" type="button" onClick={() => openCreation(tab === 'indicadores' ? 'indicador' : 'medicao')}>{tab === 'indicadores' ? 'Novo indicador' : 'Nova medição'}</button>}
+          />
+        </section>
       )}
       {!loading && !error && tab === 'indicadores' && indicators.length > 0 && (
-        <section className="record-sheet" role="tabpanel" aria-label="Indicadores cadastrados"><header className="record-sheet-head"><span>{indicators.length} {indicators.length === 1 ? 'indicador' : 'indicadores'}</span><span>Por território</span></header><div className="record-list">{indicators.map((indicator) => (
+        <section className="record-sheet" role="tabpanel" id="impact-indicators-panel" aria-labelledby="impact-indicators-tab"><header className="record-sheet-head"><span>{indicators.length} {indicators.length === 1 ? 'indicador' : 'indicadores'}</span><span>Por território</span></header><div className="record-list">{indicators.map((indicator) => (
           <article className="record-row operational-row" key={indicator.id} style={{ '--record-accent': '#626B2F' } as React.CSSProperties}><span className="record-mark" aria-hidden="true" /><div className="record-main"><h2>{indicator.nome}</h2><p>{indicator.descricao || 'Sem descrição adicional.'}</p><div className="record-meta"><span>Território · {territoryNames.get(indicator.territorioId) ?? 'Território não disponível'}</span><span>Unidade · {indicator.unidade || 'Não informada'}</span></div></div><div className="record-provenance"><strong>{indicator.status}</strong><time dateTime={indicator.updatedAt}>Atualizado em {formatDate(indicator.updatedAt)}</time></div></article>
         ))}</div></section>
       )}
       {!loading && !error && tab === 'medicoes' && measurements.length > 0 && (
-        <section className="record-sheet" role="tabpanel" aria-label="Medições registradas"><header className="record-sheet-head"><span>{measurements.length} {measurements.length === 1 ? 'medição' : 'medições'}</span><span>Registros disponíveis</span></header><div className="record-list">{measurements.map((measurement) => (
+        <section className="record-sheet" role="tabpanel" id="impact-measurements-panel" aria-labelledby="impact-measurements-tab"><header className="record-sheet-head"><span>{measurements.length} {measurements.length === 1 ? 'medição' : 'medições'}</span><span>Registros disponíveis</span></header><div className="record-list">{measurements.map((measurement) => (
           <article className="record-row operational-row" key={measurement.id} style={{ '--record-accent': '#0E7C86' } as React.CSSProperties}><span className="record-mark" aria-hidden="true" /><div className="record-main"><h2>{measurement.valor.toLocaleString('pt-BR')} {measurement.unidade ?? ''}</h2><p>{measurement.fonte ? `Fonte: ${measurement.fonte}` : 'Fonte não informada.'}</p><div className="record-meta"><span>Indicador · {indicatorNames.get(measurement.indicadorId) ?? 'Indicador não disponível'}</span><span>Medido em {formatDate(measurement.measuredAt)}</span></div></div><div className="record-provenance"><strong>Valor registrado</strong><time dateTime={measurement.createdAt}>Registrado em {formatDate(measurement.createdAt)}</time></div></article>
         ))}</div></section>
       )}

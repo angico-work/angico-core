@@ -16,6 +16,7 @@ export default function AngicoIdField({ workspaceId, value, onChange, onPick, id
   const [results, setResults] = useState<PessoaHit[]>([]);
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
   const [active, setActive] = useState(-1);
   const boxRef = useRef<HTMLDivElement>(null);
   const justPicked = useRef(false);
@@ -33,6 +34,7 @@ export default function AngicoIdField({ workspaceId, value, onChange, onPick, id
     setResults([]);
     setOpen(false);
     setActive(-1);
+    setSearchError(null);
     const q = value.trim();
     if (q.length < 2) {
       setLoading(false);
@@ -41,12 +43,18 @@ export default function AngicoIdField({ workspaceId, value, onChange, onPick, id
     const ctrl = new AbortController();
     setLoading(true);
     const timer = setTimeout(async () => {
-      const found = await searchPessoas(workspaceId, q, ctrl.signal);
-      if (request !== searchRequest.current) return;
-      setResults(found);
-      setActive(-1);
-      setOpen(true);
-      setLoading(false);
+      try {
+        const found = await searchPessoas(workspaceId, q, ctrl.signal);
+        if (request !== searchRequest.current) return;
+        setResults(found);
+        setActive(-1);
+        setOpen(true);
+      } catch (caught) {
+        if (request !== searchRequest.current || ctrl.signal.aborted) return;
+        setSearchError(caught instanceof Error ? caught.message : 'Não foi possível buscar pessoas.');
+      } finally {
+        if (request === searchRequest.current && !ctrl.signal.aborted) setLoading(false);
+      }
     }, 300);
     return () => {
       clearTimeout(timer);
@@ -69,6 +77,7 @@ export default function AngicoIdField({ workspaceId, value, onChange, onPick, id
     setOpen(false);
     setResults([]);
     setActive(-1);
+    setSearchError(null);
   }
 
   function onKeyDown(event: KeyboardEvent<HTMLInputElement>) {
@@ -90,7 +99,7 @@ export default function AngicoIdField({ workspaceId, value, onChange, onPick, id
     }
   }
 
-  const showEmpty = open && !loading && results.length === 0 && value.trim().length >= 2;
+  const showEmpty = open && !loading && !searchError && results.length === 0 && value.trim().length >= 2;
 
   return (
     <div className="address-field" ref={boxRef}>
@@ -112,6 +121,7 @@ export default function AngicoIdField({ workspaceId, value, onChange, onPick, id
         aria-busy={loading}
       />
       {loading && <span className="address-field__spinner" aria-hidden="true" />}
+      {searchError && <div className="address-field__error" role="alert">{searchError}</div>}
       {open && results.length > 0 && (
         <ul id={listboxId} className="address-field__menu" role="listbox">
           {results.map((p, index) => (

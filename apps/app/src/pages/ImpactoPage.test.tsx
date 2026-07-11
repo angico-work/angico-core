@@ -107,9 +107,20 @@ describe('ImpactoPage', () => {
   it('shows measurements as real records under an accessible tab', async () => {
     renderPage();
     await screen.findByRole('heading', { name: 'Trechos protegidos' });
-    fireEvent.click(screen.getByRole('tab', { name: 'Medições' }));
+    const measurementsTab = screen.getByRole('tab', { name: 'Medições' });
+    expect(measurementsTab).toHaveAttribute('aria-controls', 'impact-measurements-panel');
+    fireEvent.keyDown(screen.getByRole('tab', { name: 'Indicadores' }), { key: 'ArrowRight' });
 
     expect(screen.getByText('3 trechos')).toBeInTheDocument();
+    expect(measurementsTab).toHaveAttribute('aria-selected', 'true');
     expect(screen.getByText('Indicador · Trechos protegidos')).toBeInTheDocument();
+    expect(screen.getByRole('tabpanel', { name: 'Medições' })).toHaveAttribute('id', 'impact-measurements-panel');
+  });
+
+  it('does not replace an unavailable Rastro indicator with the first indicator', async () => {
+    renderPage('/indicadores?create=medicao&indicadorId=999');
+
+    await screen.findByRole('dialog', { name: 'Nova medição' });
+    expect(screen.getByLabelText('Indicador')).toHaveDisplayValue('Selecione por nome');
   });
 });

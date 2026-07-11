@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import type { AppContext } from '../components/AppShell';
 import { ErrorState, LoadingState } from '../components/PageFeedback';
@@ -9,16 +9,21 @@ function useDashboard(workspaceId: string) {
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const refreshRequest = useRef(0);
   const refresh = useCallback(async () => {
+    const request = ++refreshRequest.current;
     setLoading(true);
     setError(null);
+    setData(null);
     try {
-      setData(await loadDashboard(workspaceId));
+      const response = await loadDashboard(workspaceId);
+      if (request === refreshRequest.current) setData(response);
     } catch (caught) {
-      setData(null);
-      setError(caught instanceof Error ? caught.message : 'Não foi possível carregar esta leitura.');
+      if (request === refreshRequest.current) {
+        setError(caught instanceof Error ? caught.message : 'Não foi possível carregar esta leitura.');
+      }
     } finally {
-      setLoading(false);
+      if (request === refreshRequest.current) setLoading(false);
     }
   }, [workspaceId]);
   useEffect(() => { void refresh(); }, [refresh]);

@@ -101,6 +101,7 @@
 .address-field__name { font-weight: 600; }
 .address-field__meta, .address-field__hint { color: var(--muted); font-size: .78rem; }
 .address-field__empty { cursor: default !important; }
+.address-field__error { margin-top: .35rem; color: var(--clay); font-size: .8rem; }
 
 .profile-photo-row { margin-bottom: 1.2rem; display: flex; align-items: center; gap: 1rem; }
 .profile-avatar { width: 72px; height: 72px; border-radius: 50%; display: grid; place-items: center; overflow: hidden; color: #fff; background: var(--water); font-size: 1.5rem; font-weight: 700; }

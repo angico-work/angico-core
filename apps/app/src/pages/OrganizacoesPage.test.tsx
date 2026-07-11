@@ -9,6 +9,7 @@ import {
   listMissoes,
   listOrganizacoes,
   listParticipacoes,
+  listPessoas,
   searchPessoas
 } from '../lib/api';
 import type { MissaoRegistro, Organizacao, Participacao, PessoaHit } from '../types';
@@ -19,6 +20,7 @@ vi.mock('../lib/api', () => ({
   listMissoes: vi.fn(),
   listOrganizacoes: vi.fn(),
   listParticipacoes: vi.fn(),
+  listPessoas: vi.fn(),
   searchPessoas: vi.fn()
 }));
 
@@ -71,8 +73,8 @@ const person = {
   createdAt: '2026-07-10T10:00:00Z'
 } satisfies PessoaHit;
 
-function renderPage(workspaceId = 'workspace-a') {
-  return render(
+function Page({ workspaceId }: { workspaceId: string }) {
+  return (
     <MemoryRouter>
       <Routes>
         <Route element={<Outlet context={{ workspaceId }} />}>
@@ -83,11 +85,16 @@ function renderPage(workspaceId = 'workspace-a') {
   );
 }
 
+function renderPage(workspaceId = 'workspace-a') {
+  return render(<Page workspaceId={workspaceId} />);
+}
+
 describe('OrganizacoesPage', () => {
   beforeEach(() => {
     vi.mocked(listOrganizacoes).mockResolvedValue([organization]);
     vi.mocked(listMissoes).mockResolvedValue([mission]);
     vi.mocked(listParticipacoes).mockResolvedValue([participation]);
+    vi.mocked(listPessoas).mockResolvedValue([person]);
     vi.mocked(searchPessoas).mockResolvedValue([person]);
     vi.mocked(createOrganizacao).mockResolvedValue(organization);
     vi.mocked(createParticipacao).mockResolvedValue(participation);
@@ -188,7 +195,30 @@ describe('OrganizacoesPage', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Registrar participação em Rede da Nascente' }));
     const records = await screen.findByRole('region', { name: 'Participações registradas' });
     expect(within(records).getByText('1 participação')).toBeInTheDocument();
-    expect(within(records).getByRole('heading', { name: 'Representação' })).toBeInTheDocument();
-    expect(within(records).queryByRole('heading', { name: 'Parceiro' })).not.toBeInTheDocument();
+    expect(within(records).getByRole('heading', { name: 'Mara Lima' })).toBeInTheDocument();
+    expect(within(records).getByText(/Representação/)).toBeInTheDocument();
+    expect(within(records).queryByText(/Parceiro/)).not.toBeInTheDocument();
+  });
+
+  it('closes an organization modal when the active workspace changes', async () => {
+    const view = renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Registrar participação em Rede da Nascente' }));
+    expect(screen.getByRole('dialog', { name: 'Nova participação' })).toBeInTheDocument();
+
+    view.rerender(<Page workspaceId="workspace-b" />);
+
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Nova participação' })).not.toBeInTheDocument());
+  });
+
+  it('reports a person-search failure instead of calling it an empty result', async () => {
+    vi.mocked(searchPessoas).mockRejectedValue(new Error('busca de pessoas indisponível'));
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Registrar participação em Rede da Nascente' }));
+    const field = screen.getByLabelText('Pessoa');
+
+    fireEvent.change(field, { target: { value: 'Mara' } });
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('busca de pessoas indisponível');
+    expect(screen.queryByText(/Nenhuma pessoa encontrada/)).not.toBeInTheDocument();
   });
 });

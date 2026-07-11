@@ -315,10 +315,12 @@ export async function searchPessoas(workspaceId: string, q: string, signal?: Abo
       apiUrl(`/api/pessoas/search?workspaceId=${encodeURIComponent(workspaceId)}&q=${encodeURIComponent(query)}`),
       { headers: requestHeaders(), signal }
     );
-    if (!r.ok) return [];
+    if (!r.ok) throw new Error(await readError(r, 'Não foi possível buscar pessoas.'));
     return (await r.json()) as PessoaHit[];
-  } catch {
-    return [];
+  } catch (error) {
+    if (signal?.aborted) return [];
+    if (error instanceof Error && !(error instanceof TypeError)) throw error;
+    throw new Error('Não foi possível buscar pessoas. Verifique a conexão.');
   }
 }
 
@@ -421,6 +423,10 @@ export function createAcao(input: AcaoInput): Promise<Acao> {
 
 export function listObservacoes(workspaceId = DEFAULT_WORKSPACE): Promise<Observacao[]> {
   return listEntities<Observacao>('/api/observacoes', workspaceId);
+}
+
+export function listPessoas(workspaceId = DEFAULT_WORKSPACE): Promise<PessoaHit[]> {
+  return listEntities<PessoaHit>('/api/pessoas', workspaceId);
 }
 
 export function listAcoes(workspaceId = DEFAULT_WORKSPACE): Promise<Acao[]> {

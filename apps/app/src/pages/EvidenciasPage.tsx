@@ -37,6 +37,12 @@ function fileSize(value: number | null): string | null {
   return `${(value / 1024).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} KB`;
 }
 
+function authorLabel(actorId: string): string {
+  if (actorId === 'api') return 'Serviço Angico';
+  if (actorId === 'system') return 'Sistema';
+  return /^[A-Za-z][A-Za-z0-9._-]{1,63}$/.test(actorId) ? `@${actorId}` : 'registrada';
+}
+
 function EvidenceDialog({ workspaceId, records, requestedType, requestedId, onClose, onCreated }: {
   workspaceId: string;
   records: SubjectRecords;
@@ -47,8 +53,9 @@ function EvidenceDialog({ workspaceId, records, requestedType, requestedId, onCl
 }) {
   const initialType = validSubjectType(requestedType) ? requestedType : 'OBSERVACAO';
   const requestedNumber = Number(requestedId);
-  const initialRecord = records[initialType].some((entry) => entry.id === requestedNumber)
-    ? requestedNumber
+  const hasRequestedSubject = requestedType !== null || requestedId !== null;
+  const initialRecord = hasRequestedSubject
+    ? (records[initialType].some((entry) => entry.id === requestedNumber) ? requestedNumber : 0)
     : records[initialType][0]?.id ?? 0;
   const [subjectType, setSubjectType] = useState<EvidenceSubjectType>(initialType);
   const [subjectId, setSubjectId] = useState(initialRecord);
@@ -56,6 +63,7 @@ function EvidenceDialog({ workspaceId, records, requestedType, requestedId, onCl
   const [description, setDescription] = useState('');
   const [capturedAt, setCapturedAt] = useState('');
   const [file, setFile] = useState<File | undefined>();
+  const [clientMutationId] = useState(() => crypto.randomUUID());
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -80,7 +88,7 @@ function EvidenceDialog({ workspaceId, records, requestedType, requestedId, onCl
         title: title.trim(),
         description: description.trim() || undefined,
         capturedAt: capturedAt ? new Date(capturedAt).toISOString() : undefined,
-        clientMutationId: crypto.randomUUID(),
+        clientMutationId,
         file
       }));
     } catch (caught) {
@@ -233,7 +241,10 @@ export default function EvidenciasPage() {
                 <div className="record-provenance">
                   <strong>{evidence.hasFile ? 'Arquivo disponível' : 'Sem arquivo'}</strong>
                   {evidence.hasFile && <a className="record-link" href={evidenciaFileUrl(evidence.id)} target="_blank" rel="noreferrer">Abrir arquivo</a>}
+                  {evidence.originalFilename && <span>{evidence.originalFilename}{evidence.contentType ? ` · ${evidence.contentType}` : ''}</span>}
                   {fileSize(evidence.sizeBytes) && <span>{fileSize(evidence.sizeBytes)}</span>}
+                  {evidence.sha256 && <span className="evidence-hash">SHA-256 {evidence.sha256}</span>}
+                  <span>Autoria: {authorLabel(evidence.actorId)}</span>
                   <time dateTime={evidence.recordedAt}>Registrada em {formatDate(evidence.recordedAt)}</time>
                 </div>
               </article>

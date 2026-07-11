@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useOutletContext } from 'react-router-dom';
 import type { AppContext } from '../components/AppShell';
 import { EmptyState, ErrorState, LoadingState } from '../components/PageFeedback';
@@ -32,15 +32,23 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showNew, setShowNew] = useState(false);
+  const refreshRequest = useRef(0);
+
+  useEffect(() => setShowNew(false), [workspaceId]);
 
   const refresh = useCallback(async () => {
+    const request = ++refreshRequest.current;
     setLoading(true);
     setError(null);
+    setData(null);
+    setPoints([]);
+    setEvents([]);
     const [dashboard, map, memory] = await Promise.allSettled([
       loadDashboard(workspaceId),
       loadMapPoints(workspaceId),
       loadMemoria(workspaceId)
     ]);
+    if (request !== refreshRequest.current) return;
     if (dashboard.status === 'fulfilled') setData(dashboard.value);
     else {
       setData(null);

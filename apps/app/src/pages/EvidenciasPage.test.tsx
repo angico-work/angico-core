@@ -73,6 +73,9 @@ describe('EvidenciasPage', () => {
     expect(screen.getByRole('link', { name: 'Abrir arquivo' })).toHaveAttribute(
       'href', '/api/evidencias/9/arquivo'
     );
+    expect(screen.getByText('relato.pdf · application/pdf')).toBeInTheDocument();
+    expect(screen.getByText('SHA-256 abc')).toBeInTheDocument();
+    expect(screen.getByText('Autoria: @ana.sp')).toBeInTheDocument();
     expect(evidenciaFileUrl).toHaveBeenCalledWith(9);
     expect(screen.queryByText(/\bID\b/i)).not.toBeInTheDocument();
   });
@@ -92,5 +95,30 @@ describe('EvidenciasPage', () => {
       subjectId: 4,
       title: 'Foto depois do mutirão'
     })));
+  });
+
+  it('does not replace an invalid Rastro subject with the first record', async () => {
+    renderPage('/evidencias?create=1&subjectType=ACAO&subjectId=999');
+
+    await screen.findByRole('dialog', { name: 'Nova evidência' });
+    expect(screen.getByLabelText('Registro vinculado')).toHaveDisplayValue('Selecione por nome');
+  });
+
+  it('keeps the same idempotency key when a submission is retried', async () => {
+    vi.mocked(createEvidencia)
+      .mockRejectedValueOnce(new Error('resposta perdida'))
+      .mockResolvedValueOnce(evidence);
+    renderPage('/evidencias?create=1&subjectType=ACAO&subjectId=4');
+    await screen.findByRole('dialog', { name: 'Nova evidência' });
+    fireEvent.change(screen.getByLabelText('Título'), { target: { value: 'Registro do mutirão' } });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar evidência' }));
+    await screen.findByRole('alert');
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar evidência' }));
+
+    await waitFor(() => expect(createEvidencia).toHaveBeenCalledTimes(2));
+    expect(vi.mocked(createEvidencia).mock.calls[0][0].clientMutationId).toBe(
+      vi.mocked(createEvidencia).mock.calls[1][0].clientMutationId
+    );
   });
 });

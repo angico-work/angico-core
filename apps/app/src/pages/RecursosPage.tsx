@@ -138,6 +138,11 @@ export default function RecursosPage() {
   const [error, setError] = useState<string | null>(null);
   const request = useRef(0);
 
+  useEffect(() => {
+    setCreating(false);
+    setUsageResource(null);
+  }, [workspaceId]);
+
   const refresh = useCallback(async () => {
     const current = ++request.current;
     setLoading(true);

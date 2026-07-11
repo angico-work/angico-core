@@ -1,5 +1,5 @@
 import '@testing-library/jest-dom/vitest';
-import { cleanup, render, screen } from '@testing-library/react';
+import { act, cleanup, render, screen } from '@testing-library/react';
 import { MemoryRouter, Outlet, Route, Routes } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { RelatoriosPage } from './SummaryPages';
@@ -38,5 +38,25 @@ describe('RelatoriosPage', () => {
     );
 
     expect(await screen.findByText('40% · 2 ações · EM ANDAMENTO')).toBeInTheDocument();
+  });
+
+  it('does not render a late dashboard response from the previous workspace', async () => {
+    let resolveFirst!: (data: DashboardData) => void;
+    let resolveSecond!: (data: DashboardData) => void;
+    const first = new Promise<DashboardData>((resolve) => { resolveFirst = resolve; });
+    const second = new Promise<DashboardData>((resolve) => { resolveSecond = resolve; });
+    vi.mocked(loadDashboard).mockImplementation((workspaceId) => workspaceId === 'workspace-a' ? first : second);
+
+    function Page({ workspaceId }: { workspaceId: string }) {
+      return <MemoryRouter><Routes><Route element={<Outlet context={{ workspaceId }} />}><Route index element={<RelatoriosPage />} /></Route></Routes></MemoryRouter>;
+    }
+
+    const view = render(<Page workspaceId="workspace-a" />);
+    view.rerender(<Page workspaceId="workspace-b" />);
+    await act(async () => resolveSecond({ ...dashboard, workspaceId: 'workspace-b', territory: { ...dashboard.territory, name: 'Território B' } }));
+    expect(await screen.findByRole('heading', { name: 'Território B' })).toBeInTheDocument();
+
+    await act(async () => resolveFirst({ ...dashboard, territory: { ...dashboard.territory, name: 'Território antigo' } }));
+    expect(screen.queryByRole('heading', { name: 'Território antigo' })).not.toBeInTheDocument();
   });
 });

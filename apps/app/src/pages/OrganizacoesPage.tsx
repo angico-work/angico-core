@@ -9,7 +9,8 @@ import {
   createParticipacao,
   listMissoes,
   listOrganizacoes,
-  listParticipacoes
+  listParticipacoes,
+  listPessoas
 } from '../lib/api';
 import type {
   MissaoRegistro,
@@ -150,9 +151,10 @@ function OrganizationDialog({ workspaceId, missions, onClose, onCreated }: {
   );
 }
 
-function ParticipationDialog({ workspaceId, organization, onClose }: {
+function ParticipationDialog({ workspaceId, organization, people, onClose }: {
   workspaceId: string;
   organization: Organizacao;
+  people: PessoaHit[];
   onClose: () => void;
 }) {
   const [participations, setParticipations] = useState<Participacao[]>([]);
@@ -168,6 +170,7 @@ function ParticipationDialog({ workspaceId, organization, onClose }: {
     () => participations.filter((participation) => participation.status === 'ATIVA' && participation.endedAt == null),
     [participations]
   );
+  const personNames = useMemo(() => new Map(people.map((entry) => [entry.id, entry.nome])), [people]);
 
   useEffect(() => {
     let active = true;
@@ -248,8 +251,8 @@ function ParticipationDialog({ workspaceId, organization, onClose }: {
               <article className="record-row operational-row" key={participation.id} style={{ '--record-accent': '#37785B' } as React.CSSProperties}>
                 <span className="record-mark" aria-hidden="true" />
                 <div className="record-main">
-                  <h3>{PARTICIPATION_ROLES.find((entry) => entry.value === participation.papel)?.label ?? participation.papel}</h3>
-                  <div className="record-meta"><span>Ativa desde {formatDate(participation.startedAt)}</span></div>
+                  <h3>{personNames.get(participation.pessoaId) ?? 'Pessoa não disponível'}</h3>
+                  <div className="record-meta"><span>{PARTICIPATION_ROLES.find((entry) => entry.value === participation.papel)?.label ?? participation.papel}</span><span>Ativa desde {formatDate(participation.startedAt)}</span></div>
                 </div>
                 <div className="record-provenance"><strong>Ativa</strong></div>
               </article>
@@ -297,19 +300,26 @@ export default function OrganizacoesPage() {
   const { workspaceId } = useOutletContext<AppContext>();
   const [organizations, setOrganizations] = useState<Organizacao[]>([]);
   const [missions, setMissions] = useState<MissaoRegistro[]>([]);
+  const [people, setPeople] = useState<PessoaHit[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [participationTarget, setParticipationTarget] = useState<Organizacao | null>(null);
 
   useEffect(() => {
+    setCreating(false);
+    setParticipationTarget(null);
+  }, [workspaceId]);
+
+  useEffect(() => {
     let active = true;
     setLoading(true);
     setLoadError(null);
-    Promise.all([listOrganizacoes(workspaceId), listMissoes(workspaceId)]).then(([nextOrganizations, nextMissions]) => {
+    Promise.all([listOrganizacoes(workspaceId), listMissoes(workspaceId), listPessoas(workspaceId)]).then(([nextOrganizations, nextMissions, nextPeople]) => {
       if (!active) return;
       setOrganizations(nextOrganizations);
       setMissions(nextMissions);
+      setPeople(nextPeople);
     }).catch((caught) => {
       if (active) setLoadError(caught instanceof Error ? caught.message : 'Não foi possível carregar as organizações.');
     }).finally(() => {
@@ -387,6 +397,7 @@ export default function OrganizacoesPage() {
         <ParticipationDialog
           workspaceId={workspaceId}
           organization={participationTarget}
+          people={people}
           onClose={() => setParticipationTarget(null)}
         />
       )}

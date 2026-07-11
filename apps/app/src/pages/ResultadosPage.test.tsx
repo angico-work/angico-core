@@ -71,4 +71,11 @@ describe('ResultadosPage', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('resultados indisponíveis');
     expect(screen.queryByText('Nenhum resultado registrado')).not.toBeInTheDocument();
   });
+
+  it('does not replace an unavailable Rastro action with the first action', async () => {
+    renderPage('/resultados?create=1&acaoId=999');
+
+    await screen.findByRole('dialog', { name: 'Novo resultado' });
+    expect(screen.getByLabelText('Ação relacionada')).toHaveDisplayValue('Selecione por nome');
+  });
 });

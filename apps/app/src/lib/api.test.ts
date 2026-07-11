@@ -11,6 +11,7 @@ import {
   listConversas,
   markConversaRead,
   searchMensagens,
+  searchPessoas,
   listEntities,
   listWorkspaces,
   login,
@@ -29,6 +30,7 @@ import {
   evidenciaFileUrl,
   listEvidencias,
   listParticipacoes,
+  listPessoas,
   listRecursos,
   sendMensagem
 } from './api';
@@ -436,13 +438,21 @@ describe('cookie session API', () => {
 
     await listEvidencias('campo norte/um');
     await listParticipacoes(11, 'campo norte/um');
+    await listPessoas('campo norte/um');
     await listRecursos('campo norte/um');
 
     expect(fetchMock.mock.calls.map((call) => call[0])).toEqual([
       '/api/evidencias?workspaceId=campo%20norte%2Fum',
       '/api/organizacoes/11/participacoes?workspaceId=campo%20norte%2Fum',
+      '/api/pessoas?workspaceId=campo%20norte%2Fum',
       '/api/recursos?workspaceId=campo%20norte%2Fum'
     ]);
+  });
+
+  it('keeps a person-search failure distinct from an empty result', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response(503, { detail: 'busca de pessoas indisponível' })));
+
+    await expect(searchPessoas('workspace-a', 'Mara')).rejects.toThrow('busca de pessoas indisponível');
   });
 
   it('searches messages inside the authorized workspace with an encoded query', async () => {

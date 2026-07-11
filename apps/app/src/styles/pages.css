@@ -57,6 +57,7 @@
 .record-tabs button[aria-selected='true'] { color: #fff; background: var(--forest); }
 .record-sublist { margin: .8rem 0 0; padding: .6rem 0 0; border-top: 1px solid var(--line); display: grid; gap: .35rem; list-style: none; }
 .record-sublist li { display: flex; flex-wrap: wrap; justify-content: space-between; gap: .4rem 1rem; color: var(--muted); font-size: .82rem; }
+.evidence-hash { max-width: 240px; overflow-wrap: anywhere; font-family: 'Spline Sans Mono', monospace; font-size: .68rem; }
 
 .map-page-head { align-items: center; }
 .map-search { width: min(420px, 100%); }
