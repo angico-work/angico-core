@@ -14,6 +14,7 @@ import com.angico.impacto.Medicao;
 import com.angico.impacto.MedicaoRepository;
 import com.angico.impacto.ResultadoRepository;
 import com.angico.missoes.MissaoRepository;
+import com.angico.missoes.Missao;
 import com.angico.mensagens.ConversationAccessPolicy;
 import com.angico.observacoes.ObservacaoRepository;
 import com.angico.potencialidades.PotencialidadeRepository;
@@ -119,5 +120,24 @@ class GlimpseServiceTest {
                 .value());
         assertFalse(response.stats().stream()
                 .anyMatch(stat -> stat.label().contains("Jovens")));
+    }
+
+    @Test
+    void dashboardNamesMissionStatusAsStatus() {
+        String workspaceId = "coletivo-rio";
+        Missao mission = new Missao(
+                workspaceId, "Cuidar da nascente", null, "EM_ANDAMENTO", 30,
+                null, null, null, Instant.parse("2026-07-10T10:00:00Z"));
+        when(authorization.requireAuthorizedWorkspace(workspaceId)).thenReturn(workspaceId);
+        when(clock.now()).thenReturn(Instant.parse("2026-07-10T12:00:00Z"));
+        when(observacoes.findByWorkspaceIdOrderByCreatedAtDesc(workspaceId)).thenReturn(List.of());
+        when(missoes.findByWorkspaceIdOrderByCreatedAtDesc(workspaceId)).thenReturn(List.of(mission));
+        when(medicoes.findByWorkspaceIdOrderByCreatedAtDesc(workspaceId)).thenReturn(List.of());
+        when(workspaces.findBySlug(workspaceId)).thenReturn(Optional.of(
+                new Workspace(workspaceId, "Coletivo do Rio", "actor", Instant.EPOCH)));
+
+        DashboardResponse response = service.dashboard(workspaceId);
+
+        assertEquals("Em andamento", response.missions().getFirst().status());
     }
 }

@@ -22,7 +22,7 @@ public record DashboardResponse(
     public record Activity(String title, String subtitle, String location, String time, String type) {
     }
 
-    public record Mission(String title, int progress, String actions, String participants) {
+    public record Mission(String title, int progress, String actions, String status) {
     }
 
     public record Impact(String value, String label, String period, String icon) {
