@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { icon } from '../lib/icons';
 import { getSyncState, type SyncState } from '../lib/offlineSync';
+import { useOnlineStatus } from '../hooks/useOnlineStatus';
 import SyncCenter from './SyncCenter';
 
 interface Props {
@@ -16,21 +17,6 @@ function initials(label: string): string {
   const parts = label.trim().split(/\s+/).filter(Boolean);
   if (parts.length === 0) return '?';
   return (parts[0][0] + (parts.length > 1 ? parts.at(-1)?.[0] ?? '' : '')).toUpperCase();
-}
-
-function useOnline(): boolean {
-  const [online, setOnline] = useState(() => typeof navigator === 'undefined' || navigator.onLine);
-  useEffect(() => {
-    const on = () => setOnline(true);
-    const off = () => setOnline(false);
-    window.addEventListener('online', on);
-    window.addEventListener('offline', off);
-    return () => {
-      window.removeEventListener('online', on);
-      window.removeEventListener('offline', off);
-    };
-  }, []);
-  return online;
 }
 
 const EMPTY_SYNC_STATE: SyncState = {
@@ -50,7 +36,7 @@ function syncLabel(online: boolean, state: SyncState): string {
 }
 
 export default function Topbar({ workspaceLabel, workspaceId, ownerId, sidebarOpen, onToggleSidebar, onWorkspaceClick }: Props) {
-  const online = useOnline();
+  const online = useOnlineStatus();
   const [syncState, setSyncState] = useState<SyncState>(EMPTY_SYNC_STATE);
   const [showSync, setShowSync] = useState(false);
 

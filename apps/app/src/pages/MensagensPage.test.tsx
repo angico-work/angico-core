@@ -173,6 +173,19 @@ describe('MensagensPage', () => {
     expect(cacheRemoteMessages).toHaveBeenCalledWith('stable-owner', 'territorio-a', 12, 7, [remoteMessage]);
   });
 
+  it('updates conversation controls when connectivity changes', async () => {
+    renderPage();
+    expect(await screen.findByText('Conectado')).toBeInTheDocument();
+    const create = screen.getByRole('button', { name: 'Nova conversa' });
+    expect(create).toBeEnabled();
+
+    Object.defineProperty(navigator, 'onLine', { configurable: true, value: false });
+    fireEvent(window, new Event('offline'));
+
+    expect(await screen.findByText('Trabalho offline')).toBeInTheDocument();
+    expect(create).toBeDisabled();
+  });
+
   it('restores a saved draft and its local attachment', async () => {
     vi.mocked(loadMessageDraft).mockResolvedValue({
       body: 'Confirmar horário do mutirão.',

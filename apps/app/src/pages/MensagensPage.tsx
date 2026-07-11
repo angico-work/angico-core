@@ -19,6 +19,7 @@ import {
   sessionOwnerId
 } from '../lib/api';
 import { validateMessageFiles } from '../lib/messageFiles';
+import { useOnlineStatus } from '../hooks/useOnlineStatus';
 import type { MessageLinkedEntityType } from '../lib/messageLinks';
 import { startOnlinePolling } from '../lib/messagePolling';
 import {
@@ -49,6 +50,7 @@ export default function MensagensPage() {
   const { workspaceId } = useOutletContext<AppContext>();
   const ownerId = sessionOwnerId();
   const meId = getSession()?.pessoaId ?? null;
+  const online = useOnlineStatus();
   const [conversations, setConversations] = useState<Conversa[]>([]);
   const [contexts, setContexts] = useState<ConversationContext[]>([]);
   const [activeId, setActiveId] = useState<number | null>(null);
@@ -165,7 +167,7 @@ export default function MensagensPage() {
     try {
       remote = await listMensagens(conversationId, workspaceId);
       await cacheRemoteMessages(ownerId, workspaceId, conversationId, meId, remote);
-      if (navigator.onLine
+      if (online
           && markRead
           && activeConversationRef.current === conversationId
           && activeWorkspaceRef.current === workspaceId) {
@@ -197,17 +199,17 @@ export default function MensagensPage() {
     setTimeline(mergeTimeline(remote, refreshedLocal, meId));
     if (!readFailed && !networkError) setMessageError(null);
     if (networkError && propagateNetworkError) throw networkError;
-  }, [meId, ownerId, workspaceId]);
+  }, [meId, online, ownerId, workspaceId]);
 
   const refreshConversationBadges = useCallback(async () => {
-    if (!navigator.onLine) return;
+    if (!online) return;
     const next = await listConversas(workspaceId);
     if (activeWorkspaceRef.current !== workspaceId) return;
     setConversations(next);
     setActiveId((current) => current && next.some((conversation) => conversation.id === current)
       ? current
       : next[0]?.id ?? null);
-  }, [workspaceId]);
+  }, [online, workspaceId]);
 
   useEffect(() => {
     setConversations([]);
@@ -384,7 +386,7 @@ export default function MensagensPage() {
       savedFilesSignature.current = '';
       setDraftState('idle');
       await refreshMessages(activeId, false);
-      if (navigator.onLine) await refreshConversations(true);
+      if (online) await refreshConversations(true);
     } catch (caught) {
       if (activeWorkspaceRef.current === requestedWorkspace) {
         setMessageError(caught instanceof Error ? caught.message : 'Não foi possível guardar a mensagem.');
@@ -418,7 +420,7 @@ export default function MensagensPage() {
       setSearchResults([]);
       return;
     }
-    if (!navigator.onLine) {
+    if (!online) {
       setSearchError('A busca no histórico precisa de conexão. O conteúdo salvo continua disponível abaixo.');
       return;
     }
@@ -458,7 +460,7 @@ export default function MensagensPage() {
           <h1>Conversas</h1>
           <p>Trocas ligadas ao trabalho real. O que for enviado entra na memória operacional.</p>
         </div>
-        <button className="primary-button" disabled={!navigator.onLine || contexts.length === 0} onClick={() => setShowNew(true)}>Nova conversa</button>
+        <button className="primary-button" disabled={!online || contexts.length === 0} onClick={() => setShowNew(true)}>Nova conversa</button>
       </header>
 
       {contextError && <div className="form-error" role="alert">{contextError}</div>}
@@ -493,7 +495,7 @@ export default function MensagensPage() {
       ) : conversations.length === 0 ? (
         <EmptyState
           title={contexts.length === 0 ? 'Nenhuma conversa disponível' : 'Nenhuma conversa iniciada'}
-          message={navigator.onLine ? 'Crie uma conversa ligada a um território, missão ou ação existente.' : 'Conecte este aparelho uma vez para guardar as conversas autorizadas.'}
+          message={online ? 'Crie uma conversa ligada a um território, missão ou ação existente.' : 'Conecte este aparelho uma vez para guardar as conversas autorizadas.'}
           action={contexts.length > 0 ? <button className="secondary-button" onClick={() => setShowNew(true)}>Nova conversa</button> : undefined}
         />
       ) : (
@@ -512,7 +514,7 @@ export default function MensagensPage() {
               <>
                 <header className="chat-head">
                   <div><span className="overline">{contextLabel(active.contextEntityType)} relacionado</span><h2>{active.titulo}</h2></div>
-                  <span>{navigator.onLine ? 'Conectado' : 'Trabalho offline'}</span>
+                  <span>{online ? 'Conectado' : 'Trabalho offline'}</span>
                 </header>
                 <div className="message-stream" ref={streamRef}>
                   {messageLoading ? <LoadingState label="Carregando mensagens…" /> : timeline.length === 0 ? (
@@ -602,9 +604,9 @@ export default function MensagensPage() {
                   </div>
                   <footer>
                     <label className="ghost-button" aria-disabled={!draftReady || sending}>Anexar evidência<input type="file" accept="image/jpeg,image/png,image/webp,application/pdf,text/plain" multiple hidden disabled={!draftReady || sending} onChange={(event) => selectFiles(Array.from(event.target.files ?? []))} /></label>
-                    <button type="submit" className="primary-button" disabled={!draftReady || sending || (!draft.trim() && files.length === 0)}>{sending ? 'Guardando…' : navigator.onLine ? 'Enviar mensagem' : 'Guardar na fila'}</button>
+                    <button type="submit" className="primary-button" disabled={!draftReady || sending || (!draft.trim() && files.length === 0)}>{sending ? 'Guardando…' : online ? 'Enviar mensagem' : 'Guardar na fila'}</button>
                   </footer>
-                  {hasRetryable && navigator.onLine && <button type="button" className="message-retry" disabled={sending} onClick={() => void retryMessages()}>Tentar reenviar mensagens pendentes</button>}
+                  {hasRetryable && online && <button type="button" className="message-retry" disabled={sending} onClick={() => void retryMessages()}>Tentar reenviar mensagens pendentes</button>}
                 </form>
               </>
             )}
