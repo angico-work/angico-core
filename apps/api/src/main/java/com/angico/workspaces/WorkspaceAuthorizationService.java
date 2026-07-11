@@ -61,6 +61,10 @@ public final class WorkspaceAuthorizationService {
         return roles.stream().anyMatch(role -> role.equalsIgnoreCase(membership.getRole()));
     }
 
+    public String currentRole(String workspaceId) {
+        return activeMembership(workspaceId).getRole();
+    }
+
     public List<String> authorizedWorkspaceIds() {
         String actorId = currentActorId();
         return memberRepository.findByActorIdAndStatusOrderByJoinedAtAsc(actorId, "ACTIVE")

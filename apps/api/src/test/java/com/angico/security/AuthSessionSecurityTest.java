@@ -4,6 +4,7 @@ import static org.hamcrest.Matchers.blankOrNullString;
 import static org.hamcrest.Matchers.not;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.cookie;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -140,12 +141,24 @@ class AuthSessionSecurityTest {
                         .content("{\"nome\":\"Sem CSRF\"}"))
                 .andExpect(status().isForbidden());
 
-        mvc.perform(post("/api/workspaces")
+        MvcResult created = mvc.perform(post("/api/workspaces")
                         .cookie(credentials.cookie())
                         .header("X-CSRF-Token", credentials.csrfToken())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"nome\":\"Com CSRF\"}"))
-                .andExpect(status().isCreated());
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.role").value("OWNER"))
+                .andReturn();
+        String createdSlug = com.jayway.jsonpath.JsonPath.read(
+                created.getResponse().getContentAsString(), "$.slug");
+
+        mvc.perform(put("/api/workspaces/{slug}", createdSlug)
+                        .cookie(credentials.cookie())
+                        .header("X-CSRF-Token", credentials.csrfToken())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"descricao\":\"Contexto atualizado\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.role").value("OWNER"));
     }
 
     @Test

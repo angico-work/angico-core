@@ -29,6 +29,7 @@ class WorkspaceServiceTest {
     private List<WorkspaceMember> memberStore;
     private List<Pessoa> pessoaStore;
     private WorkspaceRepository workspaceRepository;
+    private WorkspaceAuthorizationService authorizationService;
     private WorkspaceMemoryPublisher memoryPublisher;
     private WorkspaceService service;
 
@@ -97,10 +98,18 @@ class WorkspaceServiceTest {
         when(accessService.currentActorId()).thenReturn(Optional.of("test.actor"));
         when(accessService.currentActorName()).thenReturn(Optional.of("Test Actor"));
 
-        WorkspaceAuthorizationService authorizationService = mock(WorkspaceAuthorizationService.class);
+        authorizationService = mock(WorkspaceAuthorizationService.class);
         when(authorizationService.currentActorId()).thenReturn("test.actor");
         when(authorizationService.authorizedWorkspaceIds()).thenAnswer(call ->
                 workspaceStore.stream().map(Workspace::getSlug).toList());
+        when(authorizationService.currentRole(anyString())).thenAnswer(call ->
+                memberStore.stream()
+                        .filter(member -> member.getWorkspaceId().equals(call.getArgument(0)))
+                        .filter(member -> "test.actor".equals(member.getActorId()))
+                        .filter(member -> "ACTIVE".equals(member.getStatus()))
+                        .map(WorkspaceMember::getRole)
+                        .findFirst()
+                        .orElse(null));
 
         memoryPublisher = mock(WorkspaceMemoryPublisher.class);
 
@@ -137,6 +146,25 @@ class WorkspaceServiceTest {
         assertEquals("Mutirão da Horta", created.nome());
         assertEquals("test.actor", created.createdBy());
         assertEquals("ACTIVE", created.status());
+        assertEquals("OWNER", created.role());
+    }
+
+    @Test
+    void listingReturnsTheCurrentActiveMembershipRole() {
+        create("Equipe");
+        memberStore.getFirst().setRole("VIEWER");
+
+        assertEquals("VIEWER", service.listar().getFirst().role());
+    }
+
+    @Test
+    void updatingReturnsTheCurrentActiveMembershipRole() {
+        WorkspaceResponse created = create("Equipe");
+
+        WorkspaceResponse updated = service.atualizar(created.slug(),
+                new WorkspaceUpdateRequest(null, "Novo contexto", null, null, null, null));
+
+        assertEquals("OWNER", updated.role());
     }
 
     @Test

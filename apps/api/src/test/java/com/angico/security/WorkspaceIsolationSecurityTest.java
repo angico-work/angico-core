@@ -221,7 +221,11 @@ class WorkspaceIsolationSecurityTest {
         mvc.perform(get("/api/workspaces").cookie(memberA.cookie()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[*].slug", hasItem(workspaceA)))
-                .andExpect(jsonPath("$[*].slug", not(hasItem(workspaceB))));
+                .andExpect(jsonPath("$[*].slug", not(hasItem(workspaceB))))
+                .andExpect(jsonPath("$[0].role").value("MEMBER"))
+                .andExpect(jsonPath("$[0].actorId").doesNotExist())
+                .andExpect(jsonPath("$[0].displayName").doesNotExist())
+                .andExpect(jsonPath("$[0].joinedAt").doesNotExist());
     }
 
     @Test

@@ -50,7 +50,8 @@ public class WorkspaceService {
                 .stream()
                 .filter(workspace -> authorized.contains(workspace.getSlug()))
                 .filter(workspace -> "ACTIVE".equalsIgnoreCase(workspace.getStatus()))
-                .map(WorkspaceResponse::from)
+                .map(workspace -> WorkspaceResponse.from(
+                        workspace, authorizationService.currentRole(workspace.getSlug())))
                 .toList();
     }
 
@@ -75,7 +76,7 @@ public class WorkspaceService {
                 new WorkspaceMember(saved.getSlug(), actorId, displayName, "OWNER", "ACTIVE", now));
         memoryPublisher.publicarMembroAdicionado(owner, actorId);
 
-        return WorkspaceResponse.from(saved);
+        return WorkspaceResponse.from(saved, owner.getRole());
     }
 
     @Transactional
@@ -103,7 +104,7 @@ public class WorkspaceService {
         workspace.setUpdatedAt(clock.now());
         Workspace saved = workspaceRepository.save(workspace);
         memoryPublisher.publicarAtualizado(saved, accessService.currentActorId().orElse(null));
-        return WorkspaceResponse.from(saved);
+        return WorkspaceResponse.from(saved, authorizationService.currentRole(slug));
     }
 
     @Transactional
