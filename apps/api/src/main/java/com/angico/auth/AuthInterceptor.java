@@ -47,6 +47,7 @@ public class AuthInterceptor implements HandlerInterceptor {
 
     private boolean isPublic(String uri) {
         return "/health".equals(uri)
+                || "/health/ready".equals(uri)
                 || "/api/auth/login".equals(uri)
                 || "/api/auth/register".equals(uri)
                 || uri.startsWith("/assets/")

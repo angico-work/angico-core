@@ -103,6 +103,13 @@ class AuthSessionSecurityTest {
     }
 
     @Test
+    void readinessIsPublicAndChecksTheLocalDatabase() throws Exception {
+        mvc.perform(get("/health/ready"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("UP"));
+    }
+
+    @Test
     void loginIssuesHttpOnlyCookieAndReturnsOnlySessionMetadataAndCsrf() throws Exception {
         mvc.perform(post("/api/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
