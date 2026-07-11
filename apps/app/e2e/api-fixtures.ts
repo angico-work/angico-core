@@ -1,4 +1,4 @@
-import type { Page } from '@playwright/test';
+import type { Page, Request } from '@playwright/test';
 
 const WORKSPACE_ID = 'territorio-verificacao';
 const NOW = '2026-07-10T12:00:00Z';
@@ -54,36 +54,75 @@ const responses = {
   }
 };
 
+function hasExactQuery(url: URL, expected: Record<string, string>): boolean {
+  const entries = Object.entries(expected);
+  return url.searchParams.size === entries.length
+    && entries.every(([name, value]) => url.searchParams.get(name) === value);
+}
+
+function hasExactLoginBody(request: Request): boolean {
+  try {
+    const body = request.postDataJSON();
+    if (!body || typeof body !== 'object' || Array.isArray(body)) return false;
+    const values = body as Record<string, unknown>;
+    return Object.keys(values).length === 2
+      && values.email === 'ana@example.org'
+      && values.password === 'senha-local';
+  } catch {
+    return false;
+  }
+}
+
 export async function installApiFixtures(page: Page): Promise<string[]> {
-  const unhandledRequests: string[] = [];
+  const violations: string[] = [];
   await page.route('**/api/**', async (route) => {
     const request = route.request();
     const url = new URL(request.url());
     const key = `${request.method()} ${url.pathname}`;
+    const reject = async (reason: string) => {
+      violations.push(`${key}${url.search}: ${reason}`);
+      await route.fulfill({ status: 422, json: { message: 'Requisição fora do contrato da fixture.' } });
+    };
 
-    if (key === 'POST /api/auth/login' || key === 'GET /api/auth/me') {
+    if (key === 'POST /api/auth/login') {
+      if (!hasExactQuery(url, {})) return reject('query inesperada');
+      if (!hasExactLoginBody(request)) return reject('corpo inesperado');
+      await route.fulfill({ status: 200, json: session });
+      return;
+    }
+    if (key === 'GET /api/auth/me') {
+      if (!hasExactQuery(url, {})) return reject('query inesperada');
       await route.fulfill({ status: 200, json: session });
       return;
     }
     if (key === 'GET /api/workspaces') {
+      if (!hasExactQuery(url, {})) return reject('query inesperada');
       await route.fulfill({ status: 200, json: responses.workspaces });
       return;
     }
     if (key === 'GET /api/pessoas') {
+      if (!hasExactQuery(url, { workspaceId: WORKSPACE_ID })) return reject('query inesperada');
       await route.fulfill({ status: 200, json: responses.people });
       return;
     }
     if (key === 'GET /api/glimpse/dashboard') {
+      if (!hasExactQuery(url, { workspaceId: WORKSPACE_ID })) return reject('query inesperada');
       await route.fulfill({ status: 200, json: responses.dashboard });
       return;
     }
-    if (key === 'GET /api/glimpse/map' || key.startsWith('GET /api/history/workspaces/')) {
+    if (key === 'GET /api/glimpse/map') {
+      if (!hasExactQuery(url, { workspaceId: WORKSPACE_ID })) return reject('query inesperada');
+      await route.fulfill({ status: 200, json: [] });
+      return;
+    }
+    if (key === `GET /api/history/workspaces/${WORKSPACE_ID}`) {
+      if (!hasExactQuery(url, {})) return reject('query inesperada');
       await route.fulfill({ status: 200, json: [] });
       return;
     }
 
-    unhandledRequests.push(`${key}${url.search}`);
+    violations.push(`${key}${url.search}: fixture ausente`);
     await route.fulfill({ status: 501, json: { message: 'Fixture ausente.' } });
   });
-  return unhandledRequests;
+  return violations;
 }

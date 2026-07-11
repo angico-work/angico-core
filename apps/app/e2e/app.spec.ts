@@ -69,3 +69,25 @@ test('supports keyboard login and a responsive authenticated shell', async ({ pa
   expect(unhandledRequests).toEqual([]);
   expect(errors).toEqual([]);
 });
+
+test('rejects fixture requests with an unexpected identity or workspace', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'desktop');
+  const violations = await installApiFixtures(page);
+  await page.goto('/login');
+
+  const statuses = await page.evaluate(async () => {
+    const login = await fetch('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: 'outra@example.org', password: 'incorreta' })
+    });
+    const dashboard = await fetch('/api/glimpse/dashboard?workspaceId=outro');
+    return [login.status, dashboard.status];
+  });
+
+  expect(statuses).toEqual([422, 422]);
+  expect(violations).toEqual([
+    'POST /api/auth/login: corpo inesperado',
+    'GET /api/glimpse/dashboard?workspaceId=outro: query inesperada'
+  ]);
+});
