@@ -141,4 +141,23 @@ public class OperationalMemoryService {
                 relationType
         );
     }
+
+    @Transactional(propagation = Propagation.MANDATORY)
+    public int encerrarRelacaoAtiva(
+            String workspaceId,
+            String originType,
+            String originId,
+            String destinationType,
+            String destinationId,
+            String relationType
+    ) {
+        return memoryGateway.endActiveRelation(
+                workspaceId,
+                originType,
+                originId,
+                destinationType,
+                destinationId,
+                relationType
+        );
+    }
 }

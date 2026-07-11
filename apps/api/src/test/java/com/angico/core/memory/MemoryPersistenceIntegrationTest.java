@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -283,6 +284,32 @@ class MemoryPersistenceIntegrationTest {
         assertEquals(0, ((BigDecimal) edge.get("confidence")).compareTo(new BigDecimal("0.85")));
         assertEquals("Captured in the field", edge.get("context"));
         assertNotNull(edge.get("endedAt"));
+    }
+
+    @Test
+    void endingOneExactRelationDoesNotCloseOtherRelationsOfTheSameType() {
+        gateway.upsertObject("workspace-a", "WORKSPACE", "workspace-a", null,
+                "Workspace A", "ACTIVE", "api");
+        gateway.upsertObject("workspace-a", "PESSOA", "ana.sp", null,
+                "Ana", "ATIVA", "api");
+        gateway.upsertObject("workspace-a", "PESSOA", "bia.sp", null,
+                "Bia", "ATIVA", "api");
+        gateway.ensureActiveRelation("workspace-a", "WORKSPACE", "workspace-a",
+                "PESSOA", "ana.sp", "POSSUI_MEMBRO", "api", null);
+        gateway.ensureActiveRelation("workspace-a", "WORKSPACE", "workspace-a",
+                "PESSOA", "bia.sp", "POSSUI_MEMBRO", "api", null);
+
+        int ended = gateway.endActiveRelation(
+                "workspace-a", "WORKSPACE", "workspace-a",
+                "PESSOA", "ana.sp", "POSSUI_MEMBRO");
+
+        assertEquals(1, ended);
+        assertFalse(relations
+                .existsByWorkspaceIdAndOriginTypeAndOriginIdAndDestinationTypeAndDestinationIdAndRelationTypeAndActiveTrue(
+                        "workspace-a", "WORKSPACE", "workspace-a", "PESSOA", "ana.sp", "POSSUI_MEMBRO"));
+        assertTrue(relations
+                .existsByWorkspaceIdAndOriginTypeAndOriginIdAndDestinationTypeAndDestinationIdAndRelationTypeAndActiveTrue(
+                        "workspace-a", "WORKSPACE", "workspace-a", "PESSOA", "bia.sp", "POSSUI_MEMBRO"));
     }
 
     @Test

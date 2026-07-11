@@ -82,4 +82,13 @@ public interface MemoryGateway {
             String originId,
             String relationType
     );
+
+    int endActiveRelation(
+            String workspaceId,
+            String originType,
+            String originId,
+            String destinationType,
+            String destinationId,
+            String relationType
+    );
 }

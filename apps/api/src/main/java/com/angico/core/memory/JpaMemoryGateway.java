@@ -184,6 +184,34 @@ public class JpaMemoryGateway implements MemoryGateway {
         return active.size();
     }
 
+    @Override
+    public int endActiveRelation(
+            String workspaceId,
+            String originType,
+            String originId,
+            String destinationType,
+            String destinationId,
+            String relationType
+    ) {
+        workspaceId = requireText(workspaceId, "workspaceId");
+        originId = requireText(originId, "originId");
+        destinationId = requireText(destinationId, "destinationId");
+        String canonicalOrigin = ontology.canonicalObjectType(originType);
+        String canonicalDestination = ontology.canonicalObjectType(destinationType);
+        String canonicalRelation = ontology.canonicalRelationType(relationType);
+        ontology.requireValidRelation(canonicalOrigin, canonicalRelation, canonicalDestination);
+        Instant now = clock.now();
+        List<StoredMemoryRelation> active = relations.findActiveRelation(
+                workspaceId,
+                canonicalOrigin,
+                originId,
+                canonicalDestination,
+                destinationId,
+                canonicalRelation);
+        active.forEach(relation -> relation.end(now));
+        return active.size();
+    }
+
     private String serializePayload(MemoryEvent event) {
         try {
             return objectMapper.writeValueAsString(event.payload());
