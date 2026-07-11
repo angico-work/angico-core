@@ -12,12 +12,15 @@ import {
   getMessageAttachmentFile,
   listOutbox,
   markOutboxStatus,
+  messageAttachmentsMatch,
   recordSyncAttempt,
   requeueManualOutbox,
+  renewOutboxLease,
   type MessageOutboxEntry,
   type EvidenceOutboxEntry,
   type ObservationOutboxEntry,
   type OutboxEntry,
+  type OutboxClaim,
   type OutboxStatus
 } from './offlineStore';
 
@@ -61,6 +64,8 @@ interface SyncFilter {
   workspaceId?: string;
   entryId?: string;
 }
+
+const activeEntries = new Set<string>();
 
 async function errorMessage(response: Response, fallback: string): Promise<string> {
   try {
@@ -150,27 +155,81 @@ async function sendEvidence(entry: EvidenceOutboxEntry): Promise<Response> {
 function isConfirmedEvidence(value: unknown, entry: EvidenceOutboxEntry): value is Evidencia {
   if (!value || typeof value !== 'object') return false;
   const record = value as Partial<Evidencia>;
-  return Number.isSafeInteger(record.id)
+  const identityMatches = Number.isSafeInteger(record.id)
     && Number(record.id) > 0
     && record.workspaceId === entry.workspaceId
     && record.subjectType === entry.body.subjectType
     && record.subjectId === entry.body.subjectId
     && record.clientMutationId === entry.id;
+  if (!identityMatches) return false;
+  if (!entry.body.file) return record.hasFile === false;
+  return record.hasFile === true
+    && record.sizeBytes === entry.body.file.size
+    && typeof record.sha256 === 'string'
+    && record.sha256.toLowerCase() === entry.body.file.sha256;
+}
+
+function isConfirmedObservation(value: unknown, entry: ObservationOutboxEntry): value is Observacao {
+  if (!value || typeof value !== 'object') return false;
+  const record = value as Partial<Observacao>;
+  return Number.isSafeInteger(record.id)
+    && Number(record.id) > 0
+    && record.workspaceId === entry.workspaceId
+    && record.clientMutationId === entry.id;
+}
+
+function sameAttachments(entry: MessageOutboxEntry, message: Partial<Mensagem>): boolean {
+  if (!Array.isArray(message.anexos)) return false;
+  return messageAttachmentsMatch(entry.body.attachments, message.anexos);
+}
+
+function isConfirmedMessage(value: unknown, entry: MessageOutboxEntry): value is Mensagem {
+  if (!value || typeof value !== 'object') return false;
+  const record = value as Partial<Mensagem>;
+  return Number.isSafeInteger(record.id)
+    && Number(record.id) > 0
+    && record.workspaceId === entry.workspaceId
+    && record.conversaId === entry.body.conversationId
+    && record.clientMessageId === entry.id
+    && sameAttachments(entry, record);
 }
 
 async function parseRemote(entry: OutboxEntry, response: Response): Promise<Observacao | Mensagem | Evidencia> {
   const remote = await response.json() as unknown;
-  if (entry.operation === 'EVIDENCE_CREATE') {
-    if (response.status !== 201 || !isConfirmedEvidence(remote, entry)) {
-      throw new Error('A confirmação da evidência é inválida.');
-    }
+  if (response.status !== 201) throw new Error('A confirmação do registro é inválida.');
+  if (entry.operation === 'CREATE_OBSERVATION' && !isConfirmedObservation(remote, entry)) {
+    throw new Error('A confirmação da observação é inválida.');
+  }
+  if (entry.operation === 'MESSAGE_SEND' && !isConfirmedMessage(remote, entry)) {
+    throw new Error('A confirmação da mensagem é inválida.');
+  }
+  if (entry.operation === 'EVIDENCE_CREATE' && !isConfirmedEvidence(remote, entry)) {
+    throw new Error('A confirmação da evidência é inválida.');
   }
   return remote as Observacao | Mensagem | Evidencia;
+}
+
+function claimOf(entry: OutboxEntry): OutboxClaim {
+  return {
+    leaseId: entry.leaseId!,
+    leaseGeneration: entry.leaseGeneration!
+  };
+}
+
+function maintainLease(entry: OutboxEntry, claim: OutboxClaim): () => void {
+  const timer = window.setInterval(() => {
+    void renewOutboxLease(entry.id, claim).then((renewed) => {
+      if (!renewed) window.clearInterval(timer);
+    }).catch(() => window.clearInterval(timer));
+  }, 10_000);
+  return () => window.clearInterval(timer);
 }
 
 async function synchronizeEntry(entry: OutboxEntry, summary: SyncSummary): Promise<boolean> {
   summary.attempted += 1;
   await recordSyncAttempt(entry.ownerId, entry.workspaceId, false);
+  const claim = claimOf(entry);
+  const stopRenewal = maintainLease(entry, claim);
   try {
     const response = entry.operation === 'CREATE_OBSERVATION'
       ? await sendObservation(entry)
@@ -179,48 +238,54 @@ async function synchronizeEntry(entry: OutboxEntry, summary: SyncSummary): Promi
         : await sendEvidence(entry);
     if (response.ok) {
       const remote = await parseRemote(entry, response);
-      await markOutboxStatus(entry.id, 'SYNCED', { remote });
-      await recordSyncAttempt(entry.ownerId, entry.workspaceId, true);
-      summary.synced += 1;
+      const applied = await markOutboxStatus(entry.id, 'SYNCED', { remote, expectedClaim: claim });
+      if (applied) {
+        await recordSyncAttempt(entry.ownerId, entry.workspaceId, true);
+        summary.synced += 1;
+      }
       return true;
     }
 
     const message = await errorMessage(response, `Falha de sincronização (HTTP ${response.status}).`);
     if (response.status === 401) {
-      await markOutboxStatus(entry.id, 'BLOCKED', { message });
-      summary.blocked += 1;
+      const applied = await markOutboxStatus(entry.id, 'BLOCKED', { message, expectedClaim: claim });
+      if (applied) summary.blocked += 1;
       return false;
     }
     if (response.status === 409) {
-      await markOutboxStatus(entry.id, 'CONFLICT', { message });
-      summary.conflicts += 1;
+      const applied = await markOutboxStatus(entry.id, 'CONFLICT', { message, expectedClaim: claim });
+      if (applied) summary.conflicts += 1;
       return true;
     }
     if ([400, 403, 404, 413, 422].includes(response.status)) {
-      await markOutboxStatus(entry.id, 'ACTION_REQUIRED', { message });
-      summary.actionRequired += 1;
+      const applied = await markOutboxStatus(entry.id, 'ACTION_REQUIRED', { message, expectedClaim: claim });
+      if (applied) summary.actionRequired += 1;
       return true;
     }
 
-    await markOutboxStatus(entry.id, 'RETRYABLE_ERROR', {
+    const applied = await markOutboxStatus(entry.id, 'RETRYABLE_ERROR', {
       message,
-      nextAttemptAt: retryAt(entry.attemptCount)
+      nextAttemptAt: retryAt(entry.attemptCount),
+      expectedClaim: claim
     });
-    summary.retryable += 1;
+    if (applied) summary.retryable += 1;
     return true;
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Sem conexão com o servidor.';
     if (error instanceof PermanentMessageOperationError) {
-      await markOutboxStatus(entry.id, 'ACTION_REQUIRED', { message });
-      summary.actionRequired += 1;
+      const applied = await markOutboxStatus(entry.id, 'ACTION_REQUIRED', { message, expectedClaim: claim });
+      if (applied) summary.actionRequired += 1;
       return true;
     }
-    await markOutboxStatus(entry.id, 'RETRYABLE_ERROR', {
+    const applied = await markOutboxStatus(entry.id, 'RETRYABLE_ERROR', {
       message,
-      nextAttemptAt: retryAt(entry.attemptCount)
+      nextAttemptAt: retryAt(entry.attemptCount),
+      expectedClaim: claim
     });
-    summary.retryable += 1;
+    if (applied) summary.retryable += 1;
     return true;
+  } finally {
+    stopRenewal();
   }
 }
 
@@ -256,9 +321,16 @@ async function syncPendingByOperation(
     .filter((entry) => (!operation || entry.operation === operation)
       && (!filter.entryId || entry.id === filter.entryId));
   for (const entry of entries) {
+    if (activeEntries.has(entry.id)) continue;
     const claimed = await claimOutboxEntry(entry.id);
     if (!claimed) continue;
-    const mayContinue = await synchronizeEntry(claimed, summary);
+    activeEntries.add(entry.id);
+    let mayContinue: boolean;
+    try {
+      mayContinue = await synchronizeEntry(claimed, summary);
+    } finally {
+      activeEntries.delete(entry.id);
+    }
     if (!mayContinue) break;
   }
   return summary;
@@ -297,9 +369,16 @@ function requireManualRetry(ownerId: string): void {
   }
 }
 
-export async function captureObservation(input: ObservacaoInput): Promise<CaptureResult> {
+function requireCaptureOwner(): string {
   const ownerId = sessionOwnerId();
-  if (!ownerId) throw new Error('Entre novamente para identificar o autor do registro.');
+  if (!ownerId || !isAuthenticated() || !hasFreshOfflineSession()) {
+    throw new Error('Entre novamente com uma sessão validada antes de registrar dados neste aparelho.');
+  }
+  return ownerId;
+}
+
+export async function captureObservation(input: ObservacaoInput): Promise<CaptureResult> {
+  const ownerId = requireCaptureOwner();
   const queued = await enqueueObservation(input, ownerId);
   if (typeof navigator === 'undefined' || navigator.onLine !== false) {
     await syncPendingObservations({
@@ -322,8 +401,7 @@ export async function captureMessage(input: {
   body: string;
   attachments: File[];
 }): Promise<CaptureMessageResult> {
-  const ownerId = sessionOwnerId();
-  if (!ownerId) throw new Error('Entre novamente para identificar o autor da mensagem.');
+  const ownerId = requireCaptureOwner();
   const queued = await enqueueMessage(input, ownerId);
   if (typeof navigator === 'undefined' || navigator.onLine !== false) {
     await syncPendingMessages({
@@ -341,10 +419,7 @@ export async function captureMessage(input: {
 }
 
 export async function captureEvidence(input: EvidenciaInput): Promise<CaptureEvidenceResult> {
-  const ownerId = sessionOwnerId();
-  if (!ownerId || !isAuthenticated() || !hasFreshOfflineSession()) {
-    throw new Error('Entre novamente para registrar a evidência neste aparelho.');
-  }
+  const ownerId = requireCaptureOwner();
   const queued = await enqueueEvidence(input, ownerId);
   if (typeof navigator === 'undefined' || navigator.onLine !== false) {
     await syncPendingEvidence({

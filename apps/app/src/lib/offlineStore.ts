@@ -7,6 +7,7 @@ import { validateMessageFiles } from './messageFiles';
 const DATABASE_NAME = 'angico-operational-data';
 const DATABASE_VERSION = 4;
 const DEVICE_KEY = 'angico.deviceId';
+const OUTBOX_LEASE_MS = 30_000;
 
 export type OutboxStatus =
   | 'QUEUED'
@@ -36,7 +37,14 @@ interface OutboxBase {
   updatedAt: string;
   nextAttemptAt: string;
   leaseUntil?: string;
+  leaseId?: string;
+  leaseGeneration?: number;
   lastError?: string;
+}
+
+export interface OutboxClaim {
+  leaseId: string;
+  leaseGeneration: number;
 }
 
 export interface ObservationOutboxEntry extends OutboxBase {
@@ -71,6 +79,7 @@ export interface LocalEvidenceFile {
   name: string;
   type: string;
   size: number;
+  sha256: string;
 }
 
 export interface OfflineEvidenceInput {
@@ -127,6 +136,8 @@ interface BlobRecord {
   type: string;
   operationId?: string;
   purpose?: 'EVIDENCE_FILE';
+  size?: number;
+  sha256?: string;
   updatedAt: string;
 }
 
@@ -330,6 +341,13 @@ function randomId(): string {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
 }
 
+async function sha256Hex(bytes: ArrayBuffer): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-256', bytes);
+  return Array.from(new Uint8Array(digest))
+    .map((byte) => byte.toString(16).padStart(2, '0'))
+    .join('');
+}
+
 export function getDeviceId(): string {
   const existing = localStorage.getItem(DEVICE_KEY);
   if (existing) return existing;
@@ -375,11 +393,23 @@ function syncMetadataKey(ownerId: string, workspaceId: string): string {
 }
 
 function canonicalQuery(query: SnapshotIdentity['query']): string {
-  return Object.entries(query ?? {})
+  const entries = Object.entries(query ?? {})
     .filter((entry): entry is [string, Exclude<SnapshotQueryValue, undefined>] => entry[1] !== undefined)
-    .sort(([left], [right]) => left.localeCompare(right))
-    .map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(String(value))}`)
-    .join('&');
+    .sort(([left], [right]) => left.localeCompare(right));
+  return JSON.stringify(entries);
+}
+
+function normalizeResource(resource: string): string {
+  return resource.trim().toLowerCase();
+}
+
+function normalizeRoot(root?: string): string {
+  const value = root?.trim() ?? '';
+  const separator = value.indexOf(':');
+  if (separator < 0) return value;
+  const type = value.slice(0, separator).trim().toUpperCase();
+  const id = value.slice(separator + 1).trim();
+  return `${type}:${id}`;
 }
 
 function snapshotKey(identity: SnapshotIdentity): string {
@@ -387,9 +417,9 @@ function snapshotKey(identity: SnapshotIdentity): string {
     'snapshot',
     identity.ownerId,
     identity.workspaceId,
-    identity.resource,
+    normalizeResource(identity.resource),
     canonicalQuery(identity.query),
-    identity.root?.trim() ?? ''
+    normalizeRoot(identity.root)
   ]);
 }
 
@@ -401,7 +431,7 @@ function requirePartition(ownerId: string, workspaceId: string): void {
 
 function requireSnapshotIdentity(identity: SnapshotIdentity): void {
   requirePartition(identity.ownerId, identity.workspaceId);
-  if (!identity.resource.trim()) throw new Error('Recurso obrigatório para o snapshot.');
+  if (!normalizeResource(identity.resource)) throw new Error('Recurso obrigatório para o snapshot.');
   if (!Number.isSafeInteger(identity.contractVersion) || identity.contractVersion < 1) {
     throw new Error('Versão de contrato inválida para o snapshot.');
   }
@@ -475,6 +505,8 @@ export async function enqueueEvidence(
 
   const clientMutationId = randomId();
   const now = new Date().toISOString();
+  const fileBytes = input.file ? await input.file.arrayBuffer() : undefined;
+  const fileSha256 = fileBytes ? await sha256Hex(fileBytes) : undefined;
   const fileKey = input.file
     ? evidenceBlobKey(ownerId, input.workspaceId, clientMutationId)
     : undefined;
@@ -491,7 +523,8 @@ export async function enqueueEvidence(
       blobKey: fileKey,
       name: input.file.name,
       type: input.file.type,
-      size: input.file.size
+      size: fileBytes!.byteLength,
+      sha256: fileSha256!
     } : undefined
   };
   const key = localEvidenceKey(ownerId, input.workspaceId, clientMutationId);
@@ -521,11 +554,13 @@ export async function enqueueEvidence(
     key: fileKey,
     ownerId,
     workspaceId: input.workspaceId,
-    bytes: await input.file.arrayBuffer(),
+    bytes: fileBytes!,
     name: input.file.name,
     type: input.file.type,
     operationId: clientMutationId,
     purpose: 'EVIDENCE_FILE' as const,
+    size: fileBytes!.byteLength,
+    sha256: fileSha256!,
     updatedAt: now
   } : undefined;
 
@@ -817,6 +852,25 @@ export async function loadCachedConversations(
   return (await db.get('conversations', conversationCacheKey(ownerId, workspaceId)))?.conversations ?? [];
 }
 
+export function messageAttachmentsMatch(
+  local: LocalMessageAttachment[],
+  remote: Mensagem['anexos']
+): boolean {
+  const counts = (values: Array<{ name: string; type: string; size: number }>) => values.reduce((result, value) => {
+    const key = JSON.stringify([value.name, value.type, value.size]);
+    result.set(key, (result.get(key) ?? 0) + 1);
+    return result;
+  }, new Map<string, number>());
+  const localCounts = counts(local);
+  const remoteCounts = counts(remote.map((attachment) => ({
+    name: attachment.originalFilename,
+    type: attachment.contentType,
+    size: attachment.sizeBytes
+  })));
+  if (localCounts.size !== remoteCounts.size) return false;
+  return Array.from(localCounts).every(([key, count]) => remoteCounts.get(key) === count);
+}
+
 export async function cacheRemoteMessages(
   ownerId: string,
   workspaceId: string,
@@ -855,6 +909,7 @@ export async function cacheRemoteMessages(
         && pending.workspaceId === workspaceId
         && pending.body.conversationId === conversationId;
       if (pending && !matchingOperation) continue;
+      if (matchingOperation && !messageAttachmentsMatch(existing.attachments, message.anexos)) continue;
       if (matchingOperation) {
         await outbox.put({
           ...pending,
@@ -1018,7 +1073,9 @@ export async function claimOutboxEntry(id: string, now = new Date()): Promise<Ou
     status: 'SYNCING',
     attemptCount: entry.attemptCount + 1,
     updatedAt: now.toISOString(),
-    leaseUntil: new Date(now.getTime() + 30_000).toISOString()
+    leaseUntil: new Date(now.getTime() + OUTBOX_LEASE_MS).toISOString(),
+    leaseId: randomId(),
+    leaseGeneration: (entry.leaseGeneration ?? 0) + 1
   };
   await store.put(claimed);
   await tx.done;
@@ -1026,18 +1083,60 @@ export async function claimOutboxEntry(id: string, now = new Date()): Promise<Ou
   return claimed;
 }
 
+function matchesClaim(entry: OutboxEntry, claim: OutboxClaim): boolean {
+  return entry.leaseId === claim.leaseId && entry.leaseGeneration === claim.leaseGeneration;
+}
+
+export async function renewOutboxLease(
+  id: string,
+  claim: OutboxClaim,
+  now = new Date()
+): Promise<boolean> {
+  const db = await database();
+  const tx = db.transaction('outbox', 'readwrite');
+  const store = tx.objectStore('outbox');
+  const entry = await store.get(id);
+  if (!entry || entry.status !== 'SYNCING' || !matchesClaim(entry, claim)) {
+    await tx.done;
+    return false;
+  }
+  await store.put({
+    ...entry,
+    leaseUntil: new Date(now.getTime() + OUTBOX_LEASE_MS).toISOString()
+  });
+  await tx.done;
+  return true;
+}
+
 export async function markOutboxStatus(
   id: string,
   status: OutboxStatus,
-  options: { message?: string; nextAttemptAt?: string; remote?: Observacao | Mensagem | Evidencia } = {}
-): Promise<void> {
+  options: {
+    message?: string;
+    nextAttemptAt?: string;
+    remote?: Observacao | Mensagem | Evidencia;
+    expectedClaim?: OutboxClaim;
+  } = {}
+): Promise<boolean> {
   const db = await database();
   const tx = db.transaction(['outbox', 'entities', 'messages', 'evidences', 'blobs'], 'readwrite');
   const outboxStore = tx.objectStore('outbox');
   const entry = await outboxStore.get(id);
   if (!entry) {
     await tx.done;
-    return;
+    return false;
+  }
+  if (entry.status === 'SYNCED' || entry.status === 'DISCARDED' || entry.status === 'SUPERSEDED') {
+    await tx.done;
+    return false;
+  }
+  if (options.expectedClaim && !matchesClaim(entry, options.expectedClaim) && status !== 'SYNCED') {
+    await tx.done;
+    return false;
+  }
+  if (status === 'SYNCED' && !options.remote) {
+    await tx.done;
+    return false;
   }
   const now = new Date().toISOString();
   await outboxStore.put({
@@ -1046,7 +1145,8 @@ export async function markOutboxStatus(
     updatedAt: now,
     nextAttemptAt: options.nextAttemptAt ?? entry.nextAttemptAt,
     lastError: options.message,
-    leaseUntil: undefined
+    leaseUntil: undefined,
+    leaseId: undefined
   });
   if (entry.operation === 'CREATE_OBSERVATION') {
     const entityStore = tx.objectStore('entities');
@@ -1096,6 +1196,7 @@ export async function markOutboxStatus(
   }
   await tx.done;
   announceChange();
+  return true;
 }
 
 export async function requeueManualOutbox(
@@ -1315,9 +1416,9 @@ export async function saveSnapshot<T>(
     key: snapshotKey(identity),
     ownerId: identity.ownerId,
     workspaceId: identity.workspaceId,
-    resource: identity.resource.trim(),
+    resource: normalizeResource(identity.resource),
     queryKey: canonicalQuery(identity.query),
-    rootKey: identity.root?.trim() ?? '',
+    rootKey: normalizeRoot(identity.root),
     contractVersion: identity.contractVersion,
     savedAt: savedAt.toISOString(),
     payload

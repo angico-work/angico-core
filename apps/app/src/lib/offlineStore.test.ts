@@ -9,6 +9,7 @@ import {
   clearMessageDraft,
   cacheConversations,
   cacheRemoteMessages,
+  claimOutboxEntry,
   enqueueMessage,
   enqueueObservation,
   enqueueEvidence,
@@ -27,6 +28,7 @@ import {
   markOutboxStatus,
   recordSyncAttempt,
   recoverMessageAsDraft,
+  renewOutboxLease,
   reviseObservation,
   saveMessageDraft,
   saveSnapshot,
@@ -410,7 +412,14 @@ describe('offline observation store', () => {
       occurredAt: queued.occurredAt,
       recordedAt: '2026-07-10T12:01:00Z',
       createdAt: '2026-07-10T12:01:00Z',
-      anexos: [],
+      anexos: [{
+        id: 6,
+        originalFilename: 'prova.txt',
+        contentType: 'text/plain',
+        sizeBytes: 5,
+        attachmentType: 'ARQUIVO',
+        createdAt: '2026-07-10T12:01:00Z'
+      }],
       relacoes: []
     };
 
@@ -429,6 +438,44 @@ describe('offline observation store', () => {
       status: 'SYNCED'
     });
     expect(await getMessageAttachmentFile(localBefore!.attachments[0].blobKey)).toBeUndefined();
+  });
+
+  it('does not reconcile a remote message whose attachment multiset is incomplete', async () => {
+    const queued = await enqueueMessage({
+      workspaceId: 'territorio-a',
+      conversationId: 12,
+      body: 'Ainda aguardando o arquivo.',
+      attachments: [new File(['prova'], 'prova.txt', { type: 'text/plain' })]
+    }, 'ana.sp');
+    const local = await getLocalMessage('ana.sp', 'territorio-a', queued.clientMessageId);
+    await cacheRemoteMessages('ana.sp', 'territorio-a', 12, 7, [{
+      id: 97,
+      workspaceId: 'territorio-a',
+      conversaId: 12,
+      senderPessoaId: 7,
+      senderNome: 'Ana',
+      corpo: 'Ainda aguardando o arquivo.',
+      latitude: null,
+      longitude: null,
+      localDescricao: null,
+      linkedEntityType: null,
+      linkedEntityId: null,
+      clientMessageId: queued.clientMessageId,
+      deviceId: queued.deviceId,
+      status: 'ENVIADA',
+      occurredAt: queued.occurredAt,
+      recordedAt: queued.occurredAt,
+      createdAt: queued.occurredAt,
+      anexos: [],
+      relacoes: []
+    }]);
+
+    const preserved = await getLocalMessage('ana.sp', 'territorio-a', queued.clientMessageId);
+    expect(preserved).toMatchObject({ syncStatus: 'QUEUED' });
+    expect(preserved?.remote).toBeUndefined();
+    expect((await listOutbox('ana.sp', 'territorio-a'))[0]).toMatchObject({ status: 'QUEUED' });
+    expect(await getMessageAttachmentFile(local!.attachments[0].blobKey, 'ana.sp', 'territorio-a'))
+      .toBeDefined();
   });
 
   it('does not reconcile a client message identifier returned for another conversation', async () => {
@@ -574,6 +621,10 @@ describe('offline observation store', () => {
       data: { title: 'Foto da nascente' }
     });
     expect(local?.data.file?.blobKey).toBeTruthy();
+    expect(local?.data.file).toMatchObject({
+      size: 9,
+      sha256: '769c9e0034dbc4088b0409174315aaa092dca9c3cfd978658f0c5880455e3255'
+    });
     const stored = await getEvidenceFile(local!.data.file!.blobKey, 'ana.sp', 'territorio-a');
     expect(stored).toMatchObject({ name: 'nascente.txt', type: 'text/plain', size: 9 });
     expect(await stored?.text()).toBe('evidencia');
@@ -616,7 +667,7 @@ describe('offline observation store', () => {
       ownerId: 'ana.sp',
       workspaceId: 'territorio-a',
       resource: 'evidencias',
-      queryKey: 'subjectId=42&subjectType=OBSERVACAO',
+      queryKey: '[["subjectId",42],["subjectType","OBSERVACAO"]]',
       rootKey: 'OBSERVACAO:42',
       contractVersion: 1,
       savedAt: '2026-07-10T12:05:00.000Z',
@@ -638,6 +689,94 @@ describe('offline observation store', () => {
 
     expect(await loadSnapshot({ ...base, query: { subjectId: 42, subjectType: 'OBSERVACAO' } }))
       .toMatchObject({ payload: ['confirmado'] });
+  });
+
+  it('preserves query value types in snapshot identities', async () => {
+    const base = {
+      ownerId: 'ana.sp', workspaceId: 'territorio-a', resource: 'evidencias', contractVersion: 1
+    };
+    await saveSnapshot({ ...base, query: { subjectId: 42, active: true, optional: null } }, ['numero']);
+
+    expect(await loadSnapshot({
+      ...base, query: { subjectId: '42', active: true, optional: null }
+    })).toBeUndefined();
+  });
+
+  it('normalizes snapshot resource and root before building the key', async () => {
+    const padded = {
+      ownerId: 'ana.sp',
+      workspaceId: 'territorio-a',
+      resource: '  EVIDENCIAS  ',
+      root: '  observacao : 42  ',
+      contractVersion: 1
+    };
+    await saveSnapshot(padded, ['normalizado']);
+
+    expect(await loadSnapshot({
+      ...padded, resource: 'evidencias', root: 'OBSERVACAO:42'
+    })).toMatchObject({
+      resource: 'evidencias',
+      rootKey: 'OBSERVACAO:42',
+      payload: ['normalizado']
+    });
+  });
+
+  it('keeps SYNCED monotonic when an expired claim confirms before a newer failure', async () => {
+    const queued = await enqueueObservation(observation, 'ana.sp');
+    const startedAt = new Date(queued.occurredAt);
+    const first = await claimOutboxEntry(queued.clientMutationId, startedAt);
+    const second = await claimOutboxEntry(
+      queued.clientMutationId,
+      new Date(startedAt.getTime() + 31_000)
+    );
+    expect(first?.leaseId).toBeTruthy();
+    expect(second?.leaseId).toBeTruthy();
+    expect(second?.leaseGeneration).toBe((first?.leaseGeneration ?? 0) + 1);
+    const remote = {
+      ...queued,
+      id: 81,
+      status: 'ABERTA',
+      createdAt: '2026-07-10T12:00:31.000Z'
+    };
+
+    await Promise.all([
+      markOutboxStatus(queued.clientMutationId, 'RETRYABLE_ERROR', {
+        message: 'falha da segunda tentativa',
+        expectedClaim: { leaseId: second!.leaseId!, leaseGeneration: second!.leaseGeneration! }
+      }),
+      markOutboxStatus(queued.clientMutationId, 'SYNCED', {
+        remote,
+        expectedClaim: { leaseId: first!.leaseId!, leaseGeneration: first!.leaseGeneration! }
+      })
+    ]);
+
+    await markOutboxStatus(queued.clientMutationId, 'RETRYABLE_ERROR', {
+      message: 'falha tardia',
+      expectedClaim: { leaseId: second!.leaseId!, leaseGeneration: second!.leaseGeneration! }
+    });
+
+    expect((await listOutbox('ana.sp', 'territorio-a'))[0]).toMatchObject({
+      status: 'SYNCED',
+      lastError: undefined
+    });
+    expect(await getLocalObservation('ana.sp', 'territorio-a', queued.clientMutationId))
+      .toMatchObject({ syncStatus: 'SYNCED', remote: { id: 81 } });
+  });
+
+  it('renews only the active claim and prevents a second claim at the old deadline', async () => {
+    const queued = await enqueueObservation(observation, 'ana.sp');
+    const startedAt = new Date(queued.occurredAt);
+    const claim = await claimOutboxEntry(queued.clientMutationId, startedAt);
+
+    expect(await renewOutboxLease(
+      queued.clientMutationId,
+      { leaseId: claim!.leaseId!, leaseGeneration: claim!.leaseGeneration! },
+      new Date(startedAt.getTime() + 20_000)
+    )).toBe(true);
+    expect(await claimOutboxEntry(
+      queued.clientMutationId,
+      new Date(startedAt.getTime() + 31_000)
+    )).toBeUndefined();
   });
 
   it('clears evidence and snapshots only for the explicitly confirmed owner', async () => {
@@ -690,11 +829,53 @@ describe('offline observation store', () => {
       body: { ...observation, clientMutationId: 'v3-observation', occurredAt: now, deviceId: 'v3-device' },
       status: 'QUEUED', attemptCount: 0, createdAt: now, updatedAt: now, nextAttemptAt: now
     });
+    await legacy.add('entities', {
+      key: JSON.stringify(['ana.sp', 'territorio-a', 'v3-observation']),
+      ownerId: 'ana.sp', workspaceId: 'territorio-a', clientMutationId: 'v3-observation',
+      data: { ...observation, clientMutationId: 'v3-observation', occurredAt: now, deviceId: 'v3-device' },
+      syncStatus: 'QUEUED', updatedAt: now
+    });
+    await legacy.add('messages', {
+      key: JSON.stringify(['message', 'ana.sp', 'territorio-a', 'v3-message']),
+      ownerId: 'ana.sp', workspaceId: 'territorio-a', conversationId: 12,
+      clientMessageId: 'v3-message', body: 'Mensagem preservada', occurredAt: now,
+      deviceId: 'v3-device', attachments: [], syncStatus: 'QUEUED', updatedAt: now
+    });
+    const blobKey = JSON.stringify(['message-blob', 'ana.sp', 'territorio-a', 'v3-blob']);
+    await legacy.add('blobs', {
+      key: blobKey, ownerId: 'ana.sp', workspaceId: 'territorio-a',
+      bytes: new TextEncoder().encode('rascunho').buffer,
+      name: 'rascunho.txt', type: 'text/plain', updatedAt: now
+    });
+    await legacy.add('drafts', {
+      key: JSON.stringify(['message-draft', 'ana.sp', 'territorio-a', 12]),
+      ownerId: 'ana.sp', workspaceId: 'territorio-a', kind: 'MESSAGE',
+      value: {
+        conversationId: 12,
+        body: 'Rascunho preservado',
+        attachments: [{ blobKey, name: 'rascunho.txt', type: 'text/plain', size: 8 }]
+      },
+      updatedAt: now
+    });
+    await legacy.add('syncMeta', {
+      key: JSON.stringify(['ana.sp', 'territorio-a']),
+      ownerId: 'ana.sp', workspaceId: 'territorio-a', lastAttemptAt: now, lastSuccessAt: now
+    });
     legacy.close();
 
     expect(await listOutbox('ana.sp', 'territorio-a')).toEqual([
       expect.objectContaining({ id: 'v3-observation' })
     ]);
+    expect(await getLocalObservation('ana.sp', 'territorio-a', 'v3-observation'))
+      .toMatchObject({ syncStatus: 'QUEUED', data: { titulo: observation.titulo } });
+    expect(await listLocalMessages('ana.sp', 'territorio-a', 12))
+      .toEqual([expect.objectContaining({ clientMessageId: 'v3-message', body: 'Mensagem preservada' })]);
+    expect(await loadMessageDraft('ana.sp', 'territorio-a', 12))
+      .toMatchObject({ body: 'Rascunho preservado', attachments: [{ name: 'rascunho.txt', size: 8 }] });
+    expect(await getMessageAttachmentFile(blobKey, 'ana.sp', 'territorio-a'))
+      .toMatchObject({ name: 'rascunho.txt', size: 8 });
+    expect(await getSyncMetadata('ana.sp', 'territorio-a'))
+      .toMatchObject({ lastAttemptAt: now, lastSuccessAt: now });
     await closeOfflineDatabase();
     const upgraded = await openDB('angico-operational-data');
     expect(upgraded.version).toBe(4);
