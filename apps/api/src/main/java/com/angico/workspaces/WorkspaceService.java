@@ -115,9 +115,13 @@ public class WorkspaceService {
         workspaceRepository.findBySlug(slug).ifPresent(workspace -> {
             workspace.setStatus("ARCHIVED");
             workspace.setUpdatedAt(clock.now());
+            String actorId = accessService.currentActorId().orElse(null);
             memberRepository.findByWorkspaceIdOrderByJoinedAtAsc(slug)
-                    .forEach(member -> member.setStatus("INACTIVE"));
-            memoryPublisher.publicarAtualizado(workspace, accessService.currentActorId().orElse(null));
+                    .forEach(member -> {
+                        member.setStatus("INACTIVE");
+                        memoryPublisher.publicarMembroRemovido(member, actorId);
+                    });
+            memoryPublisher.publicarAtualizado(workspace, actorId);
         });
     }
 

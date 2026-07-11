@@ -148,10 +148,12 @@ class WorkspaceServiceTest {
     @Test
     void removingDropsTheWorkspaceFromTheRegistry() {
         WorkspaceResponse created = create("Temporário", null);
+        WorkspaceMember owner = memberStore.getFirst();
         service.remover(created.slug());
         assertFalse(service.listar().stream().anyMatch(w -> created.slug().equals(w.slug())));
         assertEquals("ARCHIVED", workspaceStore.getFirst().getStatus());
         assertTrue(memberStore.stream().allMatch(member -> "INACTIVE".equals(member.getStatus())));
+        verify(memoryPublisher).publicarMembroRemovido(owner, "test.actor");
     }
 
     @Test
