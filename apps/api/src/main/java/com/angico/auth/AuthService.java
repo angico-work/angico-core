@@ -38,6 +38,7 @@ public class AuthService {
     private final AuthSessionRepository sessionRepository;
     private final WorkspaceRepository workspaceRepository;
     private final WorkspaceMemberRepository memberRepository;
+    private final String dummyPasswordHash;
     private final boolean publicRegistration;
 
     public AuthService(
@@ -53,15 +54,23 @@ public class AuthService {
         this.sessionRepository = sessionRepository;
         this.workspaceRepository = workspaceRepository;
         this.memberRepository = memberRepository;
+        this.dummyPasswordHash = passwordHasher.hash(newToken());
         this.publicRegistration = publicRegistration;
     }
 
     @Transactional
     public IssuedSession login(LoginRequest request) {
         String email = normalizeEmail(request.email());
-        Pessoa pessoa = pessoaRepository.findByEmailIgnoreCase(email)
-                .filter(candidate -> "ATIVA".equalsIgnoreCase(candidate.getStatus()))
-                .filter(candidate -> passwordHasher.matches(request.password(), candidate.getPasswordHash()))
+        Optional<Pessoa> candidate = pessoaRepository.findByEmailIgnoreCase(email);
+        String passwordHash = candidate
+                .map(Pessoa::getPasswordHash)
+                .filter(hash -> !hash.isBlank())
+                .orElse(dummyPasswordHash);
+        boolean passwordMatches = passwordHasher.matches(
+                request.password() == null ? "" : request.password(), passwordHash);
+        Pessoa pessoa = candidate
+                .filter(value -> "ATIVA".equalsIgnoreCase(value.getStatus()))
+                .filter(value -> passwordMatches)
                 .orElseThrow(() -> new UnauthorizedException("Credenciais inválidas."));
 
         String workspaceId = activeWorkspaceId(pessoa);
