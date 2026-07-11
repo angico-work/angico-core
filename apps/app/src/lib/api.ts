@@ -40,8 +40,6 @@ export {
 } from './session';
 export type { AuthSession } from './session';
 
-export const DEFAULT_WORKSPACE = 'coletivo-jardim-novo';
-
 export const API_BASE = '';
 
 export function apiUrl(path: string): string {
@@ -157,7 +155,7 @@ export async function revalidateSession(): Promise<AuthSession | null> {
   }
 }
 
-export async function loadDashboard(workspaceId = DEFAULT_WORKSPACE): Promise<DashboardData> {
+export async function loadDashboard(workspaceId: string): Promise<DashboardData> {
   const result = await loadConfirmedOrSnapshot(
     { workspaceId, resource: 'dashboard', contractVersion: 2 },
     () => requestJson(
@@ -170,7 +168,7 @@ export async function loadDashboard(workspaceId = DEFAULT_WORKSPACE): Promise<Da
   return result.data;
 }
 
-export async function loadMapPoints(workspaceId = DEFAULT_WORKSPACE): Promise<MapPoint[]> {
+export async function loadMapPoints(workspaceId: string): Promise<MapPoint[]> {
   const result = await loadConfirmedOrSnapshot(
     { workspaceId, resource: 'map-points', contractVersion: 2 },
     () => requestJson(
@@ -343,7 +341,7 @@ function memoryFilters(filters: MemoryFilters): Record<string, string> {
 }
 
 export async function loadMemoria(
-  workspaceId = DEFAULT_WORKSPACE,
+  workspaceId: string,
   filters: MemoryFilters = {}
 ): Promise<MemoriaEvent[]> {
   const query = memoryFilters(filters);
@@ -364,7 +362,7 @@ export async function loadMemoria(
 export async function loadRastro(
   rootType: RastroRootType,
   rootId: string,
-  workspaceId = DEFAULT_WORKSPACE
+  workspaceId: string
 ): Promise<RastroResponse> {
   const normalizedId = rootId.trim();
   if (!normalizedId) throw new Error('Selecione uma raiz para consultar o Rastro.');
@@ -390,7 +388,7 @@ export async function loadRastro(
 }
 
 export async function listEntities<T = Record<string, unknown>>(
-  path: string, workspaceId = DEFAULT_WORKSPACE
+  path: string, workspaceId: string
 ): Promise<T[]> {
   const contract = entityListContract(path);
   const result = await loadConfirmedOrSnapshot(
@@ -434,27 +432,27 @@ async function createJson<T>(path: string, body: object, fallback: string): Prom
   return (await response.json()) as T;
 }
 
-export function listProblemas(workspaceId = DEFAULT_WORKSPACE): Promise<Problema[]> {
+export function listProblemas(workspaceId: string): Promise<Problema[]> {
   return listEntities<Problema>('/api/problemas', workspaceId);
 }
 
-export function listMissoes(workspaceId = DEFAULT_WORKSPACE): Promise<MissaoRegistro[]> {
+export function listMissoes(workspaceId: string): Promise<MissaoRegistro[]> {
   return listEntities<MissaoRegistro>('/api/missoes', workspaceId);
 }
 
-export function listObservacoes(workspaceId = DEFAULT_WORKSPACE): Promise<Observacao[]> {
+export function listObservacoes(workspaceId: string): Promise<Observacao[]> {
   return listEntities<Observacao>('/api/observacoes', workspaceId);
 }
 
-export function listPessoas(workspaceId = DEFAULT_WORKSPACE): Promise<PessoaHit[]> {
+export function listPessoas(workspaceId: string): Promise<PessoaHit[]> {
   return listEntities<PessoaHit>('/api/pessoas', workspaceId);
 }
 
-export function listAcoes(workspaceId = DEFAULT_WORKSPACE): Promise<Acao[]> {
+export function listAcoes(workspaceId: string): Promise<Acao[]> {
   return listEntities<Acao>('/api/acoes', workspaceId);
 }
 
-export function listEvidencias(workspaceId = DEFAULT_WORKSPACE): Promise<Evidencia[]> {
+export function listEvidencias(workspaceId: string): Promise<Evidencia[]> {
   return listEntities<Evidencia>('/api/evidencias', workspaceId);
 }
 
@@ -462,19 +460,19 @@ export function evidenciaFileUrl(evidenciaId: number): string {
   return apiUrl(`/api/evidencias/${evidenciaId}/arquivo`);
 }
 
-export function listResultados(workspaceId = DEFAULT_WORKSPACE): Promise<Resultado[]> {
+export function listResultados(workspaceId: string): Promise<Resultado[]> {
   return listEntities<Resultado>('/api/resultados', workspaceId);
 }
 
-export function listIndicadores(workspaceId = DEFAULT_WORKSPACE): Promise<Indicador[]> {
+export function listIndicadores(workspaceId: string): Promise<Indicador[]> {
   return listEntities<Indicador>('/api/indicadores', workspaceId);
 }
 
-export function listMedicoes(workspaceId = DEFAULT_WORKSPACE): Promise<Medicao[]> {
+export function listMedicoes(workspaceId: string): Promise<Medicao[]> {
   return listEntities<Medicao>('/api/medicoes', workspaceId);
 }
 
-export function listOrganizacoes(workspaceId = DEFAULT_WORKSPACE): Promise<Organizacao[]> {
+export function listOrganizacoes(workspaceId: string): Promise<Organizacao[]> {
   return listEntities<Organizacao>('/api/organizacoes', workspaceId);
 }
 
@@ -483,7 +481,7 @@ export function createOrganizacao(input: OrganizacaoInput): Promise<Organizacao>
 }
 
 export function listParticipacoes(
-  organizacaoId: number, workspaceId = DEFAULT_WORKSPACE
+  organizacaoId: number, workspaceId: string
 ): Promise<Participacao[]> {
   return listEntities<Participacao>(`/api/organizacoes/${organizacaoId}/participacoes`, workspaceId);
 }
@@ -497,17 +495,17 @@ export function createParticipacao(
   );
 }
 
-export function listRecursos(workspaceId = DEFAULT_WORKSPACE): Promise<Recurso[]> {
+export function listRecursos(workspaceId: string): Promise<Recurso[]> {
   return listEntities<Recurso>('/api/recursos', workspaceId);
 }
 
 export function listRecursoUsos(
-  recursoId: number, workspaceId = DEFAULT_WORKSPACE
+  recursoId: number, workspaceId: string
 ): Promise<RecursoUso[]> {
   return listEntities<RecursoUso>(`/api/recursos/${recursoId}/usos`, workspaceId);
 }
 
-export async function listConversas(workspaceId = DEFAULT_WORKSPACE): Promise<Conversa[]> {
+export async function listConversas(workspaceId: string): Promise<Conversa[]> {
   const result = await loadConfirmedOrSnapshot(
     { workspaceId, resource: 'conversations', contractVersion: 2 },
     () => requestJson(
@@ -528,7 +526,7 @@ function requireConversationId(conversaId: number): void {
 
 export async function listMensagens(
   conversaId: number,
-  workspaceId = DEFAULT_WORKSPACE
+  workspaceId: string
 ): Promise<Mensagem[]> {
   requireConversationId(conversaId);
   const result = await loadConfirmedOrSnapshot(
@@ -565,7 +563,7 @@ export async function createConversa(input: CreateConversaInput): Promise<Conver
   return (await r.json()) as Conversa;
 }
 
-export async function listTerritorios(workspaceId = DEFAULT_WORKSPACE): Promise<Territorio[]> {
+export async function listTerritorios(workspaceId: string): Promise<Territorio[]> {
   const result = await loadConfirmedOrSnapshot(
     { workspaceId, resource: 'territories', contractVersion: 2 },
     () => requestJson(

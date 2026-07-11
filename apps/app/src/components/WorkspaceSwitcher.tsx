@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { icon } from '../lib/icons';
 import WorkspaceMembersModal from './WorkspaceMembersModal';
-import { DEFAULT_WORKSPACE } from '../lib/api';
 import type { Workspace } from '../types';
 
 interface Props {
@@ -110,7 +109,7 @@ export default function WorkspaceSwitcher({ workspaces, activeSlug, onSwitch, on
           <div className="workspace-options">
             {workspaces.map((w) => {
               const isActive = w.slug === activeSlug;
-              const removable = !isActive && w.slug !== DEFAULT_WORKSPACE;
+              const removable = !isActive;
 
               if (confirmingSlug === w.slug) {
                 return (

@@ -28,6 +28,8 @@ O modo offline permite abrir dados locais somente dentro de uma autorização pr
 
 - Endpoints privados exigem associação ativa ao workspace.
 - Papéis administrativos são verificados na API, não na interface.
+- O papel `VIEWER` não altera o domínio compartilhado. Ele pode atualizar apenas o próprio perfil e o próprio estado de leitura de conversas.
+- Mutações diretas, sincronização offline, uploads e mensagens revalidam no serviço se o papel atual permite escrita.
 - Serviços validam referências entre entidades antes de persistir relações.
 - Entidades de outro workspace não podem ser ligadas por IDs enviados pelo cliente.
 - Conversas e anexos exigem participação ou papel administrativo.

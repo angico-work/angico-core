@@ -5,7 +5,7 @@ import Topbar from './Topbar';
 import ProfileModal from './ProfileModal';
 import OfflineReadNotice from './OfflineReadNotice';
 import {
-  ApiNetworkError, DEFAULT_WORKSPACE, createWorkspace, deleteWorkspace, getProfile, getSession,
+  ApiNetworkError, createWorkspace, deleteWorkspace, getProfile, getSession,
   hasFreshOfflineSession, isAuthenticated, listWorkspaces, logout, revalidateSession,
   offlineSessionExpiresAt, sessionOwnerId, setSessionWorkspace
 } from '../lib/api';
@@ -53,7 +53,7 @@ export default function AppShell() {
   const [authStatus, setAuthStatus] = useState<'checking' | 'authenticated' | 'anonymous'>(
     isAuthenticated() || hasFreshOfflineSession() ? 'checking' : 'anonymous'
   );
-  const [activeSlug, setActiveSlug] = useState(session?.workspaceId ?? DEFAULT_WORKSPACE);
+  const [activeSlug, setActiveSlug] = useState(session?.workspaceId ?? '');
 
   useEffect(() => {
     let active = true;
@@ -188,7 +188,7 @@ export default function AppShell() {
       if (!active) return;
       setWorkspaces(list);
       if (list.length && !list.some((w) => w.slug === activeSlug)) {
-        const fallback = list.find((w) => w.slug === DEFAULT_WORKSPACE)?.slug ?? list[0].slug;
+        const fallback = list[0].slug;
         setActiveSlug(fallback);
         setSessionWorkspace(fallback);
       }
@@ -269,8 +269,8 @@ export default function AppShell() {
     await deleteWorkspace(slug);
     setWorkspaces((prev) => prev.filter((w) => w.slug !== slug));
     if (slug === activeSlug) {
-      const fallback = workspaces.find((w) => w.slug !== slug)?.slug ?? DEFAULT_WORKSPACE;
-      switchWorkspace(fallback);
+      const fallback = workspaces.find((w) => w.slug !== slug)?.slug;
+      if (fallback) switchWorkspace(fallback);
     }
   }
 

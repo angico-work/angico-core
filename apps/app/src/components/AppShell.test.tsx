@@ -12,7 +12,8 @@ import {
   offlineSessionExpiresAt,
   logout,
   revalidateSession,
-  sessionOwnerId
+  sessionOwnerId,
+  setSessionWorkspace
 } from '../lib/api';
 import { clearOfflineOwner, getOfflineOwnerState } from '../lib/offlineStore';
 import { startSyncEngine } from '../lib/offlineSync';
@@ -80,7 +81,6 @@ vi.mock('../lib/api', async (importOriginal) => {
   const original = await importOriginal<typeof import('../lib/api')>();
   return {
     ApiNetworkError: original.ApiNetworkError,
-    DEFAULT_WORKSPACE: 'territorio-a',
     createWorkspace: vi.fn(),
     deleteWorkspace: vi.fn(),
     getProfile: vi.fn().mockResolvedValue(null),
@@ -282,6 +282,20 @@ describe('AppShell local partition', () => {
     renderShell();
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Espaços indisponíveis');
+  });
+
+  it('uses the first authorized workspace when the persisted selection is unavailable', async () => {
+    const unavailableSession = { ...session, workspaceId: 'territorio-indisponivel' };
+    vi.mocked(getSession).mockReturnValue(unavailableSession);
+    vi.mocked(revalidateSession).mockResolvedValue(unavailableSession);
+    vi.mocked(listWorkspaces).mockResolvedValue([
+      { slug: 'territorio-z', nome: 'Território Z' },
+      { slug: 'territorio-a', nome: 'Território A' }
+    ]);
+
+    renderShell();
+
+    await waitFor(() => expect(setSessionWorkspace).toHaveBeenCalledWith('territorio-z'));
   });
 
   it('does not open profile editing with provisional session data', async () => {

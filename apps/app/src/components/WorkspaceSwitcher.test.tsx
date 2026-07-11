@@ -4,7 +4,6 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import WorkspaceSwitcher from './WorkspaceSwitcher';
 
 vi.mock('../lib/api', () => ({
-  DEFAULT_WORKSPACE: 'workspace-a',
   addMember: vi.fn(),
   listMembers: vi.fn().mockResolvedValue([]),
   removeMember: vi.fn(),
@@ -36,5 +35,23 @@ describe('WorkspaceSwitcher accessibility', () => {
 
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     expect(trigger).toHaveFocus();
+  });
+
+  it('does not reserve a workspace because its slug matches demo data', () => {
+    render(
+      <WorkspaceSwitcher
+        workspaces={[
+          { slug: 'workspace-a', nome: 'Território A' },
+          { slug: 'coletivo-jardim-novo', nome: 'Dados de demonstração' }
+        ]}
+        activeSlug="workspace-a"
+        onSwitch={() => undefined}
+        onCreate={async () => undefined}
+        onDelete={async () => undefined}
+      />
+    );
+    fireEvent.click(screen.getByRole('button', { name: /Espaço de trabalho/ }));
+
+    expect(screen.getByRole('button', { name: 'Remover Dados de demonstração' })).toBeInTheDocument();
   });
 });
