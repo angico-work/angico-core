@@ -65,7 +65,7 @@ public class PessoaService {
         } catch (DataIntegrityViolationException exception) {
             throw new IllegalArgumentException("Angico ID já está associado a outra pessoa.");
         }
-        pessoaMemoryPublisher.publicarEngajada(saved);
+        pessoaMemoryPublisher.publicarEngajada(saved, authorizationService.currentActorId());
         return PessoaResponse.from(saved);
     }
 
@@ -96,7 +96,8 @@ public class PessoaService {
                 .orElseThrow(() -> new UnauthorizedException("Sessao invalida."));
         Pessoa pessoa = pessoaRepository.findById(pessoaId)
                 .orElseThrow(() -> new UnauthorizedException("Sessao invalida."));
-        authorizationService.requireMember(pessoa.getWorkspaceId());
+        List<String> workspaceIds = authorizationService.authorizedWorkspaceIds();
+        String actorId = authorizationService.currentActorId();
         if (request.nome() != null && !request.nome().isBlank()) {
             pessoa.setNome(request.nome().trim());
         }
@@ -106,14 +107,13 @@ public class PessoaService {
         if (request.foto() != null) {
             pessoa.setFoto(request.foto().isBlank() ? null : request.foto());
         }
-        return PessoaResponse.from(pessoaRepository.save(pessoa));
+        Pessoa saved = pessoaRepository.save(pessoa);
+        workspaceIds.forEach(workspaceId ->
+                pessoaMemoryPublisher.publicarAtualizada(saved, workspaceId, actorId));
+        return PessoaResponse.from(saved);
     }
 
     private String safeNormalize(String rawAngicoId) {
-        try {
-            return AngicoIdNormalizer.normalizeOptional(rawAngicoId);
-        } catch (IllegalArgumentException ex) {
-            return null;
-        }
+        return AngicoIdNormalizer.normalizeOptional(rawAngicoId);
     }
 }
