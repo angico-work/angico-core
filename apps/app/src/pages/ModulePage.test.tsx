@@ -1,7 +1,7 @@
 import 'fake-indexeddb/auto';
 import '@testing-library/jest-dom/vitest';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { MemoryRouter, Outlet, Route, Routes } from 'react-router-dom';
+import { MemoryRouter, Outlet, Route, Routes, useNavigate } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import ModulePage from './ModulePage';
 import { listEntities } from '../lib/api';
@@ -80,6 +80,11 @@ function moduleView(workspaceId: string) {
       </Routes>
     </MemoryRouter>
   );
+}
+
+function BackButton() {
+  const navigate = useNavigate();
+  return <button type="button" onClick={() => navigate(-1)}>Voltar</button>;
 }
 
 describe('ModulePage offline observations', () => {
@@ -195,6 +200,24 @@ describe('ModulePage offline observations', () => {
     expect(await screen.findByRole('dialog', { name: 'Novo problema' })).toBeInTheDocument();
 
     view.rerender(moduleView('territorio-b'));
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+  });
+
+  it('closes a contextual form when browser history removes the create query', async () => {
+    vi.mocked(listEntities).mockResolvedValue([]);
+    render(
+      <MemoryRouter initialEntries={['/problemas', '/problemas?create=1']} initialIndex={1}>
+        <Routes>
+          <Route element={<Outlet context={{ workspaceId: 'territorio-a' }} />}>
+            <Route path="/problemas" element={<><BackButton /><ModulePage configKey="problemas" /></>} />
+          </Route>
+        </Routes>
+      </MemoryRouter>
+    );
+    expect(await screen.findByRole('dialog', { name: 'Novo problema' })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Voltar' }));
 
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
   });

@@ -102,7 +102,7 @@ export default function ModulePage({ configKey }: { configKey: string }) {
   const contextualCreate = searchParams.get('create') === '1';
 
   useEffect(() => {
-    if (contextualCreate) setShowCreate(true);
+    setShowCreate(contextualCreate);
   }, [contextualCreate]);
 
   useEffect(() => {
