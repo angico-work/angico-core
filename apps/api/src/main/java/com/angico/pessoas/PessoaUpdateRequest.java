@@ -1,8 +1,10 @@
 package com.angico.pessoas;
 
+import jakarta.validation.constraints.Size;
+
 public record PessoaUpdateRequest(
-        String nome,
-        String telefone,
-        String foto
+        @Size(max = 255) String nome,
+        @Size(max = 50) String telefone,
+        @Size(max = 255) String foto
 ) {
 }

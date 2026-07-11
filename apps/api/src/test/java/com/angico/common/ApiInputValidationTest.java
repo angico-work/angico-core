@@ -4,6 +4,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.angico.acoes.AcaoController;
@@ -201,6 +202,18 @@ class ApiInputValidationTest {
                         .content("""
                                 {"workspaceId":"bairro","nome":"%s","angicoId":"%s"}
                                 """.formatted("p".repeat(256), "a".repeat(31))))
+                .andExpect(status().isBadRequest());
+
+        verifyNoInteractions(pessoaService);
+    }
+
+    @Test
+    void rejectsOversizedProfileUpdates() throws Exception {
+        mvc.perform(put("/api/pessoas/me")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"nome":"%s","telefone":"%s","foto":"%s"}
+                                """.formatted("p".repeat(256), "1".repeat(51), "u".repeat(256))))
                 .andExpect(status().isBadRequest());
 
         verifyNoInteractions(pessoaService);

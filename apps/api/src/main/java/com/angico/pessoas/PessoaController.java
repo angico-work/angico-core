@@ -42,7 +42,7 @@ public class PessoaController {
     }
 
     @PutMapping("/me")
-    public PessoaResponse updateMe(@RequestBody PessoaUpdateRequest request) {
+    public PessoaResponse updateMe(@Valid @RequestBody PessoaUpdateRequest request) {
         return pessoaService.updateCurrent(request);
     }
 }
