@@ -49,7 +49,16 @@ Operações atuais:
 
 - `CREATE_OBSERVATION`;
 - `MESSAGE_SEND`;
-- `EVIDENCE_CREATE`.
+- `EVIDENCE_CREATE`;
+- `PROBLEMA_CREATE`;
+- `POTENCIALIDADE_CREATE`;
+- `MISSAO_CREATE`;
+- `ACAO_CREATE`;
+- `RESULTADO_CREATE`;
+- `INDICADOR_CREATE`;
+- `MEDICAO_CREATE`;
+- `RECURSO_CREATE`;
+- `RECURSO_USO_CREATE`.
 
 Cada operação recebe no aparelho:
 
@@ -78,6 +87,16 @@ Estados:
 | `DISCARDED` | descarte explícito confirmado pela pessoa |
 
 Uma falha nunca remove a operação. O lease permite recuperar uma tentativa interrompida sem manter o item preso em `SYNCING`. O retry usa backoff limitado e respeita a mesma ordem retornada pela store.
+
+As mutações de domínio usam somente rotas compiladas no aplicativo. O item da outbox contém operação e payload tipados, mas não contém URL nem método HTTP. Na API, uma rota explícita por operação reutiliza o DTO e o serviço de domínio correspondente.
+
+Problema, potencialidade, missão, ação, resultado, indicador, medição, recurso e uso de recurso são confirmados por um comprovante com:
+
+```text
+operation + workspaceId + clientMutationId + resourceId
+```
+
+O cliente só marca `SYNCED` quando operação, workspace e chave coincidem com a pendência e `resourceId` é um ID remoto positivo. A API deriva o ator da sessão, autoriza o workspace, calcula o hash canônico e grava reserva idempotente, domínio e memória na mesma transação. Repetir a chave com o mesmo payload devolve o mesmo comprovante; reutilizá-la com outro payload retorna `409`.
 
 ## Evidências e anexos
 
@@ -178,7 +197,8 @@ Essa estratégia permite dividir as páginas em chunks sem exigir que a pessoa a
 - falhas temporárias mantêm dados e próxima tentativa.
 - observações podem ser revisadas sem sobrescrever silenciosamente o registro anterior;
 - mensagens com falha podem voltar a rascunho com seus anexos;
-- evidências inválidas podem ser revisadas ou descartadas no centro de sincronização.
+- evidências inválidas podem ser revisadas ou descartadas no centro de sincronização;
+- mutações de domínio recusadas permanecem visíveis e podem ser descartadas explicitamente.
 
 O cliente não cria uma relação, muda um ID ou resolve um conflito por inferência.
 
@@ -186,7 +206,7 @@ O cliente não cria uma relação, muda um ID ou resolve um conflito por inferê
 
 - IndexedDB não oferece criptografia própria; a proteção do dispositivo continua necessária.
 - Uma revogação ocorrida durante ausência total de rede só é conhecida na próxima comunicação.
-- A primeira versão não cria evidência contra um objeto que também está apenas na outbox.
+- Evidências e relações de domínio não podem apontar para um objeto que também está apenas na outbox.
 - A outbox cobre as operações de campo implementadas; novos módulos precisam declarar seu contrato e idempotência antes de entrar.
 - Compressão de imagem não é aplicada automaticamente; o limite atual prioriza integridade e previsibilidade.
 
@@ -200,10 +220,15 @@ Os testes locais cobrem:
 - atomicidade entre evidência, operação e blob;
 - retenção do blob em falhas;
 - remoção apenas após confirmação válida;
+- rotas fixas e payloads tipados para mutações de domínio;
+- replay idempotente, payload divergente e corrida pela mesma chave;
+- rollback conjunto de domínio, memória e reserva idempotente;
+- rejeição de relações sem ID remoto confirmado;
+- validação estrita do comprovante antes de confirmar a outbox;
+- reconexão, `409`, `422` e troca de conta durante o envio;
 - lease vencido e retry;
 - alias estável depois de alterar o identificador público;
 - sessão offline expirada sem perda do snapshot;
 - fallback de rede e rejeição de HTTP, parse e aborto;
 - precache de todos os chunks JS/CSS do manifesto;
 - exclusão de `/api` do cache do service worker.
-
