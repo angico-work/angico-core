@@ -311,7 +311,7 @@ export default function AppShell() {
         onEditProfile={openProfile}
         onLogout={handleLogout}
       />
-      {sidebarOpen && <div className="sidebar-backdrop" onClick={() => setSidebarOpen(false)} />}
+      {sidebarOpen && <button type="button" className="sidebar-backdrop" aria-label="Dispensar sobreposição" tabIndex={-1} onClick={() => setSidebarOpen(false)} />}
       <Topbar
         workspaceLabel={activeName}
         workspaceId={activeSlug}

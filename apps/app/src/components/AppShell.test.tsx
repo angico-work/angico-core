@@ -343,6 +343,7 @@ describe('AppShell local partition', () => {
     fireEvent.click(toggle);
 
     expect(await screen.findByRole('button', { name: 'Editar perfil' })).toHaveFocus();
+    expect(screen.getByRole('button', { name: 'Dispensar sobreposição' })).toBeInTheDocument();
     fireEvent.keyDown(document, { key: 'Escape' });
     await waitFor(() => expect(screen.getByRole('button', { name: 'Abrir menu' })).toHaveFocus());
   });
