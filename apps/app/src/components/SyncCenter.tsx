@@ -57,7 +57,23 @@ function entryTitle(entry: OutboxEntry): string {
   if (isMessageEntry(entry)) {
     return entry.body.body || `Mensagem com ${entry.body.attachments.length} anexo(s)`;
   }
-  return entry.body.title;
+  if (isEvidenceEntry(entry)) return entry.body.title;
+  switch (entry.operation) {
+    case 'PROBLEMA_CREATE':
+    case 'POTENCIALIDADE_CREATE':
+    case 'MISSAO_CREATE':
+    case 'ACAO_CREATE':
+    case 'RESULTADO_CREATE':
+      return entry.body.titulo;
+    case 'INDICADOR_CREATE':
+      return entry.body.nome;
+    case 'MEDICAO_CREATE':
+      return `Medição · ${entry.body.valor.toLocaleString('pt-BR')}`;
+    case 'RECURSO_CREATE':
+      return entry.body.nome;
+    case 'RECURSO_USO_CREATE':
+      return `Uso de recurso · ${entry.body.payload.quantidade.toLocaleString('pt-BR')}`;
+  }
 }
 
 function entryContext(entry: OutboxEntry): string {
@@ -66,12 +82,26 @@ function entryContext(entry: OutboxEntry): string {
     const count = entry.body.attachments.length;
     return count > 0 ? `Conversa · ${count} anexo${count === 1 ? '' : 's'}` : 'Conversa';
   }
-  const labels: Record<EvidenceOutboxEntry['body']['subjectType'], string> = {
-    OBSERVACAO: 'Observação',
-    ACAO: 'Ação',
-    RESULTADO: 'Resultado'
-  };
-  return `Evidência · ${labels[entry.body.subjectType]}`;
+  if (isEvidenceEntry(entry)) {
+    const labels: Record<EvidenceOutboxEntry['body']['subjectType'], string> = {
+      OBSERVACAO: 'Observação',
+      ACAO: 'Ação',
+      RESULTADO: 'Resultado'
+    };
+    return `Evidência · ${labels[entry.body.subjectType]}`;
+  }
+  const labels = {
+    PROBLEMA_CREATE: 'Problema',
+    POTENCIALIDADE_CREATE: 'Potencialidade',
+    MISSAO_CREATE: 'Missão',
+    ACAO_CREATE: 'Ação',
+    RESULTADO_CREATE: 'Resultado',
+    INDICADOR_CREATE: 'Indicador',
+    MEDICAO_CREATE: 'Medição',
+    RECURSO_CREATE: 'Recurso',
+    RECURSO_USO_CREATE: 'Uso de recurso'
+  } as const;
+  return `Registro de domínio · ${labels[entry.operation]}`;
 }
 
 interface RevisionDraft {
@@ -313,6 +343,20 @@ export default function SyncCenter({ ownerId, workspaceId, online, onClose }: Pr
                         type="button"
                         className="danger-text-button compact-button"
                         aria-label={`Descartar evidência: ${entryTitle(entry)}`}
+                        disabled={workingId === entry.id}
+                        onClick={() => void discard(entry)}
+                      >
+                        Descartar
+                      </button>
+                    )}
+                    {!isObservationEntry(entry)
+                      && !isMessageEntry(entry)
+                      && !isEvidenceEntry(entry)
+                      && REVIEWABLE.includes(entry.status) && (
+                      <button
+                        type="button"
+                        className="danger-text-button compact-button"
+                        aria-label={`Descartar registro: ${entryTitle(entry)}`}
                         disabled={workingId === entry.id}
                         onClick={() => void discard(entry)}
                       >

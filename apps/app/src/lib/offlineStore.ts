@@ -1,6 +1,8 @@
 import { deleteDB, openDB, type DBSchema, type IDBPDatabase } from 'idb';
 import type {
-  Conversa, Evidencia, EvidenciaInput, EvidenceSubjectType, Mensagem, Observacao, ObservacaoInput
+  AcaoInput, Conversa, Evidencia, EvidenciaInput, EvidenceSubjectType, IndicadorInput,
+  MedicaoInput, Mensagem, MissaoInput, Observacao, ObservacaoInput, PotencialidadeInput,
+  ProblemaInput, RecursoInput, RecursoUsoInput, ResultadoInput
 } from '../types';
 import { validateEvidenceFile } from './evidenceFiles';
 import { validateMessageFiles } from './messageFiles';
@@ -100,7 +102,71 @@ export interface EvidenceOutboxEntry extends OutboxBase {
   body: OfflineEvidenceInput;
 }
 
-export type OutboxEntry = ObservationOutboxEntry | MessageOutboxEntry | EvidenceOutboxEntry;
+export type DomainMutationOperation =
+  | 'PROBLEMA_CREATE'
+  | 'POTENCIALIDADE_CREATE'
+  | 'MISSAO_CREATE'
+  | 'ACAO_CREATE'
+  | 'RESULTADO_CREATE'
+  | 'INDICADOR_CREATE'
+  | 'MEDICAO_CREATE'
+  | 'RECURSO_CREATE'
+  | 'RECURSO_USO_CREATE';
+
+export interface DomainMutationPayloadMap {
+  PROBLEMA_CREATE: ProblemaInput;
+  POTENCIALIDADE_CREATE: PotencialidadeInput;
+  MISSAO_CREATE: MissaoInput;
+  ACAO_CREATE: AcaoInput;
+  RESULTADO_CREATE: ResultadoInput;
+  INDICADOR_CREATE: IndicadorInput;
+  MEDICAO_CREATE: MedicaoInput;
+  RECURSO_CREATE: RecursoInput;
+  RECURSO_USO_CREATE: { recursoId: number; payload: RecursoUsoInput };
+}
+
+export interface DomainMutationReceipt {
+  operation: DomainMutationOperation;
+  workspaceId: string;
+  clientMutationId: string;
+  resourceId: string;
+}
+
+export type DomainMutationOutboxEntry = {
+  [K in DomainMutationOperation]: OutboxBase & {
+    operation: K;
+    body: DomainMutationPayloadMap[K];
+    remote?: DomainMutationReceipt;
+  }
+}[DomainMutationOperation];
+
+export interface QueuedDomainMutation<K extends DomainMutationOperation> {
+  clientMutationId: string;
+  operation: K;
+  body: DomainMutationPayloadMap[K];
+}
+
+export type OutboxEntry =
+  | ObservationOutboxEntry
+  | MessageOutboxEntry
+  | EvidenceOutboxEntry
+  | DomainMutationOutboxEntry;
+
+const DOMAIN_MUTATION_OPERATIONS = new Set<DomainMutationOperation>([
+  'PROBLEMA_CREATE',
+  'POTENCIALIDADE_CREATE',
+  'MISSAO_CREATE',
+  'ACAO_CREATE',
+  'RESULTADO_CREATE',
+  'INDICADOR_CREATE',
+  'MEDICAO_CREATE',
+  'RECURSO_CREATE',
+  'RECURSO_USO_CREATE'
+]);
+
+export function isDomainMutationEntry(entry: OutboxEntry): entry is DomainMutationOutboxEntry {
+  return DOMAIN_MUTATION_OPERATIONS.has(entry.operation as DomainMutationOperation);
+}
 
 export interface LocalObservation {
   key: string;
@@ -378,6 +444,10 @@ function localEvidenceKey(ownerId: string, workspaceId: string, clientMutationId
   return JSON.stringify(['evidence', ownerId, workspaceId, clientMutationId]);
 }
 
+function domainMutationKey(ownerId: string, workspaceId: string, clientMutationId: string): string {
+  return JSON.stringify(['domain-mutation', ownerId, workspaceId, clientMutationId]);
+}
+
 function evidenceBlobKey(ownerId: string, workspaceId: string, operationId: string): string {
   return JSON.stringify(['evidence-blob', ownerId, workspaceId, operationId]);
 }
@@ -443,6 +513,118 @@ function announceChange(): void {
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new Event('angico:sync-state'));
   }
+}
+
+function requireRemoteId(value: unknown, label: string): void {
+  const numeric = typeof value === 'number'
+    ? value
+    : typeof value === 'string' && /^[1-9]\d*$/.test(value)
+      ? Number(value)
+      : Number.NaN;
+  if (!Number.isSafeInteger(numeric) || numeric < 1) {
+    throw new Error(`${label} precisa usar um ID remoto confirmado.`);
+  }
+}
+
+function requireOptionalRemoteId(value: unknown, label: string): void {
+  if (value == null || value === '') return;
+  requireRemoteId(value, label);
+}
+
+function validateDomainMutation<K extends DomainMutationOperation>(
+  operation: K,
+  body: DomainMutationPayloadMap[K]
+): void {
+  switch (operation) {
+    case 'PROBLEMA_CREATE': {
+      const value = body as DomainMutationPayloadMap['PROBLEMA_CREATE'];
+      requireRemoteId(value.territorioId, 'Território');
+      requireOptionalRemoteId(value.origemObservacaoId, 'Observação de origem');
+      return;
+    }
+    case 'POTENCIALIDADE_CREATE':
+      requireOptionalRemoteId(
+        (body as DomainMutationPayloadMap['POTENCIALIDADE_CREATE']).territorioId,
+        'Território'
+      );
+      return;
+    case 'MISSAO_CREATE': {
+      const value = body as DomainMutationPayloadMap['MISSAO_CREATE'];
+      requireRemoteId(value.territorioId, 'Território');
+      requireRemoteId(value.problemaId, 'Problema');
+      requireRemoteId(value.responsavelId, 'Pessoa responsável');
+      return;
+    }
+    case 'ACAO_CREATE': {
+      const value = body as DomainMutationPayloadMap['ACAO_CREATE'];
+      requireRemoteId(value.missaoId, 'Missão');
+      requireRemoteId(value.responsavelId, 'Pessoa responsável');
+      return;
+    }
+    case 'RESULTADO_CREATE':
+      requireRemoteId((body as DomainMutationPayloadMap['RESULTADO_CREATE']).acaoId, 'Ação');
+      return;
+    case 'INDICADOR_CREATE': {
+      const value = body as DomainMutationPayloadMap['INDICADOR_CREATE'];
+      requireRemoteId(value.territorioId, 'Território');
+      requireOptionalRemoteId(value.resultadoId, 'Resultado');
+      return;
+    }
+    case 'MEDICAO_CREATE':
+      requireRemoteId((body as DomainMutationPayloadMap['MEDICAO_CREATE']).indicadorId, 'Indicador');
+      return;
+    case 'RECURSO_USO_CREATE': {
+      const value = body as DomainMutationPayloadMap['RECURSO_USO_CREATE'];
+      requireRemoteId(value.recursoId, 'Recurso');
+      requireRemoteId(value.payload.acaoId, 'Ação');
+      return;
+    }
+    case 'RECURSO_CREATE':
+      return;
+  }
+}
+
+function domainMutationWorkspace<K extends DomainMutationOperation>(
+  operation: K,
+  body: DomainMutationPayloadMap[K]
+): string {
+  if (operation === 'RECURSO_USO_CREATE') {
+    return (body as DomainMutationPayloadMap['RECURSO_USO_CREATE']).payload.workspaceId;
+  }
+  return (body as Exclude<DomainMutationPayloadMap[K], DomainMutationPayloadMap['RECURSO_USO_CREATE']>)
+    .workspaceId;
+}
+
+export async function enqueueDomainMutation<K extends DomainMutationOperation>(
+  operation: K,
+  body: DomainMutationPayloadMap[K],
+  ownerId: string
+): Promise<QueuedDomainMutation<K>> {
+  const workspaceId = domainMutationWorkspace(operation, body);
+  requirePartition(ownerId, workspaceId);
+  if (workspaceId !== workspaceId.trim()) {
+    throw new Error('Workspace inválido para o registro offline.');
+  }
+  validateDomainMutation(operation, body);
+  const clientMutationId = randomId();
+  const now = new Date().toISOString();
+  const entry = {
+    id: clientMutationId,
+    operation,
+    ownerId,
+    workspaceId,
+    localEntityKey: domainMutationKey(ownerId, workspaceId, clientMutationId),
+    body,
+    status: 'QUEUED',
+    attemptCount: 0,
+    createdAt: now,
+    updatedAt: now,
+    nextAttemptAt: now
+  } as DomainMutationOutboxEntry;
+  const db = await database();
+  await db.add('outbox', entry);
+  announceChange();
+  return { clientMutationId, operation, body };
 }
 
 export async function enqueueObservation(
@@ -1116,7 +1298,7 @@ export async function markOutboxStatus(
   options: {
     message?: string;
     nextAttemptAt?: string;
-    remote?: Observacao | Mensagem | Evidencia;
+    remote?: Observacao | Mensagem | Evidencia | DomainMutationReceipt;
     expectedClaim?: OutboxClaim;
   } = {}
 ): Promise<boolean> {
@@ -1148,8 +1330,11 @@ export async function markOutboxStatus(
     nextAttemptAt: options.nextAttemptAt ?? entry.nextAttemptAt,
     lastError: options.message,
     leaseUntil: undefined,
-    leaseId: undefined
-  });
+    leaseId: undefined,
+    ...(isDomainMutationEntry(entry) && options.remote
+      ? { remote: options.remote as DomainMutationReceipt }
+      : {})
+  } as OutboxEntry);
   if (entry.operation === 'CREATE_OBSERVATION') {
     const entityStore = tx.objectStore('entities');
     const local = await entityStore.get(entry.localEntityKey);
@@ -1179,7 +1364,7 @@ export async function markOutboxStatus(
         )));
       }
     }
-  } else {
+  } else if (entry.operation === 'EVIDENCE_CREATE') {
     const evidenceStore = tx.objectStore('evidences');
     const local = await evidenceStore.get(entry.localEntityKey);
     if (local) {

@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { EvidenciaInput, ObservacaoInput } from '../types';
 import { getSession } from './api';
 import {
+  enqueueDomainMutation,
   enqueueObservation,
   enqueueMessage,
   enqueueEvidence,
@@ -12,9 +13,12 @@ import {
   getMessageAttachmentFile,
   getLocalObservation,
   listOutbox,
-  resetOfflineDatabase
+  resetOfflineDatabase,
+  type DomainMutationOperation,
+  type DomainMutationPayloadMap
 } from './offlineStore';
 import {
+  captureDomainMutation,
   captureEvidence,
   captureMessage,
   captureObservation,
@@ -24,6 +28,7 @@ import {
   startSyncEngine,
   syncPendingMessages,
   syncPendingEvidence,
+  syncPendingDomainMutations,
   syncPendingObservations
 } from './offlineSync';
 
@@ -53,6 +58,45 @@ const evidence: EvidenciaInput = {
   capturedAt: '2026-07-10T12:00:00.000Z',
   file: new File(['evidencia'], 'nascente.txt', { type: 'text/plain' })
 };
+
+type DomainCase = {
+  [K in DomainMutationOperation]: {
+    operation: K;
+    path: string;
+    body: DomainMutationPayloadMap[K];
+  }
+}[DomainMutationOperation];
+
+const domainCases: DomainCase[] = [
+  { operation: 'PROBLEMA_CREATE', path: '/api/offline/mutations/problemas', body: {
+    workspaceId: 'territorio-a', territorioId: '1', categoria: 'AGUA', titulo: 'Problema'
+  } },
+  { operation: 'POTENCIALIDADE_CREATE', path: '/api/offline/mutations/potencialidades', body: {
+    workspaceId: 'territorio-a', territorioId: '1', categoria: 'VERDE', titulo: 'Potencialidade'
+  } },
+  { operation: 'MISSAO_CREATE', path: '/api/offline/mutations/missoes', body: {
+    workspaceId: 'territorio-a', territorioId: '1', problemaId: '2', responsavelId: '3', titulo: 'Missão'
+  } },
+  { operation: 'ACAO_CREATE', path: '/api/offline/mutations/acoes', body: {
+    workspaceId: 'territorio-a', missaoId: '4', responsavelId: '3', titulo: 'Ação'
+  } },
+  { operation: 'RESULTADO_CREATE', path: '/api/offline/mutations/resultados', body: {
+    workspaceId: 'territorio-a', acaoId: 5, titulo: 'Resultado'
+  } },
+  { operation: 'INDICADOR_CREATE', path: '/api/offline/mutations/indicadores', body: {
+    workspaceId: 'territorio-a', territorioId: 1, resultadoId: 6, nome: 'Indicador'
+  } },
+  { operation: 'MEDICAO_CREATE', path: '/api/offline/mutations/medicoes', body: {
+    workspaceId: 'territorio-a', indicadorId: 7, valor: 12
+  } },
+  { operation: 'RECURSO_CREATE', path: '/api/offline/mutations/recursos', body: {
+    workspaceId: 'territorio-a', nome: 'Luvas', categoria: 'MATERIAL', unidade: 'par'
+  } },
+  { operation: 'RECURSO_USO_CREATE', path: '/api/offline/mutations/usos-recursos', body: {
+    recursoId: 8,
+    payload: { workspaceId: 'territorio-a', acaoId: 5, quantidade: 2, unidade: 'par' }
+  } }
+];
 
 function response(status: number, body: unknown): Response {
   return {
@@ -102,6 +146,105 @@ describe('offline synchronization', () => {
     );
     expect(local?.syncStatus).toBe('SYNCED');
     expect(local?.remote?.id).toBe(31);
+  });
+
+  it.each(domainCases)('routes $operation only to its compiled endpoint', async ({ operation, path, body }) => {
+    const queued = await enqueueDomainMutation(operation, body, 'ana.sp');
+    const receipt = {
+      operation,
+      workspaceId: 'territorio-a',
+      clientMutationId: queued.clientMutationId,
+      resourceId: '91'
+    };
+    const fetchMock = vi.fn().mockResolvedValue(response(201, receipt));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const summary = await syncPendingDomainMutations({ ownerId: 'ana.sp', workspaceId: 'territorio-a' });
+
+    expect(summary).toMatchObject({ attempted: 1, synced: 1 });
+    expect(fetchMock).toHaveBeenCalledWith(path, expect.objectContaining({
+      method: 'POST',
+      credentials: 'include',
+      headers: expect.objectContaining({
+        'Content-Type': 'application/json',
+        'Idempotency-Key': queued.clientMutationId,
+        'X-CSRF-Token': 'csrf-secret'
+      }),
+      body: JSON.stringify(body)
+    }));
+    expect((await listOutbox('ana.sp', 'territorio-a'))[0]).toMatchObject({
+      status: 'SYNCED',
+      remote: receipt
+    });
+  });
+
+  it('queues a domain mutation offline and confirms it after reconnection', async () => {
+    Object.defineProperty(navigator, 'onLine', { configurable: true, value: false });
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    const body: DomainMutationPayloadMap['RESULTADO_CREATE'] = {
+      workspaceId: 'territorio-a', acaoId: 5, titulo: 'Trecho recuperado'
+    };
+
+    const queued = await captureDomainMutation('RESULTADO_CREATE', body);
+
+    expect(queued.status).toBe('QUEUED');
+    expect(fetchMock).not.toHaveBeenCalled();
+    Object.defineProperty(navigator, 'onLine', { configurable: true, value: true });
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response(201, {
+      operation: 'RESULTADO_CREATE',
+      workspaceId: 'territorio-a',
+      clientMutationId: queued.clientMutationId,
+      resourceId: '52'
+    })));
+
+    await syncPendingDomainMutations({ ownerId: 'ana.sp', workspaceId: 'territorio-a' });
+
+    expect((await listOutbox('ana.sp', 'territorio-a'))[0]).toMatchObject({
+      status: 'SYNCED', remote: { resourceId: '52' }
+    });
+  });
+
+  it.each([
+    { operation: 'ACAO_CREATE', workspaceId: 'territorio-a', clientMutationId: 'matching', resourceId: '15' },
+    { operation: 'MISSAO_CREATE', workspaceId: 'territorio-b', clientMutationId: 'matching', resourceId: '15' },
+    { operation: 'MISSAO_CREATE', workspaceId: 'territorio-a', clientMutationId: 'other', resourceId: '15' },
+    { operation: 'MISSAO_CREATE', workspaceId: 'territorio-a', clientMutationId: 'matching', resourceId: '0' },
+    { operation: 'MISSAO_CREATE', workspaceId: 'territorio-a', clientMutationId: 'matching', resourceId: 'local-id' }
+  ])('rejects a domain receipt that does not match the queued command: $resourceId', async (invalid) => {
+    const queued = await enqueueDomainMutation('MISSAO_CREATE', {
+      workspaceId: 'territorio-a', territorioId: '1', problemaId: '2', responsavelId: '3', titulo: 'Missão'
+    }, 'ana.sp');
+    const receipt = {
+      ...invalid,
+      clientMutationId: invalid.clientMutationId === 'matching' ? queued.clientMutationId : invalid.clientMutationId
+    };
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response(201, receipt)));
+
+    const summary = await syncPendingDomainMutations({ ownerId: 'ana.sp', workspaceId: 'territorio-a' });
+
+    expect(summary.retryable).toBe(1);
+    const [entry] = await listOutbox('ana.sp', 'territorio-a');
+    expect(entry).toMatchObject({ status: 'RETRYABLE_ERROR' });
+    expect(entry).not.toHaveProperty('remote');
+  });
+
+  it('keeps 409 and 422 domain responses in their existing review states', async () => {
+    await enqueueDomainMutation('RECURSO_CREATE', {
+      workspaceId: 'territorio-a', nome: 'Luvas', categoria: 'MATERIAL', unidade: 'par'
+    }, 'ana.sp');
+    await enqueueDomainMutation('MEDICAO_CREATE', {
+      workspaceId: 'territorio-a', indicadorId: 7, valor: 12
+    }, 'ana.sp');
+    vi.stubGlobal('fetch', vi.fn()
+      .mockResolvedValueOnce(response(409, { detail: 'chave usada com outro conteúdo' }))
+      .mockResolvedValueOnce(response(422, { detail: 'referência não confirmada' })));
+
+    const summary = await syncPendingDomainMutations({ ownerId: 'ana.sp', workspaceId: 'territorio-a' });
+
+    expect(summary).toMatchObject({ conflicts: 1, actionRequired: 1 });
+    expect((await listOutbox('ana.sp', 'territorio-a')).map((entry) => entry.status))
+      .toEqual(['CONFLICT', 'ACTION_REQUIRED']);
   });
 
   it('keeps transient failures retryable with backoff', async () => {

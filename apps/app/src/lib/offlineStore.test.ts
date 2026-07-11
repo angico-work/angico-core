@@ -13,6 +13,7 @@ import {
   enqueueMessage,
   enqueueObservation,
   enqueueEvidence,
+  enqueueDomainMutation,
   getEvidenceFile,
   getLocalEvidence,
   getLocalMessage,
@@ -84,6 +85,44 @@ describe('offline observation store', () => {
       syncStatus: 'QUEUED',
       data: expect.objectContaining({ titulo: observation.titulo })
     });
+  });
+
+  it('persists an allowlisted domain command without a client-controlled route', async () => {
+    const queued = await enqueueDomainMutation('MISSAO_CREATE', {
+      workspaceId: 'territorio-a',
+      territorioId: '11',
+      problemaId: '12',
+      responsavelId: '13',
+      titulo: 'Recuperar a nascente'
+    }, 'ana.sp');
+
+    expect(await listOutbox('ana.sp', 'territorio-a')).toEqual([
+      expect.objectContaining({
+        id: queued.clientMutationId,
+        operation: 'MISSAO_CREATE',
+        ownerId: 'ana.sp',
+        workspaceId: 'territorio-a',
+        body: expect.objectContaining({ problemaId: '12', titulo: 'Recuperar a nascente' })
+      })
+    ]);
+    expect((await listOutbox('ana.sp', 'territorio-a'))[0]).not.toHaveProperty('url');
+    expect((await listOutbox('ana.sp', 'territorio-a'))[0]).not.toHaveProperty('method');
+  });
+
+  it('rejects domain relations that do not use confirmed positive remote ids', async () => {
+    await expect(enqueueDomainMutation('ACAO_CREATE', {
+      workspaceId: 'territorio-a',
+      missaoId: 'local-pending-mission',
+      responsavelId: '13',
+      titulo: 'Ação sem missão confirmada'
+    }, 'ana.sp')).rejects.toThrow('remoto confirmado');
+    await expect(enqueueDomainMutation('RESULTADO_CREATE', {
+      workspaceId: 'territorio-a',
+      acaoId: 0,
+      titulo: 'Resultado sem ação confirmada'
+    }, 'ana.sp')).rejects.toThrow('remoto confirmado');
+
+    expect(await listOutbox('ana.sp', 'territorio-a')).toEqual([]);
   });
 
   it('keeps pending records isolated by owner and workspace', async () => {

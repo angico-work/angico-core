@@ -104,6 +104,17 @@ export interface Problema {
   autorId?: string | null;
 }
 
+export interface PotencialidadeInput {
+  workspaceId: string;
+  territorioId?: string;
+  categoria: string;
+  titulo: string;
+  descricao?: string;
+  localizacao?: string;
+  latitude?: number;
+  longitude?: number;
+}
+
 export interface MissaoInput {
   workspaceId: string;
   territorioId: string;

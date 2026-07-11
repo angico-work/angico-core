@@ -245,6 +245,49 @@ describe('SyncCenter', () => {
     expect(screen.queryByRole('button', { name: /Retomar como rascunho/ })).not.toBeInTheDocument();
   });
 
+  it('shows a queued domain command as local work without inventing a remote record', async () => {
+    vi.mocked(listOutbox).mockResolvedValue([{
+      ...conflict,
+      id: 'mission-local-1',
+      operation: 'MISSAO_CREATE' as const,
+      body: {
+        workspaceId: 'territorio-a',
+        territorioId: '11',
+        problemaId: '12',
+        responsavelId: '13',
+        titulo: 'Recuperar a nascente'
+      },
+      status: 'QUEUED' as const
+    }]);
+
+    render(<SyncCenter ownerId="ana.sp" workspaceId="territorio-a" online onClose={vi.fn()} />);
+
+    expect(await screen.findByText('Recuperar a nascente')).toBeInTheDocument();
+    expect(screen.getByText('Registro de domínio · Missão')).toBeInTheDocument();
+    expect(screen.getByText('Salvo neste aparelho.')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Revisar/ })).not.toBeInTheDocument();
+  });
+
+  it('allows an explicitly rejected domain command to be discarded locally', async () => {
+    vi.mocked(listOutbox).mockResolvedValue([{
+      ...conflict,
+      id: 'resource-local-1',
+      operation: 'RECURSO_CREATE' as const,
+      body: {
+        workspaceId: 'territorio-a', nome: 'Luvas', categoria: 'MATERIAL' as const, unidade: 'par'
+      },
+      status: 'ACTION_REQUIRED' as const
+    }]);
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+
+    render(<SyncCenter ownerId="ana.sp" workspaceId="territorio-a" online onClose={vi.fn()} />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Descartar registro: Luvas' }));
+
+    await waitFor(() => expect(discardOutboxEntry).toHaveBeenCalledWith(
+      'resource-local-1', 'ana.sp', 'territorio-a'
+    ));
+  });
+
   it('retries a retryable evidence through the explicit synchronization action', async () => {
     vi.mocked(listOutbox).mockResolvedValue([{ ...evidenceEntry, status: 'RETRYABLE_ERROR' }]);
 

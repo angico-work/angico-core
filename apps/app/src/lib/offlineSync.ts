@@ -2,6 +2,7 @@ import type { Evidencia, EvidenciaInput, Mensagem, Observacao, ObservacaoInput }
 import { apiFetch, apiUrl, hasFreshOfflineSession, isAuthenticated, sessionOwnerId } from './api';
 import {
   claimOutboxEntry,
+  enqueueDomainMutation,
   enqueueMessage,
   enqueueObservation,
   enqueueEvidence,
@@ -10,6 +11,7 @@ import {
   getLocalMessage,
   getLocalObservation,
   getMessageAttachmentFile,
+  isDomainMutationEntry,
   listOutbox,
   markOutboxStatus,
   messageAttachmentsMatch,
@@ -18,6 +20,10 @@ import {
   renewOutboxLease,
   type MessageOutboxEntry,
   type EvidenceOutboxEntry,
+  type DomainMutationOperation,
+  type DomainMutationOutboxEntry,
+  type DomainMutationPayloadMap,
+  type DomainMutationReceipt,
   type ObservationOutboxEntry,
   type OutboxEntry,
   type OutboxClaim,
@@ -57,6 +63,12 @@ export interface CaptureEvidenceResult {
   clientMutationId: string;
   status: OutboxStatus;
   remote?: Evidencia;
+}
+
+export interface CaptureDomainMutationResult {
+  clientMutationId: string;
+  status: OutboxStatus;
+  remote?: DomainMutationReceipt;
 }
 
 interface SyncFilter {
@@ -171,6 +183,32 @@ async function sendEvidence(entry: EvidenceOutboxEntry): Promise<Response> {
   });
 }
 
+function domainMutationPath(operation: DomainMutationOperation): string {
+  switch (operation) {
+    case 'PROBLEMA_CREATE': return '/api/offline/mutations/problemas';
+    case 'POTENCIALIDADE_CREATE': return '/api/offline/mutations/potencialidades';
+    case 'MISSAO_CREATE': return '/api/offline/mutations/missoes';
+    case 'ACAO_CREATE': return '/api/offline/mutations/acoes';
+    case 'RESULTADO_CREATE': return '/api/offline/mutations/resultados';
+    case 'INDICADOR_CREATE': return '/api/offline/mutations/indicadores';
+    case 'MEDICAO_CREATE': return '/api/offline/mutations/medicoes';
+    case 'RECURSO_CREATE': return '/api/offline/mutations/recursos';
+    case 'RECURSO_USO_CREATE': return '/api/offline/mutations/usos-recursos';
+  }
+}
+
+async function sendDomainMutation(entry: DomainMutationOutboxEntry): Promise<Response> {
+  requireActiveSyncIdentity(entry.ownerId);
+  return apiFetch(apiUrl(domainMutationPath(entry.operation)), {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Idempotency-Key': entry.id
+    },
+    body: JSON.stringify(entry.body)
+  });
+}
+
 function isConfirmedEvidence(value: unknown, entry: EvidenceOutboxEntry): value is Evidencia {
   if (!value || typeof value !== 'object') return false;
   const record = value as Partial<Evidencia>;
@@ -213,7 +251,27 @@ function isConfirmedMessage(value: unknown, entry: MessageOutboxEntry): value is
     && sameAttachments(entry, record);
 }
 
-async function parseRemote(entry: OutboxEntry, response: Response): Promise<Observacao | Mensagem | Evidencia> {
+function isConfirmedDomainMutation(
+  value: unknown,
+  entry: DomainMutationOutboxEntry
+): value is DomainMutationReceipt {
+  if (!value || typeof value !== 'object') return false;
+  const record = value as Partial<DomainMutationReceipt>;
+  if (record.operation !== entry.operation
+    || record.workspaceId !== entry.workspaceId
+    || record.clientMutationId !== entry.id
+    || typeof record.resourceId !== 'string'
+    || !/^[1-9]\d*$/.test(record.resourceId)) {
+    return false;
+  }
+  const resourceId = Number(record.resourceId);
+  return Number.isSafeInteger(resourceId) && resourceId > 0;
+}
+
+async function parseRemote(
+  entry: OutboxEntry,
+  response: Response
+): Promise<Observacao | Mensagem | Evidencia | DomainMutationReceipt> {
   const remote = await response.json() as unknown;
   if (response.status !== 201) throw new Error('A confirmação do registro é inválida.');
   if (entry.operation === 'CREATE_OBSERVATION' && !isConfirmedObservation(remote, entry)) {
@@ -225,7 +283,18 @@ async function parseRemote(entry: OutboxEntry, response: Response): Promise<Obse
   if (entry.operation === 'EVIDENCE_CREATE' && !isConfirmedEvidence(remote, entry)) {
     throw new Error('A confirmação da evidência é inválida.');
   }
-  return remote as Observacao | Mensagem | Evidencia;
+  if (isDomainMutationEntry(entry) && !isConfirmedDomainMutation(remote, entry)) {
+    throw new Error('A confirmação da operação é inválida.');
+  }
+  return remote as Observacao | Mensagem | Evidencia | DomainMutationReceipt;
+}
+
+function sendEntry(entry: OutboxEntry): Promise<Response> {
+  if (entry.operation === 'CREATE_OBSERVATION') return sendObservation(entry);
+  if (entry.operation === 'MESSAGE_SEND') return sendMessage(entry);
+  if (entry.operation === 'EVIDENCE_CREATE') return sendEvidence(entry);
+  if (isDomainMutationEntry(entry)) return sendDomainMutation(entry);
+  throw new PermanentMessageOperationError('A operação offline não é suportada.');
 }
 
 function claimOf(entry: OutboxEntry): OutboxClaim {
@@ -262,11 +331,7 @@ async function synchronizeEntry(entry: OutboxEntry, summary: SyncSummary): Promi
   if (!await keepClaimForActiveOwner(entry, claim)) return false;
   const stopRenewal = maintainLease(entry, claim);
   try {
-    const response = entry.operation === 'CREATE_OBSERVATION'
-      ? await sendObservation(entry)
-      : entry.operation === 'MESSAGE_SEND'
-        ? await sendMessage(entry)
-        : await sendEvidence(entry);
+    const response = await sendEntry(entry);
     const signedOutByUnauthorized = response.status === 401 && !sessionOwnerId();
     if (!signedOutByUnauthorized && !await keepClaimForActiveOwner(entry, claim)) return false;
     if (response.ok) {
@@ -341,13 +406,18 @@ export async function syncPendingEvidence(filter: SyncFilter = {}): Promise<Sync
   return syncPendingByOperation('EVIDENCE_CREATE', filter);
 }
 
+export async function syncPendingDomainMutations(filter: SyncFilter = {}): Promise<SyncSummary> {
+  return syncPendingByOperation(undefined, filter, true);
+}
+
 export async function syncPendingOperations(filter: SyncFilter = {}): Promise<SyncSummary> {
   return syncPendingByOperation(undefined, filter);
 }
 
 async function syncPendingByOperation(
   operation: OutboxEntry['operation'] | undefined,
-  filter: SyncFilter
+  filter: SyncFilter,
+  domainOnly = false
 ): Promise<SyncSummary> {
   const ownerId = filter.ownerId ?? sessionOwnerId();
   const summary = emptySummary();
@@ -358,7 +428,8 @@ async function syncPendingByOperation(
   }
 
   const entries = (await listOutbox(ownerId, filter.workspaceId))
-    .filter((entry) => (!operation || entry.operation === operation)
+    .filter((entry) => (!domainOnly || isDomainMutationEntry(entry))
+      && (!operation || entry.operation === operation)
       && (!filter.entryId || entry.id === filter.entryId));
   for (const entry of entries) {
     if (!hasActiveSyncIdentity(ownerId)) break;
@@ -478,6 +549,36 @@ export async function captureEvidence(input: EvidenciaInput): Promise<CaptureEvi
     clientMutationId: queued.clientMutationId,
     status: local?.syncStatus ?? 'QUEUED',
     remote: local?.remote
+  };
+}
+
+function domainMutationWorkspace<K extends DomainMutationOperation>(
+  operation: K,
+  body: DomainMutationPayloadMap[K]
+): string {
+  if (operation === 'RECURSO_USO_CREATE') {
+    return (body as DomainMutationPayloadMap['RECURSO_USO_CREATE']).payload.workspaceId;
+  }
+  return (body as Exclude<DomainMutationPayloadMap[K], DomainMutationPayloadMap['RECURSO_USO_CREATE']>)
+    .workspaceId;
+}
+
+export async function captureDomainMutation<K extends DomainMutationOperation>(
+  operation: K,
+  body: DomainMutationPayloadMap[K]
+): Promise<CaptureDomainMutationResult> {
+  const ownerId = requireCaptureOwner();
+  const workspaceId = domainMutationWorkspace(operation, body);
+  const queued = await enqueueDomainMutation(operation, body, ownerId);
+  if (typeof navigator === 'undefined' || navigator.onLine !== false) {
+    await syncPendingDomainMutations({ ownerId, workspaceId, entryId: queued.clientMutationId });
+  }
+  const entry = (await listOutbox(ownerId, workspaceId))
+    .find((candidate) => candidate.id === queued.clientMutationId);
+  return {
+    clientMutationId: queued.clientMutationId,
+    status: entry?.status ?? 'QUEUED',
+    remote: entry && isDomainMutationEntry(entry) ? entry.remote : undefined
   };
 }
 
