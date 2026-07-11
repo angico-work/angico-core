@@ -32,7 +32,8 @@ import {
   requestJson,
   reverseGeocode,
   searchGeocoding,
-  sessionOwnerId
+  sessionOwnerId,
+  apiFetch
 } from './api';
 import { resetOfflineDatabase } from './offlineStore';
 
@@ -349,6 +350,27 @@ describe('cookie session API', () => {
     await vi.advanceTimersByTimeAsync(20_000);
 
     await expect(request).resolves.toBeInstanceOf(ApiNetworkError);
+    vi.useRealTimers();
+  });
+
+  it('honors a longer timeout for bounded multipart transfers', async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi.fn((_input: RequestInfo | URL, init?: RequestInit) => {
+      const signal = init?.signal;
+      return new Promise<Response>((_resolve, reject) => {
+        signal?.addEventListener('abort', () => reject(signal?.reason));
+      });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const request = apiFetch('/api/evidencias', { method: 'POST', timeoutMs: 60_000 })
+      .catch((error) => error);
+    await vi.advanceTimersByTimeAsync(20_000);
+    const init = fetchMock.mock.calls[0][1] as RequestInit;
+    expect(init.signal?.aborted).toBe(false);
+    await vi.advanceTimersByTimeAsync(40_000);
+
+    await expect(request).resolves.toMatchObject({ name: 'TimeoutError' });
     vi.useRealTimers();
   });
 

@@ -158,7 +158,8 @@ async function sendMessage(entry: MessageOutboxEntry): Promise<Response> {
   return apiFetch(apiUrl(`/api/mensagens/conversas/${entry.body.conversationId}/mensagens`), {
     method: 'POST',
     headers: { 'Idempotency-Key': entry.id },
-    body: form
+    body: form,
+    timeoutMs: 600_000
   });
 }
 
@@ -185,7 +186,8 @@ async function sendEvidence(entry: EvidenceOutboxEntry): Promise<Response> {
   return apiFetch(apiUrl('/api/evidencias'), {
     method: 'POST',
     headers: { 'Idempotency-Key': entry.id },
-    body: form
+    body: form,
+    timeoutMs: 600_000
   });
 }
 

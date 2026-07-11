@@ -49,7 +49,12 @@ export function apiUrl(path: string): string {
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 const REQUEST_TIMEOUT_MS = 20_000;
 
-export async function apiFetch(input: RequestInfo | URL, init: RequestInit = {}): Promise<Response> {
+export interface ApiRequestInit extends RequestInit {
+  timeoutMs?: number;
+}
+
+export async function apiFetch(input: RequestInfo | URL, init: ApiRequestInit = {}): Promise<Response> {
+  const { timeoutMs = REQUEST_TIMEOUT_MS, ...requestInit } = init;
   const method = (init.method ?? 'GET').toUpperCase();
   const headers = { ...(init.headers as Record<string, string> | undefined) };
   const csrfToken = getSession()?.csrfToken;
@@ -65,11 +70,11 @@ export async function apiFetch(input: RequestInfo | URL, init: RequestInit = {})
     const error = new Error('A solicitação excedeu o tempo limite.');
     error.name = 'TimeoutError';
     controller.abort(error);
-  }, REQUEST_TIMEOUT_MS);
+  }, timeoutMs);
   let response: Response;
   try {
     response = await fetch(input, {
-      ...init,
+      ...requestInit,
       credentials: 'include',
       headers,
       signal: controller.signal
