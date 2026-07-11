@@ -25,20 +25,36 @@ export function fileSignature(files: File[]): string {
 
 export interface ConversationContext {
   key: string;
-  type: 'TERRITORIO' | 'MISSAO' | 'ACAO';
+  type: ConversationContextType;
   id: string;
   label: string;
   territoryId?: number;
 }
 
+export type ConversationContextType =
+  | 'TERRITORIO'
+  | 'OBSERVACAO'
+  | 'PROBLEMA'
+  | 'POTENCIALIDADE'
+  | 'MISSAO'
+  | 'ACAO'
+  | 'RESULTADO'
+  | 'INDICADOR';
+
+export interface ConversationEntityGroup {
+  type: Exclude<ConversationContextType, 'TERRITORIO'>;
+  label: string;
+  entities: Record<string, unknown>[];
+}
+
 function entityContexts(
-  type: 'MISSAO' | 'ACAO',
+  type: Exclude<ConversationContextType, 'TERRITORIO'>,
   label: string,
   entities: Record<string, unknown>[]
 ): ConversationContext[] {
   return entities.flatMap((entity) => {
     const id = entity.id;
-    const title = entity.titulo;
+    const title = entity.titulo ?? entity.nome;
     if ((typeof id !== 'number' && typeof id !== 'string') || typeof title !== 'string' || !title.trim()) {
       return [];
     }
@@ -49,8 +65,7 @@ function entityContexts(
 
 export function conversationContexts(
   territories: Territorio[],
-  missions: Record<string, unknown>[],
-  actions: Record<string, unknown>[]
+  groups: ConversationEntityGroup[]
 ): ConversationContext[] {
   return [
     ...territories.map((territory) => ({
@@ -60,8 +75,7 @@ export function conversationContexts(
       label: `Território · ${territory.nome}${territory.cidade ? ` · ${territory.cidade}` : ''}`,
       territoryId: territory.id
     })),
-    ...entityContexts('MISSAO', 'Missão', missions),
-    ...entityContexts('ACAO', 'Ação', actions)
+    ...groups.flatMap((group) => entityContexts(group.type, group.label, group.entities))
   ];
 }
 

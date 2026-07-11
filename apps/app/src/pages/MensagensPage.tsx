@@ -96,13 +96,26 @@ export default function MensagensPage() {
         ? current
         : conversationList[0]?.id ?? null);
       try {
-        const [territories, missions, actions] = await Promise.all([
+        const [territories, observations, problems, potentialities, missions, actions, results, indicators] = await Promise.all([
           listTerritorios(workspaceId),
+          listEntities<Record<string, unknown>>('/api/observacoes', workspaceId),
+          listEntities<Record<string, unknown>>('/api/problemas', workspaceId),
+          listEntities<Record<string, unknown>>('/api/potencialidades', workspaceId),
           listEntities<Record<string, unknown>>('/api/missoes', workspaceId),
-          listEntities<Record<string, unknown>>('/api/acoes', workspaceId)
+          listEntities<Record<string, unknown>>('/api/acoes', workspaceId),
+          listEntities<Record<string, unknown>>('/api/resultados', workspaceId),
+          listEntities<Record<string, unknown>>('/api/indicadores', workspaceId)
         ]);
         if (activeWorkspaceRef.current !== requestedWorkspace) return;
-        setContexts(conversationContexts(territories, missions, actions));
+        setContexts(conversationContexts(territories, [
+          { type: 'OBSERVACAO', label: 'Observação', entities: observations },
+          { type: 'PROBLEMA', label: 'Problema', entities: problems },
+          { type: 'POTENCIALIDADE', label: 'Potencialidade', entities: potentialities },
+          { type: 'MISSAO', label: 'Missão', entities: missions },
+          { type: 'ACAO', label: 'Ação', entities: actions },
+          { type: 'RESULTADO', label: 'Resultado', entities: results },
+          { type: 'INDICADOR', label: 'Indicador', entities: indicators }
+        ]));
       } catch (caught) {
         if (activeWorkspaceRef.current !== requestedWorkspace) return;
         setContexts([]);
