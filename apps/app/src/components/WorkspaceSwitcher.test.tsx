@@ -54,4 +54,29 @@ describe('WorkspaceSwitcher accessibility', () => {
 
     expect(screen.getByRole('button', { name: 'Remover Dados de demonstração' })).toBeInTheDocument();
   });
+
+  it('uses disclosure semantics and restores focus after Escape', () => {
+    render(
+      <WorkspaceSwitcher
+        workspaces={[
+          { slug: 'workspace-a', nome: 'Território A' },
+          { slug: 'workspace-b', nome: 'Território B' }
+        ]}
+        activeSlug="workspace-a"
+        onSwitch={() => undefined}
+        onCreate={async () => undefined}
+        onDelete={async () => undefined}
+      />
+    );
+    const trigger = screen.getByRole('button', { name: /Espaço de trabalho/ });
+    expect(trigger).not.toHaveAttribute('aria-haspopup');
+    fireEvent.click(trigger);
+    const option = screen.getByRole('button', { name: 'Território B' });
+    option.focus();
+
+    fireEvent.keyDown(document, { key: 'Escape' });
+
+    expect(screen.queryByRole('button', { name: 'Território B' })).not.toBeInTheDocument();
+    expect(trigger).toHaveFocus();
+  });
 });

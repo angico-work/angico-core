@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
 import { icon } from '../lib/icons';
 import WorkspaceMembersModal from './WorkspaceMembersModal';
 import type { Workspace } from '../types';
@@ -21,6 +21,7 @@ export default function WorkspaceSwitcher({ workspaces, activeSlug, onSwitch, on
   const [showMembers, setShowMembers] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
+  const panelId = useId();
 
   const active = workspaces.find((w) => w.slug === activeSlug);
   const activeName = active?.nome ?? activeSlug
@@ -43,7 +44,10 @@ export default function WorkspaceSwitcher({ workspaces, activeSlug, onSwitch, on
       if (rootRef.current && !rootRef.current.contains(e.target as Node)) close();
     }
     function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') close();
+      if (e.key === 'Escape') {
+        close();
+        triggerRef.current?.focus();
+      }
     }
     document.addEventListener('mousedown', onDocClick);
     document.addEventListener('keydown', onKey);
@@ -93,7 +97,7 @@ export default function WorkspaceSwitcher({ workspaces, activeSlug, onSwitch, on
         ref={triggerRef}
         type="button"
         className="workspace-trigger"
-        aria-haspopup="menu"
+        aria-controls={panelId}
         aria-expanded={open ? 'true' : 'false'}
         onClick={() => setOpen((v) => !v)}
       >
@@ -105,7 +109,7 @@ export default function WorkspaceSwitcher({ workspaces, activeSlug, onSwitch, on
       </button>
 
       {open && (
-        <div className="workspace-menu" aria-label="Espaços de trabalho disponíveis">
+        <div id={panelId} className="workspace-menu" aria-label="Espaços de trabalho disponíveis">
           <div className="workspace-options">
             {workspaces.map((w) => {
               const isActive = w.slug === activeSlug;
