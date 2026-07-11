@@ -48,9 +48,10 @@ function ClickHandler({ onMapClick }: { onMapClick?: (lat: number, lng: number) 
 
 function Recenter({ center, zoom }: { center: [number, number]; zoom: number }) {
   const map = useMap();
+  const [latitude, longitude] = center;
   useEffect(() => {
-    map.flyTo(center, zoom, { duration: 0.6 });
-  }, [center[0], center[1], zoom, map]);
+    map.flyTo([latitude, longitude], zoom, { duration: 0.6 });
+  }, [latitude, longitude, map, zoom]);
   return null;
 }
 

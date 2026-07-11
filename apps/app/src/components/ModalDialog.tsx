@@ -35,10 +35,11 @@ export default function ModalDialog({
 
   useEffect(() => {
     const dialog = dialogRef.current;
+    const focusBeforeOpen = previousFocus.current;
     const target = dialog?.querySelector<HTMLElement>('[data-autofocus], [autofocus]')
       ?? dialog?.querySelector<HTMLElement>(FOCUSABLE);
     target?.focus();
-    return () => previousFocus.current?.focus();
+    return () => focusBeforeOpen?.focus();
   }, []);
 
   function handleKeyDown(event: KeyboardEvent<HTMLElement>) {
