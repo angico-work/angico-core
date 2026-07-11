@@ -33,10 +33,9 @@ describe('Site', () => {
   it('renders the versioned Angico identity assets', () => {
     render(<Site {...urls} />);
 
-    expect(screen.getByRole('link', { name: 'Angico, início' }).querySelector('img')).toHaveAttribute(
-      'src',
-      '/angico-leaf-ink.png'
-    );
+    expect(
+      screen.getByRole('link', { name: 'Angico, início' }).querySelector('.wordmark-image')
+    ).toBeInTheDocument();
     expect(
       screen.getByRole('link', { name: 'Angico, voltar ao início' }).querySelector('img')
     ).toHaveAttribute('src', '/angico-logo-white.png');

@@ -1,5 +1,3 @@
-import type { CSSProperties } from 'react';
-
 const traceSteps = [
   {
     id: 'territorio',
@@ -43,7 +41,7 @@ export default function TracePath() {
     <section id="rastro" className="trace-section" aria-labelledby="trace-title">
       <div className="site-frame trace-inner">
         <div className="trace-heading">
-          <p className="section-label section-label-light">01 / Rastro verificável</p>
+          <p className="section-label section-label-light">— 01 – Rastro verificável</p>
           <h2 id="trace-title">Uma ação não é uma linha solta no relatório.</h2>
           <p>
             Ela nasce em um contexto, mobiliza pessoas e só se torna aprendizado quando evidência,
@@ -53,7 +51,7 @@ export default function TracePath() {
 
         <ol className="trace-list" aria-label="Percurso do impacto socioambiental">
           {traceSteps.map((step, index) => (
-            <li key={step.id} style={{ '--step': index } as CSSProperties}>
+            <li key={step.id}>
               <div className="trace-step">
                 <span className="trace-node" aria-hidden="true">
                   {String(index + 1).padStart(2, '0')}

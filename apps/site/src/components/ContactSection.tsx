@@ -42,7 +42,7 @@ export default function ContactSection({ appUrl, contactApiUrl }: ContactSection
   return (
     <section id="contato" className="contact site-frame" aria-labelledby="contact-title">
       <div className="contact-heading">
-        <p className="section-label">05 / Contato</p>
+        <p className="section-label">— 05 – Contato</p>
         <h2 id="contact-title">Existe um percurso que precisa ganhar memória?</h2>
         <p>
           Conte qual ação, território ou resultado precisa ser registrado, acompanhado ou

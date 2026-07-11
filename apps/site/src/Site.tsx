@@ -44,8 +44,7 @@ export default function Site({ appUrl, contactApiUrl }: SiteProps) {
       <header className="site-header">
         <div className="site-frame header-inner">
           <a className="wordmark" href="#inicio" aria-label="Angico, início">
-            <img className="wordmark-symbol" src="/angico-leaf-ink.png" alt="" />
-            <span>Angico</span>
+            <span className="wordmark-image" aria-hidden="true" />
           </a>
 
           <nav aria-label="Navegação principal">
@@ -64,7 +63,7 @@ export default function Site({ appUrl, contactApiUrl }: SiteProps) {
       <main id="conteudo">
         <section id="inicio" className="hero site-frame" aria-labelledby="hero-title">
           <div className="hero-copy">
-            <p className="eyebrow">Memória operacional socioambiental</p>
+            <p className="eyebrow">— Memória operacional socioambiental</p>
             <h1 id="hero-title">
               A ação acontece hoje. <span>O território precisa lembrar amanhã.</span>
             </h1>
@@ -90,7 +89,7 @@ export default function Site({ appUrl, contactApiUrl }: SiteProps) {
           </div>
 
           <aside className="hero-principle" aria-label="Princípio do Angico">
-            <p className="register-code">Princípio 01</p>
+            <p className="register-code">— Princípio 01</p>
             <p>Impacto não é apenas declarado.</p>
             <p>Ele é construído, relacionado e demonstrado ao longo do tempo.</p>
           </aside>
@@ -100,7 +99,7 @@ export default function Site({ appUrl, contactApiUrl }: SiteProps) {
 
         <section id="principio" className="chapter site-frame" aria-labelledby="principle-title">
           <div className="chapter-heading">
-            <p className="section-label">02 / Por que existe</p>
+            <p className="section-label">— 02 – Por que existe</p>
             <h2 id="principle-title">Fragmentos só viram memória quando permanecem conectados.</h2>
           </div>
 
@@ -118,7 +117,7 @@ export default function Site({ appUrl, contactApiUrl }: SiteProps) {
         <section className="field-section" aria-labelledby="field-title">
           <div className="site-frame field-inner">
             <div>
-              <p className="section-label">03 / Realidade do território</p>
+              <p className="section-label">— 03 – Realidade do território</p>
               <h2 id="field-title">Pouca conexão não pode significar pouca memória.</h2>
             </div>
             <div className="field-copy">
@@ -138,7 +137,7 @@ export default function Site({ appUrl, contactApiUrl }: SiteProps) {
 
         <section className="distinction site-frame" aria-labelledby="distinction-title">
           <div>
-            <p className="section-label">04 / O que o Angico responde</p>
+            <p className="section-label">— 04 – O que o Angico responde</p>
             <h2 id="distinction-title">Não é um placar verde.</h2>
             <p className="distinction-lead">
               É uma memória de trabalho para quem precisa compreender e demonstrar uma mudança sem
