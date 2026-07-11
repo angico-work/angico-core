@@ -369,7 +369,9 @@ describe('offline synchronization', () => {
       workspaceId: 'territorio-a',
       conversationId: 12,
       body: 'Registro da visita.',
-      attachments: [new File(['relato'], 'relato.txt', { type: 'text/plain' })]
+      attachments: [new File(['relato'], 'relato.txt', { type: 'text/plain' })],
+      linkedEntityType: 'OBSERVACAO',
+      linkedEntityId: '42'
     }, 'ana.sp');
     const remote = {
       id: 91,
@@ -381,8 +383,8 @@ describe('offline synchronization', () => {
       latitude: null,
       longitude: null,
       localDescricao: null,
-      linkedEntityType: null,
-      linkedEntityId: null,
+      linkedEntityType: 'OBSERVACAO',
+      linkedEntityId: '42',
       clientMessageId: queued.clientMessageId,
       deviceId: queued.deviceId,
       status: 'ENVIADA',
@@ -418,11 +420,39 @@ describe('offline synchronization', () => {
     expect(form.get('clientMessageId')).toBe(queued.clientMessageId);
     expect(form.get('deviceId')).toBe(queued.deviceId);
     expect(form.get('occurredAt')).toBe(queued.occurredAt);
+    expect(form.get('linkedEntityType')).toBe('OBSERVACAO');
+    expect(form.get('linkedEntityId')).toBe('42');
     expect((form.get('attachments') as File).name).toBe('relato.txt');
     expect(await getLocalMessage('ana.sp', 'territorio-a', queued.clientMessageId)).toMatchObject({
       syncStatus: 'SYNCED',
       remote: { id: 91 }
     });
+  });
+
+  it('keeps a linked message pending when the server confirms a different entity', async () => {
+    const queued = await enqueueMessage({
+      workspaceId: 'territorio-a',
+      conversationId: 12,
+      body: 'Registro relacionado.',
+      attachments: [],
+      linkedEntityType: 'MISSAO',
+      linkedEntityId: '8'
+    }, 'ana.sp');
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response(201, {
+      id: 92,
+      workspaceId: 'territorio-a',
+      conversaId: 12,
+      clientMessageId: queued.clientMessageId,
+      linkedEntityType: 'MISSAO',
+      linkedEntityId: '9',
+      anexos: []
+    })));
+
+    const summary = await syncPendingMessages({ ownerId: 'ana.sp', workspaceId: 'territorio-a' });
+
+    expect(summary.retryable).toBe(1);
+    expect(await getLocalMessage('ana.sp', 'territorio-a', queued.clientMessageId))
+      .toMatchObject({ syncStatus: 'RETRYABLE_ERROR', remote: undefined });
   });
 
   it('keeps a message and its blob after a transient failure for an idempotent retry', async () => {

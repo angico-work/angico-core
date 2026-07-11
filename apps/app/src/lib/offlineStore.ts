@@ -5,7 +5,15 @@ import type {
   ProblemaInput, RecursoInput, RecursoUsoInput, ResultadoInput
 } from '../types';
 import { validateEvidenceFile } from './evidenceFiles';
+import {
+  messageLinksMatch,
+  normalizeMessageLink,
+  type MessageLinkedEntityType,
+  type MessageLinkFields
+} from './messageLinks';
 import { validateMessageFiles } from './messageFiles';
+
+export type { MessageLinkedEntityType } from './messageLinks';
 
 const DATABASE_NAME = 'angico-operational-data';
 const DATABASE_VERSION = 4;
@@ -62,6 +70,15 @@ export interface LocalMessageAttachment {
   size: number;
 }
 
+export type MessageLinkInput = MessageLinkFields;
+
+export interface OfflineMessageCaptureInput extends MessageLinkFields {
+  workspaceId: string;
+  conversationId: number;
+  body: string;
+  attachments: File[];
+}
+
 export interface OfflineMessageInput {
   workspaceId: string;
   conversationId: number;
@@ -70,6 +87,8 @@ export interface OfflineMessageInput {
   occurredAt: string;
   deviceId: string;
   attachments: LocalMessageAttachment[];
+  linkedEntityType?: MessageLinkedEntityType;
+  linkedEntityId?: string;
 }
 
 export interface MessageOutboxEntry extends OutboxBase {
@@ -183,6 +202,8 @@ interface MessageDraftValue {
   conversationId: number;
   body: string;
   attachments: LocalMessageAttachment[];
+  linkedEntityType?: MessageLinkedEntityType;
+  linkedEntityId?: string;
 }
 
 interface DraftRecord {
@@ -230,6 +251,8 @@ export interface LocalMessage {
   occurredAt: string;
   deviceId: string;
   attachments: LocalMessageAttachment[];
+  linkedEntityType?: MessageLinkedEntityType;
+  linkedEntityId?: string;
   syncStatus: OutboxStatus;
   lastError?: string;
   remote?: Mensagem;
@@ -239,6 +262,8 @@ export interface LocalMessage {
 export interface MessageDraft {
   body: string;
   attachments: File[];
+  linkedEntityType?: MessageLinkedEntityType;
+  linkedEntityId?: string;
   updatedAt: string;
 }
 
@@ -793,12 +818,14 @@ export async function saveMessageDraft(
   workspaceId: string,
   conversationId: number,
   body: string,
-  files?: File[]
+  files?: File[],
+  link?: MessageLinkInput
 ): Promise<void> {
   requirePartition(ownerId, workspaceId);
   if (!Number.isSafeInteger(conversationId) || conversationId <= 0) {
     throw new Error('A conversa é obrigatória para salvar o rascunho.');
   }
+  const normalizedLink = normalizeMessageLink(link ?? {});
   const db = await database();
   const key = messageDraftKey(ownerId, workspaceId, conversationId);
   const existing = await db.get('drafts', key);
@@ -820,7 +847,8 @@ export async function saveMessageDraft(
     value: {
       conversationId,
       body,
-      attachments: replacement?.references ?? previous?.attachments ?? []
+      attachments: replacement?.references ?? previous?.attachments ?? [],
+      ...(normalizedLink ?? {})
     } satisfies MessageDraftValue,
     updatedAt: now
   });
@@ -844,7 +872,13 @@ export async function loadMessageDraft(
       ? new File([stored.bytes], stored.name, { type: stored.type, lastModified: Date.parse(stored.updatedAt) })
       : undefined;
   }))).filter((file): file is File => Boolean(file));
-  return { body: value.body, attachments, updatedAt: record.updatedAt };
+  return {
+    body: value.body,
+    attachments,
+    linkedEntityType: value.linkedEntityType,
+    linkedEntityId: value.linkedEntityId,
+    updatedAt: record.updatedAt
+  };
 }
 
 export async function clearMessageDraft(
@@ -867,7 +901,7 @@ export async function clearMessageDraft(
 }
 
 export async function enqueueMessage(
-  input: { workspaceId: string; conversationId: number; body: string; attachments: File[] },
+  input: OfflineMessageCaptureInput,
   ownerId: string
 ): Promise<OfflineMessageInput> {
   requirePartition(ownerId, input.workspaceId);
@@ -877,6 +911,7 @@ export async function enqueueMessage(
   if (!input.body.trim() && input.attachments.length === 0) {
     throw new Error('Escreva uma mensagem ou adicione um anexo.');
   }
+  const normalizedLink = normalizeMessageLink(input);
   const clientMessageId = randomId();
   const now = new Date().toISOString();
   const storedAttachments = await attachmentRecords(ownerId, input.workspaceId, input.attachments, now);
@@ -887,7 +922,8 @@ export async function enqueueMessage(
     clientMessageId,
     occurredAt: now,
     deviceId: getDeviceId(),
-    attachments: storedAttachments.references
+    attachments: storedAttachments.references,
+    ...(normalizedLink ?? {})
   };
   const key = localMessageKey(ownerId, input.workspaceId, clientMessageId);
   const local: LocalMessage = {
@@ -900,6 +936,7 @@ export async function enqueueMessage(
     occurredAt: now,
     deviceId: body.deviceId,
     attachments: storedAttachments.references,
+    ...(normalizedLink ?? {}),
     syncStatus: 'QUEUED',
     updatedAt: now
   };
@@ -1093,7 +1130,10 @@ export async function cacheRemoteMessages(
         && pending.workspaceId === workspaceId
         && pending.body.conversationId === conversationId;
       if (pending && !matchingOperation) continue;
-      if (matchingOperation && !messageAttachmentsMatch(existing.attachments, message.anexos)) continue;
+      if (matchingOperation && (
+        !messageAttachmentsMatch(existing.attachments, message.anexos)
+        || !messageLinksMatch(existing, message)
+      )) continue;
       if (matchingOperation) {
         await outbox.put({
           ...pending,
@@ -1188,7 +1228,7 @@ export async function getOfflineOwnerState(ownerId: string): Promise<OfflineOwne
     .filter((draft) => draft.ownerId === ownerId && draft.kind === 'MESSAGE')
     .forEach((draft) => {
       const value = draft.value as MessageDraftValue;
-      if (!value.body.trim() && value.attachments.length === 0) return;
+      if (!value.body.trim() && value.attachments.length === 0 && !value.linkedEntityId) return;
       state.total += 1;
       state.unsynced += 1;
       state.drafts += 1;
@@ -1424,7 +1464,7 @@ export async function recoverMessageAsDraft(
   const existingDraft = await drafts.get(draftKey);
   if (existingDraft?.kind === 'MESSAGE') {
     const value = existingDraft.value as MessageDraftValue;
-    if (value.body.trim() || value.attachments.length > 0) {
+    if (value.body.trim() || value.attachments.length > 0 || value.linkedEntityId) {
       throw new Error('Já existe um rascunho nesta conversa. Envie ou descarte esse conteúdo antes de recuperar a mensagem.');
     }
   }
@@ -1437,7 +1477,9 @@ export async function recoverMessageAsDraft(
     value: {
       conversationId: entry.body.conversationId,
       body: entry.body.body,
-      attachments: entry.body.attachments
+      attachments: entry.body.attachments,
+      linkedEntityType: entry.body.linkedEntityType,
+      linkedEntityId: entry.body.linkedEntityId
     } satisfies MessageDraftValue,
     updatedAt: now
   });

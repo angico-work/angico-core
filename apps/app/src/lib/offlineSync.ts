@@ -1,5 +1,6 @@
 import type { Evidencia, EvidenciaInput, Mensagem, Observacao, ObservacaoInput } from '../types';
 import { apiFetch, apiUrl, hasFreshOfflineSession, isAuthenticated, sessionOwnerId } from './api';
+import { messageLinksMatch } from './messageLinks';
 import {
   claimOutboxEntry,
   enqueueDomainMutation,
@@ -25,6 +26,7 @@ import {
   type DomainMutationPayloadMap,
   type DomainMutationReceipt,
   type ObservationOutboxEntry,
+  type OfflineMessageCaptureInput,
   type OutboxEntry,
   type OutboxClaim,
   type OutboxStatus
@@ -140,6 +142,10 @@ async function sendMessage(entry: MessageOutboxEntry): Promise<Response> {
   form.append('clientMessageId', entry.body.clientMessageId);
   form.append('deviceId', entry.body.deviceId);
   form.append('occurredAt', entry.body.occurredAt);
+  if (entry.body.linkedEntityType && entry.body.linkedEntityId) {
+    form.append('linkedEntityType', entry.body.linkedEntityType);
+    form.append('linkedEntityId', entry.body.linkedEntityId);
+  }
   for (const attachment of entry.body.attachments) {
     const file = await getMessageAttachmentFile(attachment.blobKey, entry.ownerId, entry.workspaceId);
     if (!file) {
@@ -248,6 +254,7 @@ function isConfirmedMessage(value: unknown, entry: MessageOutboxEntry): value is
     && record.workspaceId === entry.workspaceId
     && record.conversaId === entry.body.conversationId
     && record.clientMessageId === entry.id
+    && messageLinksMatch(record, entry.body)
     && sameAttachments(entry, record);
 }
 
@@ -511,12 +518,7 @@ export async function captureObservation(input: ObservacaoInput): Promise<Captur
   };
 }
 
-export async function captureMessage(input: {
-  workspaceId: string;
-  conversationId: number;
-  body: string;
-  attachments: File[];
-}): Promise<CaptureMessageResult> {
+export async function captureMessage(input: OfflineMessageCaptureInput): Promise<CaptureMessageResult> {
   const ownerId = requireCaptureOwner();
   const queued = await enqueueMessage(input, ownerId);
   if (typeof navigator === 'undefined' || navigator.onLine !== false) {

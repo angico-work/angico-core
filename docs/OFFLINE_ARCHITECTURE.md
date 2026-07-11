@@ -98,6 +98,8 @@ operation + workspaceId + clientMutationId + resourceId
 
 O cliente só marca `SYNCED` quando operação, workspace e chave coincidem com a pendência e `resourceId` é um ID remoto positivo. A API deriva o ator da sessão, autoriza o workspace, calcula o hash canônico e grava reserva idempotente, domínio e memória na mesma transação. Repetir a chave com o mesmo payload devolve o mesmo comprovante; reutilizá-la com outro payload retorna `409`.
 
+Uma mensagem pode guardar um vínculo opcional com uma entidade confirmada do mesmo workspace. Tipo e ID positivo permanecem no rascunho, na mensagem local e na outbox. Tanto a resposta do envio quanto a reconciliação pela timeline precisam devolver exatamente o mesmo vínculo antes de marcar a operação como sincronizada.
+
 ## Evidências e anexos
 
 Uma evidência offline só pode apontar para um objeto que já possui ID remoto numérico. Essa restrição impede criar localmente uma relação para um objeto cuja identidade ainda não foi confirmada.

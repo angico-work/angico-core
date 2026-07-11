@@ -242,6 +242,39 @@ describe('offline observation store', () => {
     expect(await loadMessageDraft('ana.sp', 'territorio-a', 13)).toBeUndefined();
   });
 
+  it('preserves a verified entity link from the draft through the queued message', async () => {
+    const link = { linkedEntityType: 'OBSERVACAO', linkedEntityId: '42' };
+    await saveMessageDraft('ana.sp', 'territorio-a', 12, 'Revisar a observação.', undefined, link);
+
+    expect(await loadMessageDraft('ana.sp', 'territorio-a', 12)).toMatchObject(link);
+
+    const queued = await enqueueMessage({
+      workspaceId: 'territorio-a',
+      conversationId: 12,
+      body: 'Revisar a observação.',
+      attachments: [],
+      ...link
+    }, 'ana.sp');
+
+    expect(queued).toMatchObject(link);
+    expect(await getLocalMessage('ana.sp', 'territorio-a', queued.clientMessageId)).toMatchObject(link);
+    expect((await listOutbox('ana.sp', 'territorio-a'))[0].body).toMatchObject(link);
+  });
+
+  it('rejects incomplete, unsupported or non-positive message links before queueing', async () => {
+    const base = {
+      workspaceId: 'territorio-a', conversationId: 12, body: 'Registro.', attachments: []
+    };
+
+    await expect(enqueueMessage({ ...base, linkedEntityType: 'OBSERVACAO' }, 'ana.sp'))
+      .rejects.toThrow('tipo e referência');
+    await expect(enqueueMessage({ ...base, linkedEntityType: 'PESSOA', linkedEntityId: '7' }, 'ana.sp'))
+      .rejects.toThrow('não pode ser vinculado');
+    await expect(enqueueMessage({ ...base, linkedEntityType: 'OBSERVACAO', linkedEntityId: '0' }, 'ana.sp'))
+      .rejects.toThrow('referência válida');
+    expect(await listOutbox('ana.sp', 'territorio-a')).toEqual([]);
+  });
+
   it('can clear one persisted draft without touching another conversation', async () => {
     await saveMessageDraft('ana.sp', 'territorio-a', 12, 'Primeiro');
     await saveMessageDraft('ana.sp', 'territorio-a', 13, 'Segundo');
@@ -258,6 +291,15 @@ describe('offline observation store', () => {
     expect(await getOfflineOwnerState('ana.sp')).toMatchObject({ unsynced: 1, drafts: 1 });
     await expect(clearOfflineOwner('ana.sp')).rejects.toThrow('1 registro');
     expect(await loadMessageDraft('ana.sp', 'territorio-a', 12)).toMatchObject({ body: 'Ainda não enviada.' });
+  });
+
+  it('treats a selected message link as an unfinished local draft', async () => {
+    await saveMessageDraft('ana.sp', 'territorio-a', 12, '', undefined, {
+      linkedEntityType: 'MISSAO', linkedEntityId: '8'
+    });
+
+    expect(await getOfflineOwnerState('ana.sp')).toMatchObject({ unsynced: 1, drafts: 1 });
+    await expect(clearOfflineOwner('ana.sp')).rejects.toThrow('1 registro');
   });
 
   it('persists an offline message, its blob and its fixed operation atomically', async () => {
@@ -350,6 +392,37 @@ describe('offline observation store', () => {
     expect(await getLocalMessage('ana.sp', 'territorio-a', queued.clientMessageId)).toMatchObject({
       syncStatus: 'DISCARDED'
     });
+  });
+
+  it('preserves the linked entity when a rejected message returns to the draft', async () => {
+    const queued = await enqueueMessage({
+      workspaceId: 'territorio-a',
+      conversationId: 12,
+      body: 'Revisar o vínculo.',
+      attachments: [],
+      linkedEntityType: 'MISSAO',
+      linkedEntityId: '8'
+    }, 'ana.sp');
+    await markOutboxStatus(queued.clientMessageId, 'CONFLICT', { message: 'Conteúdo divergente.' });
+
+    await recoverMessageAsDraft(queued.clientMessageId, 'ana.sp', 'territorio-a');
+
+    expect(await loadMessageDraft('ana.sp', 'territorio-a', 12)).toMatchObject({
+      linkedEntityType: 'MISSAO', linkedEntityId: '8'
+    });
+  });
+
+  it('does not overwrite a link-only draft while recovering a rejected message', async () => {
+    const queued = await enqueueMessage({
+      workspaceId: 'territorio-a', conversationId: 12, body: 'Mensagem recusada.', attachments: []
+    }, 'ana.sp');
+    await markOutboxStatus(queued.clientMessageId, 'ACTION_REQUIRED', { message: 'Revise.' });
+    await saveMessageDraft('ana.sp', 'territorio-a', 12, '', undefined, {
+      linkedEntityType: 'OBSERVACAO', linkedEntityId: '42'
+    });
+
+    await expect(recoverMessageAsDraft(queued.clientMessageId, 'ana.sp', 'territorio-a'))
+      .rejects.toThrow('Já existe um rascunho');
   });
 
   it('refuses to overwrite another local draft during message recovery', async () => {
@@ -515,6 +588,44 @@ describe('offline observation store', () => {
     expect((await listOutbox('ana.sp', 'territorio-a'))[0]).toMatchObject({ status: 'QUEUED' });
     expect(await getMessageAttachmentFile(local!.attachments[0].blobKey, 'ana.sp', 'territorio-a'))
       .toBeDefined();
+  });
+
+  it('does not reconcile a linked message when the remote entity differs', async () => {
+    const queued = await enqueueMessage({
+      workspaceId: 'territorio-a',
+      conversationId: 12,
+      body: 'Acompanhar a missão.',
+      attachments: [],
+      linkedEntityType: 'MISSAO',
+      linkedEntityId: '8'
+    }, 'ana.sp');
+
+    await cacheRemoteMessages('ana.sp', 'territorio-a', 12, 7, [{
+      id: 98,
+      workspaceId: 'territorio-a',
+      conversaId: 12,
+      senderPessoaId: 7,
+      senderNome: 'Ana',
+      corpo: 'Acompanhar a missão.',
+      latitude: null,
+      longitude: null,
+      localDescricao: null,
+      linkedEntityType: 'MISSAO',
+      linkedEntityId: '9',
+      clientMessageId: queued.clientMessageId,
+      deviceId: queued.deviceId,
+      status: 'ENVIADA',
+      occurredAt: queued.occurredAt,
+      recordedAt: queued.occurredAt,
+      createdAt: queued.occurredAt,
+      anexos: [],
+      relacoes: []
+    }]);
+
+    const local = await getLocalMessage('ana.sp', 'territorio-a', queued.clientMessageId);
+    expect(local).toMatchObject({ syncStatus: 'QUEUED' });
+    expect(local?.remote).toBeUndefined();
+    expect((await listOutbox('ana.sp', 'territorio-a'))[0]).toMatchObject({ status: 'QUEUED' });
   });
 
   it('does not reconcile a client message identifier returned for another conversation', async () => {

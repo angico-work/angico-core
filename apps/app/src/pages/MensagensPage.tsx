@@ -19,6 +19,7 @@ import {
   sessionOwnerId
 } from '../lib/api';
 import { validateMessageFiles } from '../lib/messageFiles';
+import type { MessageLinkedEntityType } from '../lib/messageLinks';
 import { startOnlinePolling } from '../lib/messagePolling';
 import {
   cacheRemoteMessages,
@@ -54,6 +55,10 @@ export default function MensagensPage() {
   const [timeline, setTimeline] = useState<TimelineItem[]>([]);
   const [draft, setDraft] = useState('');
   const [files, setFiles] = useState<File[]>([]);
+  const [messageLink, setMessageLink] = useState<{
+    linkedEntityType: MessageLinkedEntityType;
+    linkedEntityId: string;
+  } | null>(null);
   const [draftKey, setDraftKey] = useState<string>();
   const [draftState, setDraftState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [loading, setLoading] = useState(true);
@@ -77,6 +82,15 @@ export default function MensagensPage() {
   activeWorkspaceRef.current = workspaceId;
 
   const active = conversations.find((conversation) => conversation.id === activeId) ?? null;
+  const linkedContextKey = messageLink
+    ? `${messageLink.linkedEntityType}:${messageLink.linkedEntityId}`
+    : '';
+  const selectedContext = contexts.find((context) => context.key === linkedContextKey);
+
+  function messageContextName(type: string, id: string): string {
+    return contexts.find((context) => context.type === type && context.id === id)?.label
+      ?? `${contextLabel(type)} · ${id}`;
+  }
 
   const refreshConversations = useCallback(async (background = false) => {
     const requestedWorkspace = workspaceId;
@@ -242,6 +256,7 @@ export default function MensagensPage() {
     setDraftKey(undefined);
     setDraft('');
     setFiles([]);
+    setMessageLink(null);
     setDraftState('idle');
     savedFilesSignature.current = '';
     let activeEffect = true;
@@ -249,8 +264,12 @@ export default function MensagensPage() {
       if (!activeEffect) return;
       setDraft(saved?.body ?? '');
       setFiles(saved?.attachments ?? []);
+      setMessageLink(saved?.linkedEntityType && saved.linkedEntityId ? {
+        linkedEntityType: saved.linkedEntityType,
+        linkedEntityId: saved.linkedEntityId
+      } : null);
       savedFilesSignature.current = fileSignature(saved?.attachments ?? []);
-      setDraftState(saved && (saved.body || saved.attachments.length) ? 'saved' : 'idle');
+      setDraftState(saved && (saved.body || saved.attachments.length || saved.linkedEntityId) ? 'saved' : 'idle');
       setDraftKey(key);
     });
     return () => { activeEffect = false; };
@@ -266,7 +285,7 @@ export default function MensagensPage() {
       && activeWorkspaceRef.current === workspaceId
       && activeConversationRef.current === activeId;
     const timer = window.setTimeout(() => {
-      if (!draft.trim() && files.length === 0) {
+      if (!draft.trim() && files.length === 0 && !messageLink) {
         void clearMessageDraft(ownerId, workspaceId, activeId)
           .then(() => { if (stillCurrent()) setDraftState('idle'); })
           .catch(() => { if (stillCurrent()) setDraftState('error'); });
@@ -275,7 +294,13 @@ export default function MensagensPage() {
       setDraftState('saving');
       const nextFilesSignature = fileSignature(files);
       const filesChanged = nextFilesSignature !== savedFilesSignature.current;
-      void saveMessageDraft(ownerId, workspaceId, activeId, draft, filesChanged ? files : undefined)
+      const save = messageLink
+        ? saveMessageDraft(ownerId, workspaceId, activeId, draft, filesChanged ? files : undefined, {
+            linkedEntityType: messageLink.linkedEntityType,
+            linkedEntityId: messageLink.linkedEntityId
+          })
+        : saveMessageDraft(ownerId, workspaceId, activeId, draft, filesChanged ? files : undefined);
+      void save
         .then(() => {
           if (!stillCurrent()) return;
           savedFilesSignature.current = nextFilesSignature;
@@ -293,7 +318,7 @@ export default function MensagensPage() {
       if (draftSaveGeneration.current === generation) draftSaveGeneration.current += 1;
       if (draftSaveTimer.current === timer) draftSaveTimer.current = undefined;
     };
-  }, [activeId, draft, draftKey, files, ownerId, sending, workspaceId]);
+  }, [activeId, draft, draftKey, files, messageLink, ownerId, sending, workspaceId]);
 
   useEffect(() => {
     const stream = streamRef.current;
@@ -305,6 +330,10 @@ export default function MensagensPage() {
   async function handleSend(event: FormEvent) {
     event.preventDefault();
     if (activeId == null || !ownerId || (!draft.trim() && files.length === 0)) return;
+    if (messageLink && !selectedContext) {
+      setMessageError('O vínculo selecionado não está mais disponível neste território.');
+      return;
+    }
     const requestedWorkspace = workspaceId;
     const requestedConversation = activeId;
     if (draftSaveTimer.current !== undefined) {
@@ -314,11 +343,21 @@ export default function MensagensPage() {
     setSending(true);
     setMessageError(null);
     try {
-      await captureMessage({ workspaceId, conversationId: activeId, body: draft, attachments: files });
+      await captureMessage({
+        workspaceId,
+        conversationId: activeId,
+        body: draft,
+        attachments: files,
+        ...(selectedContext ? {
+          linkedEntityType: selectedContext.type,
+          linkedEntityId: selectedContext.id
+        } : {})
+      });
       if (activeWorkspaceRef.current !== requestedWorkspace
         || activeConversationRef.current !== requestedConversation) return;
       setDraft('');
       setFiles([]);
+      setMessageLink(null);
       savedFilesSignature.current = '';
       setDraftState('idle');
       await refreshMessages(activeId, false);
@@ -463,6 +502,9 @@ export default function MensagensPage() {
                         <article key={item.key} className={`message-bubble ${mine ? 'mine' : ''}`}>
                           <header><b>{mine ? 'Você' : message.senderNome ?? 'Participante'}</b><time dateTime={message.occurredAt}>{when(message.occurredAt)}</time></header>
                           {message.corpo && <p>{message.corpo}</p>}
+                          {message.linkedEntityType && message.linkedEntityId && (
+                            <small className="message-linked-context">Vínculo: {messageContextName(message.linkedEntityType, message.linkedEntityId)}</small>
+                          )}
                           {message.anexos.length > 0 && <RemoteMessageAttachments attachments={message.anexos} />}
                           <footer className="message-provenance"><span>Enviada</span><time dateTime={message.recordedAt}>registrada {when(message.recordedAt)}</time></footer>
                         </article>
@@ -474,6 +516,9 @@ export default function MensagensPage() {
                       <article key={item.key} className="message-bubble mine local-message">
                         <header><b>Você</b><time dateTime={message.occurredAt}>{when(message.occurredAt)}</time></header>
                         {message.body && <p>{message.body}</p>}
+                        {message.linkedEntityType && message.linkedEntityId && (
+                          <small className="message-linked-context">Vínculo: {messageContextName(message.linkedEntityType, message.linkedEntityId)}</small>
+                        )}
                         {message.attachments.length > 0 && <div className="attachment-list">{message.attachments.map((attachment) => (
                           <LocalMessageAttachment
                             key={attachment.blobKey}
@@ -499,6 +544,25 @@ export default function MensagensPage() {
                   </div>
                   <label htmlFor="message-draft">Mensagem</label>
                   <textarea id="message-draft" rows={3} value={draft} onChange={(event) => setDraft(event.target.value)} placeholder="Escreva apenas o que precisa ficar registrado…" />
+                  <div className="field message-link-field">
+                    <label htmlFor="message-link">Vincular mensagem a <span>(opcional)</span></label>
+                    <select
+                      id="message-link"
+                      aria-label="Vincular mensagem a"
+                      value={linkedContextKey}
+                      onChange={(event) => {
+                        const context = contexts.find((candidate) => candidate.key === event.target.value);
+                        setMessageLink(context ? {
+                          linkedEntityType: context.type,
+                          linkedEntityId: context.id
+                        } : null);
+                      }}
+                    >
+                      <option value="">Sem vínculo específico</option>
+                      {contexts.map((context) => <option key={context.key} value={context.key}>{context.label}</option>)}
+                    </select>
+                    {messageLink && !selectedContext && <small>O vínculo salvo não está disponível. Selecione outro ou remova o vínculo para enviar.</small>}
+                  </div>
                   <footer>
                     <label className="ghost-button">Anexar evidência<input type="file" accept="image/jpeg,image/png,image/webp,application/pdf,text/plain" multiple hidden onChange={(event) => selectFiles(Array.from(event.target.files ?? []))} /></label>
                     <button type="submit" className="primary-button" disabled={sending || (!draft.trim() && files.length === 0)}>{sending ? 'Guardando…' : navigator.onLine ? 'Enviar mensagem' : 'Guardar na fila'}</button>

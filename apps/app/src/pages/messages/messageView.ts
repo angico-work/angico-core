@@ -1,5 +1,6 @@
 import type { Mensagem, Territorio } from '../../types';
 import type { LocalMessage, OutboxStatus } from '../../lib/offlineStore';
+import type { MessageLinkedEntityType } from '../../lib/messageLinks';
 
 export function when(value: string): string {
   return new Date(value).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
@@ -31,15 +32,7 @@ export interface ConversationContext {
   territoryId?: number;
 }
 
-export type ConversationContextType =
-  | 'TERRITORIO'
-  | 'OBSERVACAO'
-  | 'PROBLEMA'
-  | 'POTENCIALIDADE'
-  | 'MISSAO'
-  | 'ACAO'
-  | 'RESULTADO'
-  | 'INDICADOR';
+export type ConversationContextType = MessageLinkedEntityType;
 
 export interface ConversationEntityGroup {
   type: Exclude<ConversationContextType, 'TERRITORIO'>;

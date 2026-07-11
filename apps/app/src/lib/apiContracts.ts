@@ -22,6 +22,7 @@ import type {
   Workspace,
   WorkspaceMember
 } from '../types';
+import { isValidMessageLinkPair } from './messageLinks';
 
 type JsonRecord = Record<string, unknown>;
 type ItemValidator = (value: unknown, workspaceId: string) => boolean;
@@ -439,9 +440,7 @@ function isMensagem(value: unknown, workspaceId: string, conversaId?: number): v
     && text(value.corpo)
     && coordinatePair(value)
     && nullableText(value.localDescricao)
-    && nullableText(value.linkedEntityType)
-    && nullableText(value.linkedEntityId)
-    && ((value.linkedEntityType === null) === (value.linkedEntityId === null))
+    && isValidMessageLinkPair(value.linkedEntityType, value.linkedEntityId)
     && nullableText(value.clientMessageId)
     && nullableText(value.deviceId)
     && presentText(value.status)

@@ -254,6 +254,15 @@ describe('API snapshot contracts', () => {
     }])).toBe(false);
     expect(isMensagemList([message], 'territorio-a', 12)).toBe(true);
     expect(isMensagemList([{
+      ...message, linkedEntityType: 'OBSERVACAO', linkedEntityId: '42'
+    }], 'territorio-a', 12)).toBe(true);
+    expect(isMensagemList([{
+      ...message, linkedEntityType: 'PESSOA', linkedEntityId: '7'
+    }], 'territorio-a', 12)).toBe(false);
+    expect(isMensagemList([{
+      ...message, linkedEntityType: 'OBSERVACAO', linkedEntityId: '0'
+    }], 'territorio-a', 12)).toBe(false);
+    expect(isMensagemList([{
       ...message,
       anexos: [{ ...message.anexos[0], sizeBytes: -1 }]
     }], 'territorio-a', 12)).toBe(false);

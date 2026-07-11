@@ -188,6 +188,7 @@
 .message-bubble header { margin-bottom: .45rem; display: flex; justify-content: space-between; gap: 1rem; }
 .message-bubble header time { color: var(--muted); font-size: .74rem; }
 .message-bubble p { margin: 0; white-space: pre-wrap; }
+.message-linked-context { margin-top: .45rem; display: block; color: var(--muted); }
 .message-bubble.local-message { border-style: dashed; }
 .message-provenance { margin-top: .55rem; padding-top: .4rem; border-top: 1px solid var(--line); display: flex; align-items: center; justify-content: space-between; gap: .5rem; color: var(--muted); font-size: .7rem; }
 .message-provenance span { font-weight: 600; }
@@ -200,6 +201,7 @@
 .attachment-list small { color: var(--muted); }
 .message-composer { padding: .8rem 1rem 1rem; border-top: 1px solid var(--line); background: #fff; }
 .message-composer > label { display: block; margin-bottom: .35rem; font-weight: 600; }
+.message-link-field { margin: .65rem 0 0; }
 .message-composer footer { margin-top: .6rem; display: flex; justify-content: space-between; gap: .6rem; }
 .selected-files { margin-bottom: .5rem; display: grid; gap: .35rem; }
 .selected-file { min-height: 50px; padding: .4rem .5rem; border: 1px solid var(--line); display: grid; grid-template-columns: auto 1fr 36px; align-items: center; gap: .55rem; background: color-mix(in srgb, var(--water) 7%, var(--surface)); }

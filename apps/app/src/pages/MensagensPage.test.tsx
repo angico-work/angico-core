@@ -177,6 +177,8 @@ describe('MensagensPage', () => {
     vi.mocked(loadMessageDraft).mockResolvedValue({
       body: 'Confirmar horário do mutirão.',
       attachments: [new File(['ata'], 'ata.txt', { type: 'text/plain' })],
+      linkedEntityType: 'TERRITORIO',
+      linkedEntityId: '4',
       updatedAt: '2026-07-10T14:00:00Z'
     });
 
@@ -184,7 +186,126 @@ describe('MensagensPage', () => {
 
     expect(await screen.findByDisplayValue('Confirmar horário do mutirão.')).toBeInTheDocument();
     expect(screen.getByText('ata.txt')).toBeInTheDocument();
+    expect(screen.getByRole('combobox', { name: 'Vincular mensagem a' })).toHaveValue('TERRITORIO:4');
     expect(screen.getByText('Rascunho salvo neste aparelho')).toBeInTheDocument();
+  });
+
+  it('preserves a restored link while authorized contexts are still loading', async () => {
+    const territories = deferred<Awaited<ReturnType<typeof listTerritorios>>>();
+    vi.mocked(listTerritorios).mockReturnValue(territories.promise);
+    vi.mocked(loadMessageDraft).mockResolvedValue({
+      body: 'Confirmar vínculo.',
+      attachments: [],
+      linkedEntityType: 'TERRITORIO',
+      linkedEntityId: '4',
+      updatedAt: '2026-07-10T14:00:00Z'
+    });
+    vi.mocked(saveMessageDraft).mockResolvedValue(undefined);
+
+    renderPage();
+    await waitFor(() => expect(loadMessageDraft).toHaveBeenCalledWith(
+      'stable-owner', 'territorio-a', 12
+    ));
+    await new Promise((resolve) => window.setTimeout(resolve, 450));
+
+    expect(saveMessageDraft).toHaveBeenCalledWith(
+      'stable-owner',
+      'territorio-a',
+      12,
+      'Confirmar vínculo.',
+      undefined,
+      { linkedEntityType: 'TERRITORIO', linkedEntityId: '4' }
+    );
+    territories.resolve([{
+      id: 4,
+      workspaceId: 'territorio-a',
+      nome: 'Nascente Sul',
+      tipo: 'BAIRRO',
+      cidade: 'Recife',
+      bairro: null,
+      estado: 'PE',
+      pais: 'Brasil',
+      latitude: null,
+      longitude: null,
+      boundingBox: [],
+      status: 'ATIVO',
+      updatedAt: null
+    }]);
+  });
+
+  it('queues the selected authorized context with the message', async () => {
+    Object.defineProperty(navigator, 'onLine', { configurable: true, value: false });
+    vi.mocked(captureMessage).mockResolvedValue({ clientMessageId: 'msg-linked', status: 'QUEUED' });
+    renderPage();
+
+    const editor = await screen.findByLabelText('Mensagem');
+    fireEvent.change(screen.getByRole('combobox', { name: 'Vincular mensagem a' }), {
+      target: { value: 'TERRITORIO:4' }
+    });
+    const link = screen.getByRole('combobox', { name: 'Vincular mensagem a' });
+    fireEvent.change(editor, { target: { value: 'A nascente foi vistoriada.' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar na fila' }));
+
+    await waitFor(() => expect(captureMessage).toHaveBeenCalledWith({
+      workspaceId: 'territorio-a',
+      conversationId: 12,
+      body: 'A nascente foi vistoriada.',
+      attachments: [],
+      linkedEntityType: 'TERRITORIO',
+      linkedEntityId: '4'
+    }));
+    await waitFor(() => expect(link).toHaveValue(''));
+  });
+
+  it('shows the verified context recorded on a message', async () => {
+    vi.mocked(listMensagens).mockResolvedValue([{
+      ...remoteMessage,
+      linkedEntityType: 'TERRITORIO',
+      linkedEntityId: '4'
+    }]);
+
+    renderPage();
+
+    expect(await screen.findByText('Vínculo: Território · Nascente Sul · Recife')).toBeInTheDocument();
+  });
+
+  it('shows a verified context on a message that is still local', async () => {
+    vi.mocked(listLocalMessages).mockResolvedValue([{
+      key: 'local-linked',
+      ownerId: 'stable-owner',
+      workspaceId: 'territorio-a',
+      conversationId: 12,
+      clientMessageId: 'local-linked',
+      body: 'Registro ainda local.',
+      occurredAt: '2026-07-10T13:55:00Z',
+      deviceId: 'device-1',
+      attachments: [],
+      linkedEntityType: 'TERRITORIO',
+      linkedEntityId: '4',
+      syncStatus: 'QUEUED',
+      updatedAt: '2026-07-10T13:55:00Z'
+    }]);
+
+    renderPage();
+
+    expect(await screen.findByText('Registro ainda local.')).toBeInTheDocument();
+    expect(screen.getByText('Vínculo: Território · Nascente Sul · Recife')).toBeInTheDocument();
+  });
+
+  it('clears the composer link when another conversation is opened', async () => {
+    const secondConversation = { ...conversation, id: 13, titulo: 'Equipe de campo', unreadCount: 0 };
+    vi.mocked(listConversas).mockResolvedValue([conversation, secondConversation]);
+    vi.mocked(listMensagens).mockImplementation(async (id) => [{
+      ...remoteMessage, id: id + 80, conversaId: id
+    }]);
+    renderPage();
+
+    const link = await screen.findByRole('combobox', { name: 'Vincular mensagem a' });
+    fireEvent.change(link, { target: { value: 'TERRITORIO:4' } });
+    expect(link).toHaveValue('TERRITORIO:4');
+    fireEvent.click(screen.getByRole('button', { name: /Equipe de campo/ }));
+
+    await waitFor(() => expect(link).toHaveValue(''));
   });
 
   it('ignores completion of a draft save from the previous workspace', async () => {
