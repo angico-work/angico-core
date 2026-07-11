@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Link, useNavigate, useOutletContext, useParams } from 'react-router-dom';
 import type { AppContext } from '../components/AppShell';
 import { EmptyState, ErrorState, LoadingState } from '../components/PageFeedback';
@@ -10,17 +10,41 @@ interface RootOption {
   nome: string;
 }
 
-const ROOT_LABELS: Record<RastroRootType, { singular: string; plural: string; empty: string }> = {
-  TERRITORIO: { singular: 'Território', plural: 'Territórios', empty: 'Nenhum território' },
-  MISSAO: { singular: 'Missão', plural: 'Missões', empty: 'Nenhuma missão' },
-  ACAO: { singular: 'Ação', plural: 'Ações', empty: 'Nenhuma ação' }
+interface RootRecord {
+  id: number | string;
+  nome?: string;
+  titulo?: string;
+  title?: string;
+  valor?: number;
+  unidade?: string | null;
+}
+
+interface RootDefinition {
+  singular: string;
+  plural: string;
+  empty: string;
+  path: string;
+  resource: string;
+}
+
+const ROOTS: Record<RastroRootType, RootDefinition> = {
+  TERRITORIO: { singular: 'Território', plural: 'Territórios', empty: 'Nenhum território', path: '/api/territorios', resource: 'territorios' },
+  OBSERVACAO: { singular: 'Observação', plural: 'Observações', empty: 'Nenhuma observação', path: '/api/observacoes', resource: 'observacoes' },
+  PROBLEMA: { singular: 'Problema', plural: 'Problemas', empty: 'Nenhum problema', path: '/api/problemas', resource: 'problemas' },
+  POTENCIALIDADE: { singular: 'Potencialidade', plural: 'Potencialidades', empty: 'Nenhuma potencialidade', path: '/api/potencialidades', resource: 'potencialidades' },
+  MISSAO: { singular: 'Missão', plural: 'Missões', empty: 'Nenhuma missão', path: '/api/missoes', resource: 'missoes' },
+  ACAO: { singular: 'Ação', plural: 'Ações', empty: 'Nenhuma ação', path: '/api/acoes', resource: 'acoes' },
+  PESSOA: { singular: 'Pessoa', plural: 'Pessoas', empty: 'Nenhuma pessoa', path: '/api/pessoas', resource: 'pessoas' },
+  ORGANIZACAO: { singular: 'Organização', plural: 'Organizações', empty: 'Nenhuma organização', path: '/api/organizacoes', resource: 'organizacoes' },
+  RECURSO: { singular: 'Recurso', plural: 'Recursos', empty: 'Nenhum recurso', path: '/api/recursos', resource: 'recursos' },
+  EVIDENCIA: { singular: 'Evidência', plural: 'Evidências', empty: 'Nenhuma evidência', path: '/api/evidencias', resource: 'evidencias' },
+  RESULTADO: { singular: 'Resultado', plural: 'Resultados', empty: 'Nenhum resultado', path: '/api/resultados', resource: 'resultados' },
+  INDICADOR: { singular: 'Indicador', plural: 'Indicadores', empty: 'Nenhum indicador', path: '/api/indicadores', resource: 'indicadores' },
+  MEDICAO: { singular: 'Medição', plural: 'Medições', empty: 'Nenhuma medição', path: '/api/medicoes', resource: 'medicoes' }
 };
 
-const ROOT_PATHS: Record<RastroRootType, string> = {
-  TERRITORIO: '/api/territorios',
-  MISSAO: '/api/missoes',
-  ACAO: '/api/acoes'
-};
+const ROOT_TYPES = Object.keys(ROOTS) as RastroRootType[];
+const SAFE_REFERENCE_ID = /^[A-Za-z0-9._:-]{1,160}$/;
 
 const RELATION_LABELS: Record<string, string> = {
   'MISSÃO_ATUA_EM_TERRITÓRIO': 'atua no território',
@@ -35,7 +59,15 @@ const VALUE_LABELS: Record<string, string> = {
   MISSAO: 'Missão',
   ACAO: 'Ação',
   OBSERVACAO: 'Observação',
+  PROBLEMA: 'Problema',
+  POTENCIALIDADE: 'Potencialidade',
   PESSOA: 'Pessoa',
+  ORGANIZACAO: 'Organização',
+  RECURSO: 'Recurso',
+  EVIDENCIA: 'Evidência',
+  RESULTADO: 'Resultado',
+  INDICADOR: 'Indicador',
+  MEDICAO: 'Medição',
   SERVER_RECORDED: 'Registrado no servidor',
   SYNCED_FROM_OFFLINE: 'Sincronizado após registro offline',
   SYNCED: 'Sincronizado',
@@ -43,7 +75,7 @@ const VALUE_LABELS: Record<string, string> = {
 };
 
 function isRootType(value: string | undefined): value is RastroRootType {
-  return value === 'TERRITORIO' || value === 'MISSAO' || value === 'ACAO';
+  return Boolean(value && ROOT_TYPES.includes(value as RastroRootType));
 }
 
 function humanize(value: string | null | undefined): string {
@@ -62,6 +94,38 @@ function formatDate(value: string | null | undefined): string {
 
 function referenceKey(reference: RastroReference): string {
   return `${reference.type}:${reference.id}`;
+}
+
+function rootName(record: RootRecord, type: RastroRootType): string {
+  const name = [record.nome, record.titulo, record.title]
+    .find((value) => typeof value === 'string' && value.trim());
+  if (name) return name.trim();
+  if (typeof record.valor === 'number' && Number.isFinite(record.valor)) {
+    const unit = record.unidade?.trim();
+    return unit ? `${record.valor} ${unit}` : String(record.valor);
+  }
+  return `${ROOTS[type].singular} sem título`;
+}
+
+function referencePath(reference: RastroReference): string | null {
+  if (!isRootType(reference.type)) return null;
+  if (reference.resource !== ROOTS[reference.type].resource) return null;
+  if (!SAFE_REFERENCE_ID.test(reference.id)) return null;
+  return `/app/rastro/${reference.type}/${encodeURIComponent(reference.id)}`;
+}
+
+function TraceReference({
+  reference,
+  emphasized = false,
+  children
+}: {
+  reference: RastroReference;
+  emphasized?: boolean;
+  children: ReactNode;
+}) {
+  const content = emphasized ? <b>{children}</b> : children;
+  const path = referencePath(reference);
+  return path ? <Link to={path}>{content}</Link> : <>{content}</>;
 }
 
 function gapAction(code: string, subject: RastroReference): { label: string; to: string } | null {
@@ -134,14 +198,14 @@ export default function RastroPage() {
     setOptions([]);
     setOptionsLoading(true);
     setOptionsError(null);
-    const request = selectedType === 'TERRITORIO'
+    const request: Promise<RootRecord[]> = selectedType === 'TERRITORIO'
       ? listTerritorios(workspaceId)
-      : listEntities<{ id: number | string; titulo?: string; nome?: string }>(ROOT_PATHS[selectedType], workspaceId);
+      : listEntities<RootRecord>(ROOTS[selectedType].path, workspaceId);
     request.then((records) => {
       if (!active) return;
       setOptions(records.map((record) => ({
         id: String(record.id),
-        nome: 'nome' in record && record.nome ? record.nome : ('titulo' in record && record.titulo ? record.titulo : `${ROOT_LABELS[selectedType].singular} sem título`)
+        nome: rootName(record, selectedType)
       })));
     }).catch((caught) => {
       if (active) setOptionsError(caught instanceof Error ? caught.message : 'Não foi possível carregar as raízes.');
@@ -239,8 +303,8 @@ export default function RastroPage() {
               value={selectedType}
               onChange={(event) => changeType(event.target.value as RastroRootType)}
             >
-              {(Object.keys(ROOT_LABELS) as RastroRootType[]).map((type) => (
-                <option key={type} value={type}>{ROOT_LABELS[type].singular}</option>
+              {ROOT_TYPES.map((type) => (
+                <option key={type} value={type}>{ROOTS[type].singular}</option>
               ))}
             </select>
           </div>
@@ -257,10 +321,10 @@ export default function RastroPage() {
             </select>
           </div>
         </div>
-        {optionsLoading && <div className="inline-status" role="status">Carregando {ROOT_LABELS[selectedType].plural.toLocaleLowerCase('pt-BR')}…</div>}
+        {optionsLoading && <div className="inline-status" role="status">Carregando {ROOTS[selectedType].plural.toLocaleLowerCase('pt-BR')}…</div>}
         {optionsError && <div className="form-error" role="alert">{optionsError}</div>}
         {!optionsLoading && !optionsError && options.length === 0 && (
-          <p className="inline-empty">{ROOT_LABELS[selectedType].empty} disponível neste espaço de trabalho.</p>
+          <p className="inline-empty">{ROOTS[selectedType].empty} disponível neste espaço de trabalho.</p>
         )}
       </section>
 
@@ -268,14 +332,14 @@ export default function RastroPage() {
       {traceLoading && <LoadingState label="Carregando Rastro…" />}
       {traceError && <ErrorState message={traceError} onRetry={() => void refreshTrace()} />}
       {!routeType && !routeId && !optionsLoading && !optionsError && options.length > 0 && (
-        <EmptyState title="Selecione uma raiz" message="Escolha um território, uma missão ou uma ação pelo nome para abrir o percurso." />
+        <EmptyState title="Selecione uma raiz" message="Escolha um objeto pelo nome para abrir o percurso." />
       )}
 
       {trace && (
         <article className="rastro-sheet">
           <header className="rastro-root">
             <div>
-              <span>{ROOT_LABELS[routeType ?? 'TERRITORIO'].singular}</span>
+              <span>{ROOTS[routeType ?? 'TERRITORIO'].singular}</span>
               <h2>{trace.root.name}</h2>
               <p>{humanize(trace.root.status)} · Sincronização: {humanize(trace.root.syncStatus)}</p>
             </div>
@@ -299,7 +363,7 @@ export default function RastroPage() {
                 {trace.stages.map((stage) => (
                   <li key={referenceKey(stage.reference)} data-testid="rastro-stage">
                     <span aria-hidden="true" />
-                    <div><b>{stage.name}</b><small>{humanize(stage.reference.type)} · {humanize(stage.status)}</small></div>
+                    <div><TraceReference reference={stage.reference} emphasized>{stage.name}</TraceReference><small>{humanize(stage.reference.type)} · {humanize(stage.status)}</small></div>
                     <div className="rastro-provenance"><span>Sincronização: {humanize(stage.syncStatus)}</span><span>Registrado em {formatDate(stage.recordedAt)}</span></div>
                   </li>
                 ))}
@@ -313,9 +377,9 @@ export default function RastroPage() {
               <ul className="rastro-lines">
                 {trace.relations.map((relation, index) => (
                   <li key={`${referenceKey(relation.origin)}-${referenceKey(relation.destination)}-${index}`}>
-                    <b>{referenceName(relation.origin)}</b>
+                    <TraceReference reference={relation.origin} emphasized>{referenceName(relation.origin)}</TraceReference>
                     <span>{RELATION_LABELS[relation.type] ?? humanize(relation.type).toLocaleLowerCase('pt-BR')}</span>
-                    <b>{referenceName(relation.destination)}</b>
+                    <TraceReference reference={relation.destination} emphasized>{referenceName(relation.destination)}</TraceReference>
                     <small>Registrado em {formatDate(relation.recordedAt)}{actorName(relation.actorId) ? ` · Autoria: ${actorName(relation.actorId)}` : ''}</small>
                   </li>
                 ))}
@@ -330,9 +394,9 @@ export default function RastroPage() {
                 <ul className="rastro-lines">
                   {trace.participants.map((participant, index) => (
                     <li key={`${referenceKey(participant.participant)}-${referenceKey(participant.at)}-${participant.relationType}-${index}`}>
-                      <b>{participant.name}</b>
+                      <TraceReference reference={participant.participant} emphasized>{participant.name}</TraceReference>
                       <span>{humanize(participant.relationType)} · {humanize(participant.status)}</span>
-                      <small>Em {referenceName(participant.at)}</small>
+                      <small>Em <TraceReference reference={participant.at}>{referenceName(participant.at)}</TraceReference></small>
                     </li>
                   ))}
                 </ul>

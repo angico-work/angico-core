@@ -4,7 +4,7 @@ import { MemoryRouter, Outlet, Route, Routes, useLocation } from 'react-router-d
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import RastroPage from './RastroPage';
 import { listEntities, listTerritorios, loadRastro } from '../lib/api';
-import type { RastroResponse, Territorio } from '../types';
+import type { PessoaHit, RastroResponse, Territorio } from '../types';
 
 vi.mock('../lib/api', () => ({
   listEntities: vi.fn(),
@@ -31,7 +31,7 @@ const territorio: Territorio = {
 const rastro: RastroResponse = {
   workspaceId: 'workspace-a',
   root: {
-    reference: { type: 'MISSAO', id: '20', resource: '/api/missoes/20' },
+    reference: { type: 'MISSAO', id: '20', resource: 'missoes' },
     name: 'Recuperar a nascente',
     status: 'EM_ANDAMENTO',
     occurredAt: '2026-07-09T09:00:00Z',
@@ -40,37 +40,37 @@ const rastro: RastroResponse = {
   },
   stages: [
     {
-      reference: { type: 'TERRITORIO', id: '4', resource: '/api/territorios/4' },
+      reference: { type: 'TERRITORIO', id: '4', resource: 'territorios' },
       name: 'Nascente Sul', status: 'ATIVO', occurredAt: null,
       recordedAt: '2026-07-08T10:00:00Z', syncStatus: 'SYNCED'
     },
     {
-      reference: { type: 'MISSAO', id: '20', resource: '/api/missoes/20' },
+      reference: { type: 'MISSAO', id: '20', resource: 'missoes' },
       name: 'Recuperar a nascente', status: 'EM_ANDAMENTO', occurredAt: '2026-07-09T09:00:00Z',
       recordedAt: '2026-07-09T10:00:00Z', syncStatus: 'SYNCED'
     }
   ],
   relations: [{
     type: 'MISSÃO_ATUA_EM_TERRITÓRIO',
-    origin: { type: 'MISSAO', id: '20', resource: '/api/missoes/20' },
-    destination: { type: 'TERRITORIO', id: '4', resource: '/api/territorios/4' },
+    origin: { type: 'MISSAO', id: '20', resource: 'missoes' },
+    destination: { type: 'TERRITORIO', id: '4', resource: 'territorios' },
     actorId: 'ana.sp',
     recordedAt: '2026-07-09T10:00:00Z'
   }],
   events: [{
     id: 'evt-1', type: 'MISSAO_CRIADA',
-    subject: { type: 'MISSAO', id: '20', resource: '/api/missoes/20' },
+    subject: { type: 'MISSAO', id: '20', resource: 'missoes' },
     actorId: 'ana.sp', occurredAt: '2026-07-09T09:00:00Z',
     recordedAt: '2026-07-09T10:00:00Z', syncStatus: 'SYNCED'
   }],
   participants: [{
-    participant: { type: 'PESSOA', id: '7', resource: '/api/pessoas/7' },
+    participant: { type: 'PESSOA', id: '7', resource: 'pessoas' },
     name: 'Ana Souza', status: 'ATIVA', relationType: 'RESPONSAVEL_POR',
-    at: { type: 'MISSAO', id: '20', resource: '/api/missoes/20' }
+    at: { type: 'MISSAO', id: '20', resource: 'missoes' }
   }],
   gaps: [{
     code: 'MISSAO_SEM_ACAO',
-    subject: { type: 'MISSAO', id: '20', resource: '/api/missoes/20' },
+    subject: { type: 'MISSAO', id: '20', resource: 'missoes' },
     reason: 'A missão ainda não possui ação registrada.',
     nextAction: 'Registrar uma ação vinculada à missão.',
     expectedRelation: { originType: 'ACAO', relationType: 'EXECUTA', destinationType: 'MISSAO' }
@@ -131,6 +131,33 @@ describe('RastroPage', () => {
     expect(loadRastro).toHaveBeenCalledWith('TERRITORIO', '4', 'workspace-a');
   });
 
+  it('offers every trace object type and opens a person through its canonical endpoint', async () => {
+    const pessoa: PessoaHit = {
+      id: 7,
+      workspaceId: 'workspace-a',
+      nome: 'Ana Souza',
+      papel: 'Mobilizadora',
+      angicoId: 'ana.souza',
+      telefone: null,
+      foto: null,
+      createdAt: '2026-07-09T10:00:00Z'
+    };
+    vi.mocked(listEntities).mockResolvedValue([pessoa]);
+    renderPage('/app/rastro');
+
+    const typeSelect = screen.getByLabelText('Tipo de raiz');
+    expect(typeSelect.querySelectorAll('option')).toHaveLength(13);
+    fireEvent.change(typeSelect, { target: { value: 'PESSOA' } });
+
+    const rootSelect = await screen.findByLabelText('Raiz do Rastro');
+    expect(await screen.findByRole('option', { name: 'Ana Souza' })).toBeInTheDocument();
+    expect(listEntities).toHaveBeenCalledWith('/api/pessoas', 'workspace-a');
+    fireEvent.change(rootSelect, { target: { value: '7' } });
+
+    await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/app/rastro/PESSOA/7'));
+    expect(loadRastro).toHaveBeenCalledWith('PESSOA', '7', 'workspace-a');
+  });
+
   it('renders a deep-linked trace in backend order with provenance and actionable gaps', async () => {
     renderPage('/app/rastro/MISSAO/20');
 
@@ -148,6 +175,49 @@ describe('RastroPage', () => {
 
     const action = screen.getByRole('link', { name: 'Registrar ação' });
     expect(action).toHaveAttribute('href', '/app/acoes?create=1&missaoId=20');
+  });
+
+  it('links trace references only when type, resource and identifier are safe', async () => {
+    vi.mocked(loadRastro).mockResolvedValue({
+      ...rastro,
+      participants: [
+        ...rastro.participants,
+        {
+          participant: { type: 'PESSOA', id: '../8', resource: 'pessoas' },
+          name: 'Identificador inseguro',
+          status: 'ATIVA',
+          relationType: 'RESPONSAVEL_POR',
+          at: { type: 'MISSAO', id: '20', resource: 'missoes' }
+        },
+        {
+          participant: { type: 'PESSOA', id: '8', resource: 'organizacoes' },
+          name: 'Recurso incompatível',
+          status: 'ATIVA',
+          relationType: 'RESPONSAVEL_POR',
+          at: { type: 'MISSAO', id: '20', resource: 'missoes' }
+        },
+        {
+          participant: { type: 'PESSOA', id: '9', resource: 'https://example.com/pessoas/9' },
+          name: 'Destino externo',
+          status: 'ATIVA',
+          relationType: 'RESPONSAVEL_POR',
+          at: { type: 'MISSAO', id: '20', resource: 'missoes' }
+        }
+      ]
+    });
+    renderPage('/app/rastro/MISSAO/20');
+
+    expect(await screen.findByRole('heading', { name: 'Recuperar a nascente' })).toBeInTheDocument();
+    for (const link of screen.getAllByRole('link', { name: 'Nascente Sul' })) {
+      expect(link).toHaveAttribute('href', '/app/rastro/TERRITORIO/4');
+    }
+    for (const link of screen.getAllByRole('link', { name: 'Recuperar a nascente' })) {
+      expect(link).toHaveAttribute('href', '/app/rastro/MISSAO/20');
+    }
+    expect(screen.getByRole('link', { name: 'Ana Souza' })).toHaveAttribute('href', '/app/rastro/PESSOA/7');
+    expect(screen.getByText('Identificador inseguro').closest('a')).toBeNull();
+    expect(screen.getByText('Recurso incompatível').closest('a')).toBeNull();
+    expect(screen.getByText('Destino externo').closest('a')).toBeNull();
   });
 
   it('shows an honest empty state when the workspace has no root of the selected type', async () => {
@@ -172,49 +242,49 @@ describe('RastroPage', () => {
       gaps: [
         {
           code: 'TERRITORIO_SEM_ORIGEM',
-          subject: { type: 'TERRITORIO', id: '4', resource: '/api/territorios/4' },
+          subject: { type: 'TERRITORIO', id: '4', resource: 'territorios' },
           reason: 'O território ainda não possui uma observação de origem.',
           nextAction: 'Registrar uma observação vinculada.',
           expectedRelation: null
         },
         {
           code: 'ACAO_SEM_EVIDENCIA',
-          subject: { type: 'ACAO', id: '31', resource: '/api/acoes/31' },
+          subject: { type: 'ACAO', id: '31', resource: 'acoes' },
           reason: 'A ação ainda não possui evidência.',
           nextAction: 'Adicionar uma evidência da ação.',
           expectedRelation: null
         },
         {
           code: 'ACAO_SEM_RESULTADO',
-          subject: { type: 'ACAO', id: '31', resource: '/api/acoes/31' },
+          subject: { type: 'ACAO', id: '31', resource: 'acoes' },
           reason: 'A ação ainda não possui resultado.',
           nextAction: 'Registrar um resultado da ação.',
           expectedRelation: null
         },
         {
           code: 'RESULTADO_SEM_EVIDENCIA',
-          subject: { type: 'RESULTADO', id: '41', resource: '/api/resultados/41' },
+          subject: { type: 'RESULTADO', id: '41', resource: 'resultados' },
           reason: 'O resultado ainda não possui evidência.',
           nextAction: 'Adicionar uma evidência do resultado.',
           expectedRelation: null
         },
         {
           code: 'RESULTADO_SEM_INDICADOR',
-          subject: { type: 'RESULTADO', id: '41', resource: '/api/resultados/41' },
+          subject: { type: 'RESULTADO', id: '41', resource: 'resultados' },
           reason: 'O resultado ainda não possui indicador.',
           nextAction: 'Criar um indicador.',
           expectedRelation: null
         },
         {
           code: 'INDICADOR_SEM_MEDICAO',
-          subject: { type: 'INDICADOR', id: '51', resource: '/api/indicadores/51' },
+          subject: { type: 'INDICADOR', id: '51', resource: 'indicadores' },
           reason: 'O indicador ainda não possui medição.',
           nextAction: 'Registrar uma medição.',
           expectedRelation: null
         },
         {
           code: 'LACUNA_SEM_FLUXO',
-          subject: { type: 'MISSAO', id: '20', resource: '/api/missoes/20' },
+          subject: { type: 'MISSAO', id: '20', resource: 'missoes' },
           reason: 'Fluxo ainda não implementado.',
           nextAction: 'Aguardar.',
           expectedRelation: null
@@ -231,7 +301,6 @@ describe('RastroPage', () => {
     expect(screen.getByRole('link', { name: 'Criar indicador' })).toHaveAttribute('href', '/app/indicadores?create=indicador&resultadoId=41');
     expect(screen.getByRole('link', { name: 'Registrar medição' })).toHaveAttribute('href', '/app/indicadores?create=medicao&indicadorId=51');
     expect(screen.getByText('Fluxo ainda não implementado.').closest('li')?.querySelector('a')).toBeNull();
-    expect(screen.getAllByRole('link')).toHaveLength(6);
   });
 
   it('does not render a late trace response from the previous workspace', async () => {

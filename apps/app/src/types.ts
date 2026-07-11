@@ -459,7 +459,20 @@ export interface TerritorioInput {
   boundingBox: number[] | null;
 }
 
-export type RastroRootType = 'TERRITORIO' | 'MISSAO' | 'ACAO';
+export type RastroRootType =
+  | 'TERRITORIO'
+  | 'OBSERVACAO'
+  | 'PROBLEMA'
+  | 'POTENCIALIDADE'
+  | 'MISSAO'
+  | 'ACAO'
+  | 'PESSOA'
+  | 'ORGANIZACAO'
+  | 'RECURSO'
+  | 'EVIDENCIA'
+  | 'RESULTADO'
+  | 'INDICADOR'
+  | 'MEDICAO';
 
 export interface RastroReference {
   type: string;
