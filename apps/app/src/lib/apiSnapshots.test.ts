@@ -80,7 +80,7 @@ describe('authorized API snapshots', () => {
       ownerId: 'ana.sp',
       workspaceId: ACCOUNT_SNAPSHOT_WORKSPACE,
       resource: 'workspaces',
-      contractVersion: 1
+      contractVersion: 2
     })).toMatchObject({ payload: [{ slug: 'territorio-a', nome: 'Território A' }] });
 
     Object.defineProperty(navigator, 'onLine', { configurable: true, value: false });

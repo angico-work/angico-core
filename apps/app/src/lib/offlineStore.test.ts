@@ -638,6 +638,16 @@ describe('offline observation store', () => {
     expect(await listOutbox('ana.sp', 'territorio-a')).toEqual([]);
   });
 
+  it.each([
+    new File(['texto'], 'evidencia.exe', { type: 'text/plain' }),
+    new File(['texto'], 'evidencia.png', { type: 'application/pdf' })
+  ])('rejects an evidence file whose extension and declared type do not match', async (file) => {
+    await expect(enqueueEvidence({ ...evidence, file }, 'ana.sp'))
+      .rejects.toThrow('compatível com sua extensão');
+
+    expect(await listOutbox('ana.sp', 'territorio-a')).toEqual([]);
+  });
+
   it('keeps evidence and its blob across a database connection reload', async () => {
     const queued = await enqueueEvidence(evidence, 'ana.sp');
     const blobKey = (await getLocalEvidence(
@@ -718,6 +728,27 @@ describe('offline observation store', () => {
       resource: 'evidencias',
       rootKey: 'OBSERVACAO:42',
       payload: ['normalizado']
+    });
+  });
+
+  it('does not let an older request overwrite a newer snapshot', async () => {
+    const identity = {
+      ownerId: 'ana.sp', workspaceId: 'territorio-a', resource: 'mapa', contractVersion: 1
+    };
+    await saveSnapshot(identity, ['novo'], new Date('2026-07-10T12:00:02Z'), 200);
+
+    const retained = await saveSnapshot(
+      identity,
+      ['antigo'],
+      new Date('2026-07-10T12:00:03Z'),
+      100
+    );
+
+    expect(retained.payload).toEqual(['novo']);
+    expect(await loadSnapshot(identity)).toMatchObject({
+      payload: ['novo'],
+      requestStartedAt: 200,
+      savedAt: '2026-07-10T12:00:02.000Z'
     });
   });
 

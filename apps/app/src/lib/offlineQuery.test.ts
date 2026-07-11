@@ -115,6 +115,62 @@ describe('confirmed response snapshots', () => {
       .toMatchObject({ payload: [{ id: 12 }] });
   });
 
+  it('does not persist a response after another account replaces the active session', async () => {
+    let resolveRemote!: (value: unknown) => void;
+    const remote = new Promise<unknown>((resolve) => { resolveRemote = resolve; });
+    const pending = loadConfirmedOrSnapshot(identity, () => remote, isList);
+    await Promise.resolve();
+    localStorage.setItem('angico.session', JSON.stringify({
+      ...session, pessoaId: 8, angicoId: 'bia.sp'
+    }));
+
+    resolveRemote([{ id: 14 }]);
+
+    await expect(pending).rejects.toThrow('sessão ativa mudou');
+    expect(await loadSnapshot({ ...identity, ownerId: 'ana.sp' })).toBeUndefined();
+    expect(await loadSnapshot({ ...identity, ownerId: 'bia.sp' })).toBeUndefined();
+  });
+
+  it('keeps the newest confirmed response when requests finish out of order', async () => {
+    let resolveFirst!: (value: unknown) => void;
+    let resolveSecond!: (value: unknown) => void;
+    const firstRemote = new Promise<unknown>((resolve) => { resolveFirst = resolve; });
+    const secondRemote = new Promise<unknown>((resolve) => { resolveSecond = resolve; });
+    const first = loadConfirmedOrSnapshot(identity, () => firstRemote, isList);
+    const second = loadConfirmedOrSnapshot(identity, () => secondRemote, isList);
+
+    resolveSecond([{ id: 16 }]);
+    await expect(second).resolves.toMatchObject({ data: [{ id: 16 }], source: 'remote' });
+    resolveFirst([{ id: 15 }]);
+
+    await expect(first).resolves.toMatchObject({ data: [{ id: 16 }], source: 'remote' });
+    expect(await loadSnapshot({ ...identity, ownerId: 'ana.sp' }))
+      .toMatchObject({ payload: [{ id: 16 }] });
+  });
+
+  it('keeps a valid remote response when a newer request falls back to the snapshot', async () => {
+    await saveSnapshot(
+      { ...identity, ownerId: 'ana.sp' },
+      [{ id: 17 }],
+      new Date(Date.now() - 60_000)
+    );
+    let resolveRemote!: (value: unknown) => void;
+    const remote = new Promise<unknown>((resolve) => { resolveRemote = resolve; });
+    const first = loadConfirmedOrSnapshot(identity, () => remote, isList);
+    const second = loadConfirmedOrSnapshot(
+      identity,
+      async () => { throw new ApiNetworkError(new TypeError('offline')); },
+      isList
+    );
+
+    await expect(second).resolves.toMatchObject({ data: [{ id: 17 }], source: 'snapshot' });
+    resolveRemote([{ id: 18 }]);
+
+    await expect(first).resolves.toMatchObject({ data: [{ id: 18 }], source: 'remote' });
+    expect(await loadSnapshot({ ...identity, ownerId: 'ana.sp' }))
+      .toMatchObject({ payload: [{ id: 18 }] });
+  });
+
   it('blocks expired sessions without deleting the saved response', async () => {
     await saveSnapshot({ ...identity, ownerId: 'ana.sp' }, [{ id: 13 }]);
     localStorage.setItem('angico.session', JSON.stringify({

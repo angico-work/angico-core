@@ -2,6 +2,7 @@ import { deleteDB, openDB, type DBSchema, type IDBPDatabase } from 'idb';
 import type {
   Conversa, Evidencia, EvidenciaInput, EvidenceSubjectType, Mensagem, Observacao, ObservacaoInput
 } from '../types';
+import { validateEvidenceFile } from './evidenceFiles';
 import { validateMessageFiles } from './messageFiles';
 
 const DATABASE_NAME = 'angico-operational-data';
@@ -210,6 +211,7 @@ export interface SnapshotRecord<T = unknown> {
   queryKey: string;
   rootKey: string;
   contractVersion: number;
+  requestStartedAt: number;
   savedAt: string;
   payload: T;
 }
@@ -412,7 +414,7 @@ function normalizeRoot(root?: string): string {
   return `${type}:${id}`;
 }
 
-function snapshotKey(identity: SnapshotIdentity): string {
+function snapshotIdentityKey(identity: SnapshotIdentity): string {
   return JSON.stringify([
     'snapshot',
     identity.ownerId,
@@ -501,7 +503,7 @@ export async function enqueueEvidence(
   }
   const title = input.title.trim();
   if (!title) throw new Error('Título da evidência é obrigatório.');
-  if (input.file) validateMessageFiles([input.file]);
+  if (input.file) validateEvidenceFile(input.file);
 
   const clientMutationId = randomId();
   const now = new Date().toISOString();
@@ -1409,22 +1411,34 @@ export async function getSyncMetadata(
 export async function saveSnapshot<T>(
   identity: SnapshotIdentity,
   payload: T,
-  savedAt = new Date()
+  savedAt = new Date(),
+  requestStartedAt = savedAt.getTime()
 ): Promise<SnapshotRecord<T>> {
   requireSnapshotIdentity(identity);
   const record: SnapshotRecord<T> = {
-    key: snapshotKey(identity),
+    key: snapshotIdentityKey(identity),
     ownerId: identity.ownerId,
     workspaceId: identity.workspaceId,
     resource: normalizeResource(identity.resource),
     queryKey: canonicalQuery(identity.query),
     rootKey: normalizeRoot(identity.root),
     contractVersion: identity.contractVersion,
+    requestStartedAt,
     savedAt: savedAt.toISOString(),
     payload
   };
   const db = await database();
-  await db.put('snapshots', record as SnapshotRecord);
+  const tx = db.transaction('snapshots', 'readwrite');
+  const snapshots = tx.objectStore('snapshots');
+  const existing = await snapshots.get(record.key);
+  const existingRequestStartedAt = existing?.requestStartedAt ?? Date.parse(existing?.savedAt ?? '');
+  if (existing && Number.isFinite(existingRequestStartedAt)
+    && existingRequestStartedAt > requestStartedAt) {
+    await tx.done;
+    return existing as SnapshotRecord<T>;
+  }
+  await snapshots.put(record as SnapshotRecord);
+  await tx.done;
   return record;
 }
 
@@ -1433,7 +1447,7 @@ export async function loadSnapshot<T>(
 ): Promise<SnapshotRecord<T> | undefined> {
   requireSnapshotIdentity(identity);
   const db = await database();
-  const record = await db.get('snapshots', snapshotKey(identity));
+  const record = await db.get('snapshots', snapshotIdentityKey(identity));
   if (!record || record.contractVersion !== identity.contractVersion) return undefined;
   return record as SnapshotRecord<T>;
 }

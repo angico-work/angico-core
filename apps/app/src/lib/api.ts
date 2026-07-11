@@ -139,14 +139,22 @@ export async function logout(): Promise<void> {
 
 export async function revalidateSession(): Promise<AuthSession | null> {
   if (!getSession()) return null;
-  const response = await apiFetch(apiUrl('/api/auth/me'));
-  if (!response.ok) return null;
-  return saveSession((await response.json()) as AuthSession, true);
+  try {
+    const session = await requestJson<AuthSession>(
+      apiUrl('/api/auth/me'),
+      {},
+      'Não foi possível validar a sessão.'
+    );
+    return saveSession(session, true);
+  } catch (error) {
+    if (error instanceof ApiHttpError) return null;
+    throw error;
+  }
 }
 
 export async function loadDashboard(workspaceId = DEFAULT_WORKSPACE): Promise<DashboardData> {
   const result = await loadConfirmedOrSnapshot(
-    { workspaceId, resource: 'dashboard', contractVersion: 1 },
+    { workspaceId, resource: 'dashboard', contractVersion: 2 },
     () => requestJson(
       apiUrl(`/api/glimpse/dashboard?workspaceId=${encodeURIComponent(workspaceId)}`),
       { headers: requestHeaders() },
@@ -171,20 +179,20 @@ export async function createObservacao(input: ObservacaoInput): Promise<Observac
 
 export async function loadMapPoints(workspaceId = DEFAULT_WORKSPACE): Promise<MapPoint[]> {
   const result = await loadConfirmedOrSnapshot(
-    { workspaceId, resource: 'map-points', contractVersion: 1 },
+    { workspaceId, resource: 'map-points', contractVersion: 2 },
     () => requestJson(
       apiUrl(`/api/glimpse/map?workspaceId=${encodeURIComponent(workspaceId)}`),
       { headers: requestHeaders() },
       'Não foi possível carregar os pontos do mapa.'
     ),
-    isMapPointList
+    (value): value is MapPoint[] => isMapPointList(value, workspaceId)
   );
   return result.data;
 }
 
 export async function listWorkspaces(): Promise<Workspace[]> {
   const result = await loadConfirmedOrSnapshot(
-    { workspaceId: ACCOUNT_SNAPSHOT_WORKSPACE, resource: 'workspaces', contractVersion: 1 },
+    { workspaceId: ACCOUNT_SNAPSHOT_WORKSPACE, resource: 'workspaces', contractVersion: 2 },
     () => requestJson(
       apiUrl('/api/workspaces'),
       { headers: requestHeaders() },
@@ -217,7 +225,7 @@ export async function deleteWorkspace(slug: string): Promise<void> {
 
 export async function listMembers(slug: string): Promise<WorkspaceMember[]> {
   const result = await loadConfirmedOrSnapshot(
-    { workspaceId: slug, resource: 'workspace-members', contractVersion: 1 },
+    { workspaceId: slug, resource: 'workspace-members', contractVersion: 2 },
     () => requestJson(
       apiUrl(`/api/workspaces/${encodeURIComponent(slug)}/members`),
       { headers: requestHeaders() },
@@ -316,13 +324,13 @@ export async function searchPessoas(workspaceId: string, q: string, signal?: Abo
 
 export async function loadMemoria(workspaceId = DEFAULT_WORKSPACE): Promise<MemoriaEvent[]> {
   const result = await loadConfirmedOrSnapshot(
-    { workspaceId, resource: 'memory-events', contractVersion: 1 },
+    { workspaceId, resource: 'memory-events', contractVersion: 2 },
     () => requestJson(
       apiUrl(`/api/history/workspaces/${encodeURIComponent(workspaceId)}`),
       { headers: requestHeaders() },
       'Não foi possível carregar a memória do território.'
     ),
-    isMemoriaEventList
+    (value): value is MemoriaEvent[] => isMemoriaEventList(value, workspaceId)
   );
   return result.data;
 }
@@ -341,7 +349,7 @@ export async function loadRastro(
       resource: 'rastro',
       query: { rootType },
       root: normalizedId,
-      contractVersion: 1
+      contractVersion: 2
     },
     () => requestJson(
       apiUrl(path),
@@ -364,7 +372,7 @@ export async function listEntities<T = Record<string, unknown>>(
       workspaceId,
       resource: contract.resource,
       root: contract.root,
-      contractVersion: 1
+      contractVersion: 2
     },
     () => requestJson(
       apiUrl(`${path}?workspaceId=${encodeURIComponent(workspaceId)}`),
@@ -552,7 +560,7 @@ export function createRecursoUso(recursoId: number, input: RecursoUsoInput): Pro
 
 export async function listConversas(workspaceId = DEFAULT_WORKSPACE): Promise<Conversa[]> {
   const result = await loadConfirmedOrSnapshot(
-    { workspaceId, resource: 'conversations', contractVersion: 1 },
+    { workspaceId, resource: 'conversations', contractVersion: 2 },
     () => requestJson(
       apiUrl(`/api/mensagens/conversas?workspaceId=${encodeURIComponent(workspaceId)}`),
       { headers: requestHeaders() },
@@ -579,7 +587,7 @@ export async function listMensagens(
       workspaceId,
       resource: 'conversation-messages',
       root: String(conversaId),
-      contractVersion: 1
+      contractVersion: 2
     },
     () => requestJson(
       apiUrl(`/api/mensagens/conversas/${conversaId}/mensagens`),
@@ -641,7 +649,7 @@ export async function createConversa(input: CreateConversaInput): Promise<Conver
 
 export async function listTerritorios(workspaceId = DEFAULT_WORKSPACE): Promise<Territorio[]> {
   const result = await loadConfirmedOrSnapshot(
-    { workspaceId, resource: 'territories', contractVersion: 1 },
+    { workspaceId, resource: 'territories', contractVersion: 2 },
     () => requestJson(
       apiUrl(`/api/territorios?workspaceId=${encodeURIComponent(workspaceId)}`),
       { headers: requestHeaders() },

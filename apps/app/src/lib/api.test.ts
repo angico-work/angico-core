@@ -221,6 +221,14 @@ describe('cookie session API', () => {
     expect(getSession()?.nome).toBe('Ana Atualizada');
   });
 
+  it('classifies a failed session revalidation as a network error', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('offline')));
+
+    await expect(revalidateSession()).rejects.toBeInstanceOf(ApiNetworkError);
+
+    expect(getSession()).toEqual(session);
+  });
+
   it('does not invent or enumerate a workspace when protected listing fails', async () => {
     localStorage.setItem('angico.session', JSON.stringify(session));
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response(403, { detail: 'forbidden' })));

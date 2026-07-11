@@ -3,7 +3,11 @@ import {
   entityListContract,
   isConversaList,
   isDashboardData,
+  isMapPointList,
+  isMemoriaEventList,
+  isMensagemList,
   isRastroResponse,
+  isTerritorioList,
   isWorkspaceList
 } from './apiContracts';
 
@@ -88,5 +92,171 @@ describe('API snapshot contracts', () => {
 
     expect(isRastroResponse(trace, 'territorio-a')).toBe(true);
     expect(isRastroResponse({ ...trace, root: { name: 'sem referência' } }, 'territorio-a')).toBe(false);
+  });
+
+  it('requires map and memory records to belong to the requested workspace', () => {
+    const point = {
+      workspaceId: 'territorio-a',
+      type: 'observacao',
+      id: 4,
+      titulo: 'Nascente observada',
+      categoria: 'Água',
+      status: 'REGISTRADA',
+      latitude: -23.5,
+      longitude: -46.6
+    };
+    const event = {
+      workspaceId: 'territorio-a',
+      sequence: 9,
+      entityType: 'OBSERVACAO',
+      entityId: '4',
+      eventType: 'OBSERVACAO_REGISTRADA',
+      actorId: 'ana.sp',
+      occurredAt: '2026-07-10T12:00:00Z'
+    };
+
+    expect(isMapPointList([point], 'territorio-a')).toBe(true);
+    expect(isMapPointList([point], 'territorio-b')).toBe(false);
+    expect(isMemoriaEventList([event], 'territorio-a')).toBe(true);
+    expect(isMemoriaEventList([event], 'territorio-b')).toBe(false);
+  });
+
+  it('rejects invalid dates in required and optional contract fields', () => {
+    const evidence = {
+      id: 8,
+      workspaceId: 'territorio-a',
+      subjectType: 'ACAO',
+      subjectId: 4,
+      title: 'Registro',
+      description: null,
+      originalFilename: null,
+      contentType: null,
+      sizeBytes: null,
+      sha256: null,
+      capturedAt: 'data-inválida',
+      recordedAt: '2026-07-10T12:01:00Z',
+      actorId: 'ana.sp',
+      deviceId: null,
+      clientMutationId: null,
+      hasFile: false
+    };
+    const workspace = {
+      slug: 'territorio-a',
+      nome: 'Território A',
+      createdAt: 'ontem'
+    };
+    const memory = {
+      workspaceId: 'territorio-a',
+      entityType: 'ACAO',
+      entityId: '4',
+      eventType: 'ACAO_INICIADA',
+      actorId: null,
+      occurredAt: '2026-07-10T12:00:00Z',
+      recordedAt: 'sem-data'
+    };
+
+    expect(entityListContract('/api/evidencias').validate([evidence], 'territorio-a')).toBe(false);
+    expect(isWorkspaceList([workspace])).toBe(false);
+    expect(isMemoriaEventList([memory], 'territorio-a')).toBe(false);
+  });
+
+  it('validates domain enums and their nullable linked fields', () => {
+    const organization = {
+      id: 3,
+      workspaceId: 'territorio-a',
+      nome: 'Associação da praça',
+      tipo: 'ASSOCIACAO',
+      status: 'ATIVA',
+      missaoId: null,
+      missionRelation: null,
+      actorId: 'ana.sp',
+      createdAt: '2026-07-10T12:00:00Z'
+    };
+    const resource = {
+      id: 5,
+      workspaceId: 'territorio-a',
+      nome: 'Enxadas',
+      categoria: 'EQUIPAMENTO',
+      unidade: 'un',
+      descricao: null,
+      status: 'ATIVO',
+      actorId: 'ana.sp',
+      createdAt: '2026-07-10T12:00:00Z'
+    };
+
+    expect(entityListContract('/api/organizacoes').validate([organization], 'territorio-a')).toBe(true);
+    expect(entityListContract('/api/organizacoes').validate([
+      { ...organization, tipo: 'TIPO_INVENTADO' }
+    ], 'territorio-a')).toBe(false);
+    expect(entityListContract('/api/organizacoes').validate([
+      { ...organization, missionRelation: 'CONDUZ' }
+    ], 'territorio-a')).toBe(false);
+    expect(entityListContract('/api/recursos').validate([resource], 'territorio-a')).toBe(true);
+    expect(entityListContract('/api/recursos').validate([
+      { ...resource, categoria: 'INVENTADO' }
+    ], 'territorio-a')).toBe(false);
+  });
+
+  it('rejects unsafe coordinates, bounding boxes and attachment sizes', () => {
+    const territory = {
+      id: 1,
+      workspaceId: 'territorio-a',
+      nome: 'Território A',
+      tipo: null,
+      cidade: null,
+      bairro: null,
+      estado: null,
+      pais: null,
+      latitude: -23.5,
+      longitude: -46.6,
+      boundingBox: [-24, -23, -47, -46],
+      status: 'ATIVO',
+      updatedAt: '2026-07-10T12:00:00Z'
+    };
+    const message = {
+      id: 21,
+      workspaceId: 'territorio-a',
+      conversaId: 12,
+      senderPessoaId: null,
+      senderNome: null,
+      corpo: '',
+      latitude: null,
+      longitude: null,
+      localDescricao: null,
+      linkedEntityType: null,
+      linkedEntityId: null,
+      clientMessageId: null,
+      deviceId: null,
+      status: 'ENVIADA',
+      occurredAt: '2026-07-10T12:00:00Z',
+      recordedAt: '2026-07-10T12:01:00Z',
+      createdAt: '2026-07-10T12:01:00Z',
+      anexos: [{
+        id: 2,
+        originalFilename: 'foto.jpg',
+        contentType: 'image/jpeg',
+        sizeBytes: 24,
+        attachmentType: 'IMAGEM',
+        createdAt: '2026-07-10T12:01:00Z'
+      }],
+      relacoes: []
+    };
+
+    expect(isTerritorioList([territory], 'territorio-a')).toBe(true);
+    expect(isTerritorioList([{ ...territory, longitude: null }], 'territorio-a')).toBe(false);
+    expect(isTerritorioList([{ ...territory, boundingBox: [-23, -24, -47, -46] }], 'territorio-a')).toBe(false);
+    expect(isTerritorioList([{ ...territory, boundingBox: [-24, -23, -181, -46] }], 'territorio-a')).toBe(false);
+    expect(isWorkspaceList([{
+      slug: 'territorio-a', nome: 'Território A', centerLatitude: 91, centerLongitude: 0
+    }])).toBe(false);
+    expect(isWorkspaceList([{
+      slug: 'territorio-a', nome: 'Território A', centerLatitude: -23.5
+    }])).toBe(false);
+    expect(isMensagemList([message], 'territorio-a', 12)).toBe(true);
+    expect(isMensagemList([{
+      ...message,
+      anexos: [{ ...message.anexos[0], sizeBytes: -1 }]
+    }], 'territorio-a', 12)).toBe(false);
+    expect(isMensagemList([{ ...message, latitude: 91, longitude: 0 }], 'territorio-a', 12)).toBe(false);
   });
 });
