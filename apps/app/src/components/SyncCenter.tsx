@@ -13,6 +13,7 @@ import {
   type SyncMetadata
 } from '../lib/offlineStore';
 import { retryPendingOperations, syncPendingObservations } from '../lib/offlineSync';
+import ModalDialog from './ModalDialog';
 
 interface Props {
   ownerId?: string;
@@ -119,6 +120,7 @@ export default function SyncCenter({ ownerId, workspaceId, online, onClose }: Pr
   const [workingId, setWorkingId] = useState<string>();
   const [reviewingId, setReviewingId] = useState<string>();
   const [revision, setRevision] = useState<RevisionDraft>();
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const refreshRequest = useRef(0);
@@ -131,14 +133,32 @@ export default function SyncCenter({ ownerId, workspaceId, online, onClose }: Pr
       setLoading(false);
       return;
     }
-    const [nextEntries, nextMetadata] = await Promise.all([
-      listOutbox(ownerId, workspaceId),
-      getSyncMetadata(ownerId, workspaceId)
-    ]);
-    if (request !== refreshRequest.current) return;
-    setEntries(nextEntries.reverse());
-    setMetadata(nextMetadata);
-    setLoading(false);
+    try {
+      const [nextEntries, nextMetadata] = await Promise.all([
+        listOutbox(ownerId, workspaceId),
+        getSyncMetadata(ownerId, workspaceId)
+      ]);
+      if (request !== refreshRequest.current) return;
+      setEntries(nextEntries.reverse());
+      setMetadata(nextMetadata);
+      setLoadError(null);
+      setLoading(false);
+    } catch (caught) {
+      if (request !== refreshRequest.current) return;
+      setLoadError(caught instanceof Error ? caught.message : 'Não foi possível ler os dados locais.');
+      setLoading(false);
+    }
+  }, [ownerId, workspaceId]);
+
+  useEffect(() => {
+    setEntries([]);
+    setMetadata(undefined);
+    setLoading(true);
+    setLoadError(null);
+    setError(null);
+    setNotice(null);
+    setReviewingId(undefined);
+    setRevision(undefined);
   }, [ownerId, workspaceId]);
 
   useEffect(() => {
@@ -244,15 +264,18 @@ export default function SyncCenter({ ownerId, workspaceId, online, onClose }: Pr
   const reviewable = entries.filter((entry) => REVIEWABLE.includes(entry.status)).length;
 
   return (
-    <div className="modal-overlay" role="presentation" onMouseDown={(event) => {
-      if (event.target === event.currentTarget) onClose();
-    }}>
-      <section className="sync-dialog" role="dialog" aria-modal="true" aria-labelledby="sync-title">
+    <ModalDialog
+      titleId="sync-title"
+      descriptionId="sync-description"
+      className="sync-dialog"
+      busy={syncing || Boolean(workingId)}
+      onClose={onClose}
+    >
         <header className="dialog-head">
           <div>
             <span className="overline">Dados deste aparelho</span>
             <h2 id="sync-title">Sincronização</h2>
-            <p>{sendable} aguardando envio · {reviewable} para revisar</p>
+            <p id="sync-description">{sendable} aguardando envio · {reviewable} para revisar</p>
           </div>
           <button type="button" className="icon-button" aria-label="Fechar sincronização" onClick={onClose}>×</button>
         </header>
@@ -273,6 +296,7 @@ export default function SyncCenter({ ownerId, workspaceId, online, onClose }: Pr
           </div>
         </div>
 
+        {loadError && <div className="form-error" role="alert">{loadError}</div>}
         {error && <div className="form-error" role="alert">{error}</div>}
         {notice && <div className="sync-notice" role="status">{notice}</div>}
         <div className="sync-list" aria-busy={loading}>
@@ -434,7 +458,6 @@ export default function SyncCenter({ ownerId, workspaceId, online, onClose }: Pr
             {syncing ? 'Sincronizando…' : 'Sincronizar agora'}
           </button>
         </footer>
-      </section>
-    </div>
+    </ModalDialog>
   );
 }

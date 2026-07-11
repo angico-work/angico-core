@@ -109,6 +109,34 @@ describe('SyncCenter', () => {
     expect(screen.getByRole('button', { name: 'Revisar Nascente sem proteção' })).toBeInTheDocument();
   });
 
+  it('moves focus into the dialog, closes with Escape and restores the trigger', async () => {
+    const trigger = document.createElement('button');
+    trigger.textContent = 'Abrir sincronização';
+    document.body.appendChild(trigger);
+    trigger.focus();
+    const onClose = vi.fn();
+    const view = render(
+      <SyncCenter ownerId="ana.sp" workspaceId="territorio-a" online onClose={onClose} />
+    );
+
+    const close = await screen.findByRole('button', { name: 'Fechar sincronização' });
+    await waitFor(() => expect(close).toHaveFocus());
+    fireEvent.keyDown(screen.getByRole('dialog', { name: 'Sincronização' }), { key: 'Escape' });
+    expect(onClose).toHaveBeenCalledOnce();
+
+    view.unmount();
+    expect(trigger).toHaveFocus();
+    trigger.remove();
+  });
+
+  it('shows a recoverable error when local synchronization data cannot be read', async () => {
+    vi.mocked(listOutbox).mockRejectedValue(new Error('armazenamento local indisponível'));
+
+    render(<SyncCenter ownerId="ana.sp" workspaceId="territorio-a" online onClose={vi.fn()} />);
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('armazenamento local indisponível');
+  });
+
   it('ignores an older local read after the active workspace changes', async () => {
     const firstEntries = deferred<Array<typeof conflict>>();
     const secondEntries = deferred<Array<typeof conflict>>();
@@ -140,6 +168,7 @@ describe('SyncCenter', () => {
     view.rerender(
       <SyncCenter ownerId="ana.sp" workspaceId="territorio-b" online onClose={vi.fn()} />
     );
+    expect(screen.queryByText('Nascente sem proteção')).not.toBeInTheDocument();
     await waitFor(() => expect(listOutbox).toHaveBeenCalledWith('ana.sp', 'territorio-b'));
     await act(async () => {
       secondEntries.resolve([workspaceBEntry]);
@@ -166,6 +195,29 @@ describe('SyncCenter', () => {
 
     expect(screen.queryByText('Nascente sem proteção')).not.toBeInTheDocument();
     expect(screen.getByText('Registro do território B')).toBeInTheDocument();
+  });
+
+  it('hides the previous workspace records while the next partition is loading', async () => {
+    const nextEntries = deferred<Array<typeof conflict>>();
+    const nextMetadata = deferred<Awaited<ReturnType<typeof getSyncMetadata>>>();
+    vi.mocked(listOutbox).mockImplementation((_ownerId, workspaceId) => (
+      workspaceId === 'territorio-a' ? Promise.resolve([conflict]) : nextEntries.promise
+    ));
+    vi.mocked(getSyncMetadata).mockImplementation((_ownerId, workspaceId) => (
+      workspaceId === 'territorio-a'
+        ? Promise.resolve({ key: 'a', ownerId: 'ana.sp', workspaceId: 'territorio-a' })
+        : nextMetadata.promise
+    ));
+    const view = render(
+      <SyncCenter ownerId="ana.sp" workspaceId="territorio-a" online onClose={vi.fn()} />
+    );
+    expect(await screen.findByText('Nascente sem proteção')).toBeInTheDocument();
+
+    view.rerender(
+      <SyncCenter ownerId="ana.sp" workspaceId="territorio-b" online onClose={vi.fn()} />
+    );
+
+    expect(screen.queryByText('Nascente sem proteção')).not.toBeInTheDocument();
   });
 
   it('saves a corrected copy with a new operation before explicitly resending it', async () => {
