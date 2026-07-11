@@ -78,6 +78,8 @@ git filter-repo \
   --path-rename apps/api/: \
   --force
 perl -pi -e 's#\.\./\.\./docs/#docs/#g' README.md
+git add README.md
+git commit -m "docs: adjust standalone links"
 git remote remove origin
 git remote add origin https://github.com/angico-work/angico-api.git
 git push -u origin HEAD:main
