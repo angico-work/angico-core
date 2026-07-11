@@ -32,8 +32,7 @@ class SecurityDefaultsTest {
         assertEquals("${ANGICO_SEED_DEMO_LEADER_PASSWORD:}",
                 property(sources, "angico.seed-demo-leader-password"));
         assertEquals("dev", property(sources, "spring.profiles.default"));
-        assertEquals("${ANGICO_FLYWAY_ENABLED:false}",
-                property(sources, "angico.database.migrations-enabled"));
+        assertEquals(false, property(sources, "spring.flyway.enabled"));
     }
 
     @Test
@@ -48,20 +47,24 @@ class SecurityDefaultsTest {
         assertEquals(false, property(devSources, "angico.auth.cookie-secure"));
         assertEquals(true, property(prodSources, "angico.auth.cookie-secure"));
         assertEquals("update", property(devSources, "spring.jpa.hibernate.ddl-auto"));
-        assertEquals("update", property(prodSources, "spring.jpa.hibernate.ddl-auto"));
+        assertEquals("validate", property(prodSources, "spring.jpa.hibernate.ddl-auto"));
         assertEquals("${ANGICO_UPLOAD_MAX_REQUEST_SIZE:4MB}",
                 property(prodSources, "spring.servlet.multipart.max-request-size"));
         assertEquals("${ANGICO_FLYWAY_ENABLED:true}",
-                property(prodSources, "angico.database.migrations-enabled"));
+                property(prodSources, "spring.flyway.enabled"));
+        assertEquals("classpath:db/migration/{vendor}",
+                property(prodSources, "spring.flyway.locations"));
         assertEquals("${ANGICO_ALLOWED_ORIGINS}", property(prodSources, "angico.allowed-origins"));
     }
 
     @Test
     void productionMigrationsAreAdditiveAndVendorSpecific() throws IOException {
         List<ClassPathResource> migrations = List.of(
+                new ClassPathResource("db/migration/postgresql/V0__complete_schema.sql"),
                 new ClassPathResource("db/migration/postgresql/V1__session_table.sql"),
                 new ClassPathResource("db/migration/postgresql/V2__identity_constraints.sql"),
                 new ClassPathResource("db/migration/postgresql/V6__mission_territory.sql"),
+                new ClassPathResource("db/migration/h2/V0__complete_schema.sql"),
                 new ClassPathResource("db/migration/h2/V1__session_table.sql"),
                 new ClassPathResource("db/migration/h2/V2__identity_constraints.sql"),
                 new ClassPathResource("db/migration/h2/V6__mission_territory.sql")
@@ -77,6 +80,8 @@ class SecurityDefaultsTest {
                 })
                 .reduce("", String::concat);
         assertTrue(sql.contains("create table if not exists auth_session"));
+        assertTrue(sql.contains("create table acao"));
+        assertTrue(sql.contains("create table workspace_member"));
         assertTrue(sql.contains("create unique index"));
         assertTrue(sql.contains("lower("));
         assertTrue(sql.contains("regexp_replace"));

@@ -19,6 +19,7 @@ import org.springframework.test.context.ActiveProfiles;
                 "spring.datasource.url=jdbc:h2:mem:prod-bootstrap;MODE=PostgreSQL;DB_CLOSE_DELAY=-1",
                 "spring.datasource.username=sa",
                 "spring.datasource.password=",
+                "spring.jpa.hibernate.ddl-auto=validate",
                 "angico.allowed-origins=https://app.example.test",
                 "angico.seed-demo-leader=false"
         }

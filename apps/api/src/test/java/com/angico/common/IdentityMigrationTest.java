@@ -15,7 +15,7 @@ import org.junit.jupiter.api.Test;
 class IdentityMigrationTest {
 
     @Test
-    void migratesLegacySchemaWithoutLosingRowsAndEnforcesNormalizedIdentityUniqueness() throws Exception {
+    void baselinesNonEmptyLegacySchemaAndAcceptsTheResolvedVersionZero() throws Exception {
         String url = "jdbc:h2:mem:legacy-" + UUID.randomUUID()
                 + ";MODE=PostgreSQL;DB_CLOSE_DELAY=-1";
         try (var connection = DriverManager.getConnection(url, "sa", "");
@@ -53,14 +53,15 @@ class IdentityMigrationTest {
                     """);
         }
 
-        Flyway.configure()
+        Flyway flyway = Flyway.configure()
                 .dataSource(url, "sa", "")
                 .locations("classpath:db/migration/h2")
                 .baselineOnMigrate(true)
                 .baselineVersion(MigrationVersion.fromVersion("0"))
                 .cleanDisabled(true)
-                .load()
-                .migrate();
+                .load();
+        flyway.migrate();
+        flyway.validate();
 
         try (var connection = DriverManager.getConnection(url, "sa", "");
                 var statement = connection.createStatement()) {
