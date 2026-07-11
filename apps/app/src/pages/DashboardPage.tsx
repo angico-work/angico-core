@@ -64,7 +64,10 @@ export default function DashboardPage() {
     }
   }, [workspaceId]);
 
-  useEffect(() => { void refresh(); }, [refresh]);
+  useEffect(() => {
+    void refresh();
+    return () => { refreshRequest.current += 1; };
+  }, [refresh]);
 
   const center = points.length
     ? [points[0].latitude, points[0].longitude] as [number, number]

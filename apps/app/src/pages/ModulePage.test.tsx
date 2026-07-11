@@ -1,9 +1,10 @@
 import 'fake-indexeddb/auto';
 import '@testing-library/jest-dom/vitest';
-import { cleanup, render, screen } from '@testing-library/react';
+import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Outlet, Route, Routes } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import ModulePage from './ModulePage';
+import { listEntities } from '../lib/api';
 
 vi.mock('../lib/api', () => ({
   listEntities: vi.fn().mockRejectedValue(new Error('Sem conexão com o servidor.')),
@@ -61,9 +62,70 @@ vi.mock('../lib/offlineStore', () => ({
   ])
 }));
 
-afterEach(cleanup);
+afterEach(() => {
+  vi.mocked(listEntities).mockRejectedValue(new Error('Sem conexão com o servidor.'));
+  cleanup();
+});
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((done) => { resolve = done; });
+  return { promise, resolve };
+}
+
+function moduleView(workspaceId: string) {
+  return (
+    <MemoryRouter initialEntries={['/problemas']}>
+      <Routes>
+        <Route element={<Outlet context={{ workspaceId }} />}>
+          <Route path="/problemas" element={<ModulePage configKey="problemas" />} />
+        </Route>
+      </Routes>
+    </MemoryRouter>
+  );
+}
 
 describe('ModulePage offline observations', () => {
+  it('ignores an older response after the active workspace changes', async () => {
+    const first = deferred<Record<string, unknown>[]>();
+    const second = deferred<Record<string, unknown>[]>();
+    vi.mocked(listEntities).mockImplementation((_path, workspaceId) => (
+      workspaceId === 'territorio-a' ? first.promise : second.promise
+    ));
+    const view = render(moduleView('territorio-a'));
+    await waitFor(() => expect(listEntities).toHaveBeenCalledWith('/api/problemas', 'territorio-a'));
+
+    view.rerender(moduleView('territorio-b'));
+    await waitFor(() => expect(listEntities).toHaveBeenCalledWith('/api/problemas', 'territorio-b'));
+    await act(async () => {
+      second.resolve([{
+        id: 2,
+        workspaceId: 'territorio-b',
+        titulo: 'Resposta do território B',
+        categoria: 'Água',
+        status: 'ABERTO',
+        createdAt: '2026-07-10T12:02:00Z'
+      }]);
+      await second.promise;
+    });
+    expect(await screen.findByText('Resposta do território B')).toBeInTheDocument();
+
+    await act(async () => {
+      first.resolve([{
+        id: 1,
+        workspaceId: 'territorio-a',
+        titulo: 'Resposta tardia do território A',
+        categoria: 'Água',
+        status: 'ABERTO',
+        createdAt: '2026-07-10T12:01:00Z'
+      }]);
+      await first.promise;
+    });
+
+    expect(screen.queryByText('Resposta tardia do território A')).not.toBeInTheDocument();
+    expect(screen.getByText('Resposta do território B')).toBeInTheDocument();
+  });
+
   it('shows durable local records together with an honest stale-data warning', async () => {
     render(
       <MemoryRouter initialEntries={['/observacoes']}>

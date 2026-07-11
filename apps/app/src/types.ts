@@ -335,6 +335,7 @@ export interface RecursoUso {
 }
 
 export interface MapPoint {
+  workspaceId: string;
   type: 'observacao' | 'problema' | 'potencialidade';
   id: number;
   titulo: string;
@@ -557,6 +558,7 @@ export interface WorkspaceMember {
 }
 
 export interface MemoriaEvent {
+  workspaceId: string;
   sequence?: number;
   commitSequence?: number;
   entityType: string;

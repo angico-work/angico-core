@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useOutletContext } from 'react-router-dom';
 import type { AppContext } from '../components/AppShell';
 import MapView from '../components/MapView';
@@ -23,20 +23,28 @@ export default function MapPage() {
   const [flyTo, setFlyTo] = useState<[number, number] | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const refreshRequest = useRef(0);
 
   const refresh = useCallback(async () => {
+    const request = ++refreshRequest.current;
     setLoading(true);
     setError(null);
     try {
-      setPoints(await loadMapPoints(workspaceId));
+      const nextPoints = await loadMapPoints(workspaceId);
+      if (request !== refreshRequest.current) return;
+      setPoints(nextPoints);
     } catch (caught) {
+      if (request !== refreshRequest.current) return;
       setError(caught instanceof Error ? caught.message : 'Não foi possível carregar o mapa.');
     } finally {
-      setLoading(false);
+      if (request === refreshRequest.current) setLoading(false);
     }
   }, [workspaceId]);
 
-  useEffect(() => { void refresh(); }, [refresh]);
+  useEffect(() => {
+    void refresh();
+    return () => { refreshRequest.current += 1; };
+  }, [refresh]);
   const visible = useMemo(() => points.filter((point) => active.has(point.type)), [points, active]);
   const center = flyTo ?? (points[0] ? [points[0].latitude, points[0].longitude] as [number, number] : null);
 

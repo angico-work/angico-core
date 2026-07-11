@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import type { AppContext } from '../components/AppShell';
 import { EmptyState, ErrorState, LoadingState } from '../components/PageFeedback';
@@ -42,21 +42,29 @@ export default function MemoriaPage() {
   const [filter, setFilter] = useState('TODOS');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const refreshRequest = useRef(0);
 
   const refresh = useCallback(async () => {
+    const request = ++refreshRequest.current;
     setLoading(true);
     setError(null);
     try {
-      setEvents(await loadMemoria(workspaceId));
+      const nextEvents = await loadMemoria(workspaceId);
+      if (request !== refreshRequest.current) return;
+      setEvents(nextEvents);
     } catch (caught) {
+      if (request !== refreshRequest.current) return;
       setEvents([]);
       setError(caught instanceof Error ? caught.message : 'Não foi possível carregar a memória.');
     } finally {
-      setLoading(false);
+      if (request === refreshRequest.current) setLoading(false);
     }
   }, [workspaceId]);
 
-  useEffect(() => { void refresh(); }, [refresh]);
+  useEffect(() => {
+    void refresh();
+    return () => { refreshRequest.current += 1; };
+  }, [refresh]);
   const types = useMemo(() => Array.from(new Set(events.map((event) => event.entityType.toUpperCase()))), [events]);
   const visible = filter === 'TODOS' ? events : events.filter((event) => event.entityType.toUpperCase() === filter);
 

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import {
   discardOutboxEntry,
   getSyncMetadata,
@@ -91,8 +91,10 @@ export default function SyncCenter({ ownerId, workspaceId, online, onClose }: Pr
   const [revision, setRevision] = useState<RevisionDraft>();
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const refreshRequest = useRef(0);
 
   const refresh = useCallback(async () => {
+    const request = ++refreshRequest.current;
     if (!ownerId) {
       setEntries([]);
       setMetadata(undefined);
@@ -103,6 +105,7 @@ export default function SyncCenter({ ownerId, workspaceId, online, onClose }: Pr
       listOutbox(ownerId, workspaceId),
       getSyncMetadata(ownerId, workspaceId)
     ]);
+    if (request !== refreshRequest.current) return;
     setEntries(nextEntries.reverse());
     setMetadata(nextMetadata);
     setLoading(false);
@@ -111,7 +114,10 @@ export default function SyncCenter({ ownerId, workspaceId, online, onClose }: Pr
   useEffect(() => {
     void refresh();
     window.addEventListener('angico:sync-state', refresh);
-    return () => window.removeEventListener('angico:sync-state', refresh);
+    return () => {
+      refreshRequest.current += 1;
+      window.removeEventListener('angico:sync-state', refresh);
+    };
   }, [refresh]);
 
   async function synchronize() {

@@ -1,5 +1,5 @@
 import '@testing-library/jest-dom/vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import SyncCenter from './SyncCenter';
 import {
@@ -70,6 +70,12 @@ const evidenceEntry = {
   status: 'QUEUED' as const
 };
 
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((done) => { resolve = done; });
+  return { promise, resolve };
+}
+
 describe('SyncCenter', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -101,6 +107,65 @@ describe('SyncCenter', () => {
     expect(screen.getByText(/Último envio concluído/)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Sincronizar agora' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Revisar Nascente sem proteção' })).toBeInTheDocument();
+  });
+
+  it('ignores an older local read after the active workspace changes', async () => {
+    const firstEntries = deferred<Array<typeof conflict>>();
+    const secondEntries = deferred<Array<typeof conflict>>();
+    const firstMetadata = deferred<Awaited<ReturnType<typeof getSyncMetadata>>>();
+    const secondMetadata = deferred<Awaited<ReturnType<typeof getSyncMetadata>>>();
+    vi.mocked(listOutbox).mockImplementation((_ownerId, workspaceId) => (
+      workspaceId === 'territorio-a' ? firstEntries.promise : secondEntries.promise
+    ));
+    vi.mocked(getSyncMetadata).mockImplementation((_ownerId, workspaceId) => (
+      workspaceId === 'territorio-a' ? firstMetadata.promise : secondMetadata.promise
+    ));
+    const workspaceBEntry = {
+      ...conflict,
+      id: 'conflict-b',
+      workspaceId: 'territorio-b',
+      localEntityKey: 'local-b',
+      body: {
+        ...conflict.body,
+        clientMutationId: 'conflict-b',
+        workspaceId: 'territorio-b',
+        titulo: 'Registro do território B'
+      }
+    };
+    const view = render(
+      <SyncCenter ownerId="ana.sp" workspaceId="territorio-a" online onClose={vi.fn()} />
+    );
+    await waitFor(() => expect(listOutbox).toHaveBeenCalledWith('ana.sp', 'territorio-a'));
+
+    view.rerender(
+      <SyncCenter ownerId="ana.sp" workspaceId="territorio-b" online onClose={vi.fn()} />
+    );
+    await waitFor(() => expect(listOutbox).toHaveBeenCalledWith('ana.sp', 'territorio-b'));
+    await act(async () => {
+      secondEntries.resolve([workspaceBEntry]);
+      secondMetadata.resolve({
+        key: '["ana.sp","territorio-b"]',
+        ownerId: 'ana.sp',
+        workspaceId: 'territorio-b',
+        lastAttemptAt: '2026-07-10T12:02:00Z'
+      });
+      await Promise.all([secondEntries.promise, secondMetadata.promise]);
+    });
+    expect(await screen.findByText('Registro do território B')).toBeInTheDocument();
+
+    await act(async () => {
+      firstEntries.resolve([conflict]);
+      firstMetadata.resolve({
+        key: '["ana.sp","territorio-a"]',
+        ownerId: 'ana.sp',
+        workspaceId: 'territorio-a',
+        lastAttemptAt: '2026-07-10T12:01:00Z'
+      });
+      await Promise.all([firstEntries.promise, firstMetadata.promise]);
+    });
+
+    expect(screen.queryByText('Nascente sem proteção')).not.toBeInTheDocument();
+    expect(screen.getByText('Registro do território B')).toBeInTheDocument();
   });
 
   it('saves a corrected copy with a new operation before explicitly resending it', async () => {

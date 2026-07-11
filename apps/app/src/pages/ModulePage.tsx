@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import { useOutletContext, useSearchParams } from 'react-router-dom';
 import type { AppContext } from '../components/AppShell';
 import { createEntity, listEntities, sessionOwnerId } from '../lib/api';
@@ -97,6 +97,7 @@ export default function ModulePage({ configKey }: { configKey: string }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
+  const refreshRequest = useRef(0);
   const contextualCreate = searchParams.get('create') === '1';
 
   useEffect(() => {
@@ -104,6 +105,7 @@ export default function ModulePage({ configKey }: { configKey: string }) {
   }, [contextualCreate]);
 
   const refresh = useCallback(async () => {
+    const request = ++refreshRequest.current;
     setLoading(true);
     setError(null);
     let localSnapshots: Item[] = [];
@@ -121,6 +123,7 @@ export default function ModulePage({ configKey }: { configKey: string }) {
           }));
       }
       const remote = await listEntities<Item>(config.path, workspaceId);
+      if (request !== refreshRequest.current) return;
       if (configKey !== 'observacoes') {
         setItems(remote);
       } else {
@@ -134,14 +137,18 @@ export default function ModulePage({ configKey }: { configKey: string }) {
         setItems([...localOnly, ...remote]);
       }
     } catch (caught) {
+      if (request !== refreshRequest.current) return;
       setItems(localSnapshots);
       setError(caught instanceof Error ? caught.message : 'Não foi possível carregar os registros.');
     } finally {
-      setLoading(false);
+      if (request === refreshRequest.current) setLoading(false);
     }
   }, [config.path, configKey, workspaceId]);
 
-  useEffect(() => { void refresh(); }, [refresh]);
+  useEffect(() => {
+    void refresh();
+    return () => { refreshRequest.current += 1; };
+  }, [refresh]);
   useEffect(() => {
     const handleSync = () => { void refresh(); };
     window.addEventListener('angico:sync-state', handleSync);
