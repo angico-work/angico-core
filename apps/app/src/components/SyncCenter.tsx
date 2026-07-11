@@ -48,6 +48,10 @@ function isMessageEntry(entry: OutboxEntry): entry is MessageOutboxEntry {
   return entry.operation === 'MESSAGE_SEND';
 }
 
+function isEvidenceEntry(entry: OutboxEntry): entry is EvidenceOutboxEntry {
+  return entry.operation === 'EVIDENCE_CREATE';
+}
+
 function entryTitle(entry: OutboxEntry): string {
   if (isObservationEntry(entry)) return entry.body.titulo;
   if (isMessageEntry(entry)) {
@@ -165,6 +169,8 @@ export default function SyncCenter({ ownerId, workspaceId, online, onClose }: Pr
     const confirmed = window.confirm(
       entry.operation === 'MESSAGE_SEND'
         ? 'Descartar remove os anexos locais desta mensagem e interrompe o envio. Deseja continuar?'
+        : entry.operation === 'EVIDENCE_CREATE' && entry.body.file
+          ? 'Descartar remove o arquivo local desta evidência e interrompe o envio. O histórico manterá apenas os metadados do descarte. Deseja continuar?'
         : 'Descartar interrompe este envio. A cópia original continuará no histórico local como descartada. Deseja continuar?'
     );
     if (!confirmed) return;
@@ -251,6 +257,12 @@ export default function SyncCenter({ ownerId, workspaceId, online, onClose }: Pr
                     <div>
                       <b>{entryTitle(entry)}</b>
                       <p>{entryContext(entry)}</p>
+                      {isEvidenceEntry(entry) && entry.body.file && (
+                        <>
+                          <small>{entry.body.file.name}{entry.body.file.type ? ` · ${entry.body.file.type}` : ''}</small>
+                          <small>O arquivo permanece salvo neste aparelho até a confirmação do envio.</small>
+                        </>
+                      )}
                       {entry.lastError && <small>{entry.lastError}</small>}
                     </div>
                   </div>
@@ -289,6 +301,17 @@ export default function SyncCenter({ ownerId, workspaceId, online, onClose }: Pr
                           Descartar
                         </button>
                       </div>
+                    )}
+                    {isEvidenceEntry(entry) && REVIEWABLE.includes(entry.status) && (
+                      <button
+                        type="button"
+                        className="danger-text-button compact-button"
+                        aria-label={`Descartar evidência: ${entryTitle(entry)}`}
+                        disabled={workingId === entry.id}
+                        onClick={() => void discard(entry)}
+                      >
+                        Descartar
+                      </button>
                     )}
                   </div>
                 </div>

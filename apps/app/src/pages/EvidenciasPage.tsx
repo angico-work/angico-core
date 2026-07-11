@@ -4,8 +4,10 @@ import type { AppContext } from '../components/AppShell';
 import ModalDialog from '../components/ModalDialog';
 import { EmptyState, ErrorState, LoadingState } from '../components/PageFeedback';
 import {
-  createEvidencia, evidenciaFileUrl, listAcoes, listEvidencias, listObservacoes, listResultados
+  evidenciaFileUrl, listAcoes, listEvidencias, listObservacoes, listResultados, sessionOwnerId
 } from '../lib/api';
+import { listLocalEvidences, type LocalEvidence, type OutboxStatus } from '../lib/offlineStore';
+import { captureEvidence } from '../lib/offlineSync';
 import type {
   Acao, Evidencia, EvidenceSubjectType, Observacao, Resultado
 } from '../types';
@@ -43,13 +45,54 @@ function authorLabel(actorId: string): string {
   return /^[A-Za-z][A-Za-z0-9._-]{1,63}$/.test(actorId) ? `@${actorId}` : 'registrada';
 }
 
+const LOCAL_STATUS: Record<OutboxStatus, string> = {
+  QUEUED: 'Salva neste aparelho',
+  SYNCING: 'Enviando',
+  SYNCED: 'Compartilhada',
+  RETRYABLE_ERROR: 'Envio será tentado novamente',
+  CONFLICT: 'Revisão necessária',
+  BLOCKED: 'Entre novamente para enviar',
+  ACTION_REQUIRED: 'Revisão necessária',
+  SUPERSEDED: 'Versão substituída',
+  DISCARDED: 'Descartada'
+};
+
+type EvidenceView =
+  | { key: string; kind: 'remote'; evidence: Evidencia }
+  | { key: string; kind: 'local'; evidence: LocalEvidence };
+
+function mergeEvidences(remote: Evidencia[], local: LocalEvidence[]): EvidenceView[] {
+  const remoteMutationIds = new Set(remote.flatMap((entry) => entry.clientMutationId ? [entry.clientMutationId] : []));
+  const remoteIds = new Set(remote.map((entry) => entry.id));
+  const views: EvidenceView[] = remote.map((evidence) => ({
+    key: `remote:${evidence.id}`,
+    kind: 'remote',
+    evidence
+  }));
+
+  for (const evidence of local) {
+    if (evidence.syncStatus === 'DISCARDED' || evidence.syncStatus === 'SUPERSEDED') continue;
+    if (remoteMutationIds.has(evidence.clientMutationId)) continue;
+    if (evidence.remote) {
+      if (remoteIds.has(evidence.remote.id)) continue;
+      remoteIds.add(evidence.remote.id);
+      if (evidence.remote.clientMutationId) remoteMutationIds.add(evidence.remote.clientMutationId);
+      views.push({ key: `remote:${evidence.remote.id}`, kind: 'remote', evidence: evidence.remote });
+      continue;
+    }
+    views.push({ key: `local:${evidence.clientMutationId}`, kind: 'local', evidence });
+  }
+
+  return views;
+}
+
 function EvidenceDialog({ workspaceId, records, requestedType, requestedId, onClose, onCreated }: {
   workspaceId: string;
   records: SubjectRecords;
   requestedType: string | null;
   requestedId: string | null;
   onClose: () => void;
-  onCreated: (evidence: Evidencia) => void;
+  onCreated: () => void;
 }) {
   const initialType = validSubjectType(requestedType) ? requestedType : 'OBSERVACAO';
   const requestedNumber = Number(requestedId);
@@ -63,7 +106,6 @@ function EvidenceDialog({ workspaceId, records, requestedType, requestedId, onCl
   const [description, setDescription] = useState('');
   const [capturedAt, setCapturedAt] = useState('');
   const [file, setFile] = useState<File | undefined>();
-  const [clientMutationId] = useState(() => crypto.randomUUID());
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -81,16 +123,16 @@ function EvidenceDialog({ workspaceId, records, requestedType, requestedId, onCl
     setSubmitting(true);
     setError(null);
     try {
-      onCreated(await createEvidencia({
+      await captureEvidence({
         workspaceId,
         subjectType,
         subjectId,
         title: title.trim(),
         description: description.trim() || undefined,
         capturedAt: capturedAt ? new Date(capturedAt).toISOString() : undefined,
-        clientMutationId,
         file
-      }));
+      });
+      onCreated();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Não foi possível registrar a evidência.');
       setSubmitting(false);
@@ -171,6 +213,7 @@ export default function EvidenciasPage() {
   const { workspaceId } = useOutletContext<AppContext>();
   const [searchParams, setSearchParams] = useSearchParams();
   const [evidences, setEvidences] = useState<Evidencia[]>([]);
+  const [localEvidences, setLocalEvidences] = useState<LocalEvidence[]>([]);
   const [observations, setObservations] = useState<Observacao[]>([]);
   const [actions, setActions] = useState<Acao[]>([]);
   const [results, setResults] = useState<Resultado[]>([]);
@@ -184,11 +227,17 @@ export default function EvidenciasPage() {
     setError(null);
     setEvidences([]);
     try {
-      const [nextEvidences, nextObservations, nextActions, nextResults] = await Promise.all([
-        listEvidencias(workspaceId), listObservacoes(workspaceId), listAcoes(workspaceId), listResultados(workspaceId)
+      const ownerId = sessionOwnerId();
+      const [nextEvidences, nextLocalEvidences, nextObservations, nextActions, nextResults] = await Promise.all([
+        listEvidencias(workspaceId),
+        ownerId ? listLocalEvidences(ownerId, workspaceId) : Promise.resolve([]),
+        listObservacoes(workspaceId),
+        listAcoes(workspaceId),
+        listResultados(workspaceId)
       ]);
       if (request.current !== current) return;
       setEvidences(nextEvidences);
+      setLocalEvidences(nextLocalEvidences);
       setObservations(nextObservations);
       setActions(nextActions);
       setResults(nextResults);
@@ -199,7 +248,12 @@ export default function EvidenciasPage() {
     }
   }, [workspaceId]);
 
-  useEffect(() => { void refresh(); }, [refresh]);
+  useEffect(() => {
+    const sync = () => { void refresh(); };
+    void refresh();
+    window.addEventListener('angico:sync-state', sync);
+    return () => window.removeEventListener('angico:sync-state', sync);
+  }, [refresh]);
 
   const records = useMemo<SubjectRecords>(() => ({
     OBSERVACAO: observations.map((entry) => ({ id: entry.id, name: entry.titulo })),
@@ -210,6 +264,11 @@ export default function EvidenciasPage() {
   const names = useMemo(() => new Map(
     (Object.keys(records) as EvidenceSubjectType[]).flatMap((type) => records[type].map((entry) => [`${type}:${entry.id}`, entry.name] as const))
   ), [records]);
+
+  const evidenceViews = useMemo(
+    () => mergeEvidences(evidences, localEvidences),
+    [evidences, localEvidences]
+  );
 
   const creating = searchParams.get('create') === '1';
   const closeDialog = () => setSearchParams({}, { replace: true });
@@ -223,15 +282,20 @@ export default function EvidenciasPage() {
 
       {loading && <LoadingState label="Carregando evidências…" />}
       {error && <ErrorState message={error} onRetry={() => void refresh()} />}
-      {!loading && !error && evidences.length === 0 && (
+      {!loading && !error && evidenceViews.length === 0 && (
         <EmptyState title="Nenhuma evidência registrada" message="Registre a primeira comprovação vinculada a um item real do percurso." action={<button className="secondary-button" type="button" onClick={() => setSearchParams({ create: '1' })}>Nova evidência</button>} />
       )}
-      {!loading && !error && evidences.length > 0 && (
+      {!loading && !error && evidenceViews.length > 0 && (
         <section className="record-sheet" aria-label="Evidências registradas">
-          <header className="record-sheet-head"><span>{evidences.length} {evidences.length === 1 ? 'evidência' : 'evidências'}</span><span>Registros disponíveis</span></header>
+          <header className="record-sheet-head"><span>{evidenceViews.length} {evidenceViews.length === 1 ? 'evidência' : 'evidências'}</span><span>Registros disponíveis</span></header>
           <div className="record-list">
-            {evidences.map((evidence) => (
-              <article className="record-row operational-row" key={evidence.id} style={{ '--record-accent': '#7A6337' } as React.CSSProperties}>
+            {evidenceViews.map((view) => {
+              const evidence = view.kind === 'remote' ? view.evidence : view.evidence.data;
+              const local = view.kind === 'local' ? view.evidence : undefined;
+              const file = local?.data.file;
+              const hasRemoteFile = view.kind === 'remote' && view.evidence.hasFile;
+              return (
+              <article className="record-row operational-row" key={view.key}>
                 <span className="record-mark" aria-hidden="true" />
                 <div className="record-main">
                   <h2>{evidence.title}</h2>
@@ -239,16 +303,20 @@ export default function EvidenciasPage() {
                   <div className="record-meta"><span>{SUBJECT_LABELS[evidence.subjectType].singular} · {names.get(`${evidence.subjectType}:${evidence.subjectId}`) ?? 'Registro vinculado não disponível'}</span><span>Capturada em {formatDate(evidence.capturedAt)}</span></div>
                 </div>
                 <div className="record-provenance">
-                  <strong>{evidence.hasFile ? 'Arquivo disponível' : 'Sem arquivo'}</strong>
-                  {evidence.hasFile && <a className="record-link" href={evidenciaFileUrl(evidence.id)} target="_blank" rel="noreferrer">Abrir arquivo</a>}
-                  {evidence.originalFilename && <span>{evidence.originalFilename}{evidence.contentType ? ` · ${evidence.contentType}` : ''}</span>}
-                  {fileSize(evidence.sizeBytes) && <span>{fileSize(evidence.sizeBytes)}</span>}
-                  {evidence.sha256 && <span className="evidence-hash">SHA-256 {evidence.sha256}</span>}
-                  <span>Autoria: {authorLabel(evidence.actorId)}</span>
-                  <time dateTime={evidence.recordedAt}>Registrada em {formatDate(evidence.recordedAt)}</time>
+                  <strong>{local ? LOCAL_STATUS[local.syncStatus] : hasRemoteFile ? 'Arquivo disponível' : 'Sem arquivo'}</strong>
+                  {view.kind === 'remote' && hasRemoteFile && <a className="record-link" href={evidenciaFileUrl(view.evidence.id)} target="_blank" rel="noreferrer">Abrir arquivo</a>}
+                  {view.kind === 'remote' && view.evidence.originalFilename && <span>{view.evidence.originalFilename}{view.evidence.contentType ? ` · ${view.evidence.contentType}` : ''}</span>}
+                  {file && <span>{file.name}{file.type ? ` · ${file.type}` : ''}</span>}
+                  {view.kind === 'remote' && fileSize(view.evidence.sizeBytes) && <span>{fileSize(view.evidence.sizeBytes)}</span>}
+                  {file && fileSize(file.size) && <span>{fileSize(file.size)}</span>}
+                  {view.kind === 'remote' && view.evidence.sha256 && <span className="evidence-hash">SHA-256 {view.evidence.sha256}</span>}
+                  {local?.lastError && <span>{local.lastError}</span>}
+                  {view.kind === 'local' ? <span>Arquivo salvo neste aparelho</span> : <span>Autoria: {authorLabel(view.evidence.actorId)}</span>}
+                  {view.kind === 'remote' && <time dateTime={view.evidence.recordedAt}>Registrada em {formatDate(view.evidence.recordedAt)}</time>}
                 </div>
               </article>
-            ))}
+              );
+            })}
           </div>
         </section>
       )}
@@ -260,9 +328,9 @@ export default function EvidenciasPage() {
           requestedType={searchParams.get('subjectType')}
           requestedId={searchParams.get('subjectId')}
           onClose={closeDialog}
-          onCreated={(evidence) => {
-            setEvidences((current) => [evidence, ...current]);
+          onCreated={() => {
             closeDialog();
+            void refresh();
           }}
         />
       )}

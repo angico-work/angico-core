@@ -9,7 +9,7 @@ import {
   recoverMessageAsDraft,
   reviseObservation
 } from '../lib/offlineStore';
-import { syncPendingObservations } from '../lib/offlineSync';
+import { retryPendingOperations, syncPendingObservations } from '../lib/offlineSync';
 
 vi.mock('../lib/offlineStore', () => ({
   discardOutboxEntry: vi.fn(),
@@ -20,7 +20,7 @@ vi.mock('../lib/offlineStore', () => ({
 }));
 
 vi.mock('../lib/offlineSync', () => ({
-  retryPendingObservations: vi.fn(),
+  retryPendingOperations: vi.fn(),
   syncPendingObservations: vi.fn()
 }));
 
@@ -47,8 +47,31 @@ const conflict = {
   lastError: 'O conteúdo diverge do envio anterior.'
 };
 
+const evidenceEntry = {
+  ...conflict,
+  id: 'evidence-1',
+  operation: 'EVIDENCE_CREATE' as const,
+  body: {
+    workspaceId: 'territorio-a',
+    subjectType: 'OBSERVACAO' as const,
+    subjectId: 42,
+    title: 'Foto da nascente',
+    capturedAt: '2026-07-10T12:00:00Z',
+    clientMutationId: 'evidence-1',
+    deviceId: 'device-1',
+    file: {
+      blobKey: 'evidence-file-1',
+      name: 'nascente.jpg',
+      type: 'image/jpeg',
+      size: 1200
+    }
+  },
+  status: 'QUEUED' as const
+};
+
 describe('SyncCenter', () => {
   beforeEach(() => {
+    vi.clearAllMocks();
     vi.mocked(listOutbox).mockResolvedValue([conflict]);
     vi.mocked(getSyncMetadata).mockResolvedValue({
       key: '["ana.sp","territorio-a"]',
@@ -144,27 +167,42 @@ describe('SyncCenter', () => {
     ));
   });
 
-  it('identifies queued evidence without offering message recovery', async () => {
-    vi.mocked(listOutbox).mockResolvedValue([{
-      ...conflict,
-      id: 'evidence-1',
-      operation: 'EVIDENCE_CREATE' as const,
-      body: {
-        workspaceId: 'territorio-a',
-        subjectType: 'OBSERVACAO' as const,
-        subjectId: 42,
-        title: 'Foto da nascente',
-        capturedAt: '2026-07-10T12:00:00Z',
-        clientMutationId: 'evidence-1',
-        deviceId: 'device-1'
-      },
-      status: 'QUEUED' as const
-    }]);
+  it('identifies queued evidence and its protected local file without offering message recovery', async () => {
+    vi.mocked(listOutbox).mockResolvedValue([evidenceEntry]);
 
     render(<SyncCenter ownerId="ana.sp" workspaceId="territorio-a" online onClose={vi.fn()} />);
 
     expect(await screen.findByText('Foto da nascente')).toBeInTheDocument();
     expect(screen.getByText('Evidência · Observação')).toBeInTheDocument();
+    expect(screen.getByText('nascente.jpg · image/jpeg')).toBeInTheDocument();
+    expect(screen.getByText('O arquivo permanece salvo neste aparelho até a confirmação do envio.')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Retomar como rascunho/ })).not.toBeInTheDocument();
+  });
+
+  it('retries a retryable evidence through the explicit synchronization action', async () => {
+    vi.mocked(listOutbox).mockResolvedValue([{ ...evidenceEntry, status: 'RETRYABLE_ERROR' }]);
+
+    render(<SyncCenter ownerId="ana.sp" workspaceId="territorio-a" online onClose={vi.fn()} />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Sincronizar agora' }));
+
+    await waitFor(() => expect(retryPendingOperations).toHaveBeenCalledWith('ana.sp', 'territorio-a'));
+  });
+
+  it('requires evidence-specific confirmation before discarding a rejected file', async () => {
+    vi.mocked(listOutbox).mockResolvedValue([{ ...evidenceEntry, status: 'ACTION_REQUIRED' }]);
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValueOnce(false).mockReturnValueOnce(true);
+
+    render(<SyncCenter ownerId="ana.sp" workspaceId="territorio-a" online onClose={vi.fn()} />);
+    const discard = await screen.findByRole('button', { name: 'Descartar evidência: Foto da nascente' });
+    fireEvent.click(discard);
+    expect(discardOutboxEntry).not.toHaveBeenCalled();
+    fireEvent.click(discard);
+
+    await waitFor(() => expect(discardOutboxEntry).toHaveBeenCalledWith(
+      'evidence-1', 'ana.sp', 'territorio-a'
+    ));
+    expect(confirm).toHaveBeenCalledWith(
+      'Descartar remove o arquivo local desta evidência e interrompe o envio. O histórico manterá apenas os metadados do descarte. Deseja continuar?'
+    );
   });
 });

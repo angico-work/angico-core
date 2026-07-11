@@ -4,18 +4,23 @@ import { MemoryRouter, Outlet, Route, Routes } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import EvidenciasPage from './EvidenciasPage';
 import {
-  createEvidencia, evidenciaFileUrl, listAcoes, listEvidencias, listObservacoes, listResultados
+  evidenciaFileUrl, listAcoes, listEvidencias, listObservacoes, listResultados
 } from '../lib/api';
+import { listLocalEvidences } from '../lib/offlineStore';
+import { captureEvidence } from '../lib/offlineSync';
 import type { Acao, Evidencia, Observacao, Resultado } from '../types';
 
 vi.mock('../lib/api', () => ({
-  createEvidencia: vi.fn(),
   evidenciaFileUrl: vi.fn((id: number) => `/api/evidencias/${id}/arquivo`),
   listAcoes: vi.fn(),
   listEvidencias: vi.fn(),
   listObservacoes: vi.fn(),
-  listResultados: vi.fn()
+  listResultados: vi.fn(),
+  sessionOwnerId: vi.fn(() => 'ana.sp')
 }));
+
+vi.mock('../lib/offlineStore', () => ({ listLocalEvidences: vi.fn() }));
+vi.mock('../lib/offlineSync', () => ({ captureEvidence: vi.fn() }));
 
 const action = { id: 4, workspaceId: 'workspace-a', titulo: 'Limpar a margem' } as Acao;
 const observation = { id: 5, workspaceId: 'workspace-a', titulo: 'Resíduos na água' } as Observacao;
@@ -35,9 +40,28 @@ const evidence = {
   recordedAt: '2026-07-10T14:25:00Z',
   actorId: 'ana.sp',
   deviceId: null,
-  clientMutationId: null,
+  clientMutationId: 'evidence-local-1',
   hasFile: true
 } satisfies Evidencia;
+
+const localEvidence = {
+  key: 'local-evidence-1',
+  ownerId: 'ana.sp',
+  workspaceId: 'workspace-a',
+  clientMutationId: 'evidence-local-1',
+  data: {
+    workspaceId: 'workspace-a',
+    subjectType: 'ACAO' as const,
+    subjectId: 4,
+    title: 'Foto aguardando envio',
+    capturedAt: '2026-07-10T14:20:00Z',
+    deviceId: 'device-1',
+    clientMutationId: 'evidence-local-1',
+    file: { blobKey: 'blob-1', name: 'nascente.jpg', type: 'image/jpeg', size: 1200 }
+  },
+  syncStatus: 'QUEUED' as const,
+  updatedAt: '2026-07-10T14:21:00Z'
+};
 
 function renderPage(entry = '/evidencias') {
   return render(
@@ -57,7 +81,10 @@ describe('EvidenciasPage', () => {
     vi.mocked(listAcoes).mockResolvedValue([action]);
     vi.mocked(listObservacoes).mockResolvedValue([observation]);
     vi.mocked(listResultados).mockResolvedValue([result]);
-    vi.mocked(createEvidencia).mockResolvedValue(evidence);
+    vi.mocked(listLocalEvidences).mockResolvedValue([]);
+    vi.mocked(captureEvidence).mockResolvedValue({
+      clientMutationId: 'evidence-local-1', status: 'SYNCED', remote: evidence
+    });
   });
 
   afterEach(() => {
@@ -89,12 +116,13 @@ describe('EvidenciasPage', () => {
     fireEvent.change(screen.getByLabelText('Título'), { target: { value: 'Foto depois do mutirão' } });
     fireEvent.click(screen.getByRole('button', { name: 'Salvar evidência' }));
 
-    await waitFor(() => expect(createEvidencia).toHaveBeenCalledWith(expect.objectContaining({
+    await waitFor(() => expect(captureEvidence).toHaveBeenCalledWith(expect.objectContaining({
       workspaceId: 'workspace-a',
       subjectType: 'ACAO',
       subjectId: 4,
       title: 'Foto depois do mutirão'
     })));
+    expect(vi.mocked(captureEvidence).mock.calls[0][0]).not.toHaveProperty('id');
   });
 
   it('does not replace an invalid Rastro subject with the first record', async () => {
@@ -104,21 +132,26 @@ describe('EvidenciasPage', () => {
     expect(screen.getByLabelText('Registro vinculado')).toHaveDisplayValue('Selecione por nome');
   });
 
-  it('keeps the same idempotency key when a submission is retried', async () => {
-    vi.mocked(createEvidencia)
-      .mockRejectedValueOnce(new Error('resposta perdida'))
-      .mockResolvedValueOnce(evidence);
-    renderPage('/evidencias?create=1&subjectType=ACAO&subjectId=4');
-    await screen.findByRole('dialog', { name: 'Nova evidência' });
-    fireEvent.change(screen.getByLabelText('Título'), { target: { value: 'Registro do mutirão' } });
+  it('shows a queued local evidence and its file without inventing a remote id', async () => {
+    vi.mocked(listEvidencias).mockResolvedValue([]);
+    vi.mocked(listLocalEvidences).mockResolvedValue([localEvidence]);
+    renderPage();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Salvar evidência' }));
-    await screen.findByRole('alert');
-    fireEvent.click(screen.getByRole('button', { name: 'Salvar evidência' }));
+    expect(await screen.findByRole('heading', { name: 'Foto aguardando envio' })).toBeInTheDocument();
+    expect(screen.getByText('Salva neste aparelho')).toBeInTheDocument();
+    expect(screen.getByText('nascente.jpg · image/jpeg')).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Abrir arquivo' })).not.toBeInTheDocument();
+    expect(screen.queryByText(/Evidência #/)).not.toBeInTheDocument();
+  });
 
-    await waitFor(() => expect(createEvidencia).toHaveBeenCalledTimes(2));
-    expect(vi.mocked(createEvidencia).mock.calls[0][0].clientMutationId).toBe(
-      vi.mocked(createEvidencia).mock.calls[1][0].clientMutationId
-    );
+  it('reconciles a synchronized local evidence with the same remote record without duplication', async () => {
+    vi.mocked(listLocalEvidences).mockResolvedValue([{
+      ...localEvidence,
+      syncStatus: 'SYNCED',
+      remote: evidence
+    }]);
+    renderPage();
+
+    expect(await screen.findAllByRole('heading', { name: 'Registro da retirada' })).toHaveLength(1);
   });
 });
