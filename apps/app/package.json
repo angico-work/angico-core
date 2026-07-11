@@ -16,7 +16,8 @@
     "preview": "vite preview --host 0.0.0.0 --port 4176",
     "test": "vitest",
     "test:budget": "node --test scripts/check-bundle-budget.test.mjs",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "verify": "npm run check && npm run test:budget && npm run e2e && npm run budget"
   },
   "dependencies": {
     "@fontsource/bricolage-grotesque": "5.2.10",

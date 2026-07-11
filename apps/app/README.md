@@ -25,8 +25,14 @@ O valor deve ser uma origem `https`, sem caminho, query, credenciais ou fragment
 
 ## Verificação
 
+Na primeira execução, instale o Chromium controlado pelo Playwright:
+
 ```bash
-npm test -- --run
-npm run typecheck
-npm run build
+npx playwright install chromium
+npm run verify
+npm audit --audit-level=high
 ```
+
+`npm run verify` executa lint sem warnings, typecheck, testes unitários, testes do orçamento, build, smoke responsivo em 320, 375, 430 e 1440 px, axe e conferência do bundle. O smoke autentica com respostas explícitas definidas em `e2e/api-fixtures.ts`, interceptadas somente pelo Playwright; nenhum mock é importado pelo código da aplicação.
+
+Os limites brutos atuais são 680.000 bytes de JavaScript e 68.000 bytes de CSS. O workflow em `.github/workflows/verify.yml` permite repetir os mesmos gates quando este diretório for separado em um repositório próprio.

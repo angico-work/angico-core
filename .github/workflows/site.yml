@@ -22,7 +22,7 @@ concurrency:
 jobs:
   verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
     defaults:
       run:
         working-directory: apps/site
@@ -34,7 +34,6 @@ jobs:
           cache: npm
           cache-dependency-path: apps/site/package-lock.json
       - run: npm ci
-      - run: npm run typecheck
-      - run: npm test -- --run
-      - run: npm run build
+      - run: npx playwright install --with-deps chromium
+      - run: npm run verify
       - run: npm audit --audit-level=high

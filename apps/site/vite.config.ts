@@ -9,6 +9,7 @@ export default defineConfig({
     strictPort: true
   },
   test: {
-    environment: 'jsdom'
+    environment: 'jsdom',
+    include: ['src/**/*.{test,spec}.{ts,tsx}']
   }
 });

@@ -2,6 +2,8 @@
 node_modules/
 target/
 dist/
+playwright-report/
+test-results/
 apps/api/data/
 .env
 .env.local

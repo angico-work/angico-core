@@ -23,8 +23,14 @@ Quando uma URL não está configurada, o site mostra o canal correspondente como
 
 ## Verificação
 
+Na primeira execução, instale o Chromium controlado pelo Playwright:
+
 ```bash
-npm test -- --run
-npm run typecheck
-npm run build
+npx playwright install chromium
+npm run verify
+npm audit --audit-level=high
 ```
+
+`npm run verify` executa lint sem warnings, typecheck, testes unitários, testes do orçamento, build, smoke responsivo em 320, 375, 430 e 1440 px, axe e conferência do bundle. O teste de contato intercepta o endpoint somente dentro do Playwright; o site publicado não recebe fixtures nem respostas simuladas.
+
+Os limites brutos atuais são 225.000 bytes de JavaScript e 16.000 bytes de CSS. O workflow em `.github/workflows/verify.yml` permite repetir os mesmos gates quando este diretório for separado em um repositório próprio.

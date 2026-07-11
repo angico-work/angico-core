@@ -16,7 +16,8 @@
     "test:budget": "node --test scripts/check-bundle-budget.test.mjs",
     "preview": "vite preview --host 0.0.0.0 --port 4175",
     "test": "vitest",
-    "e2e": "playwright test"
+    "e2e": "playwright test",
+    "verify": "npm run check && npm run test:budget && npm run e2e && npm run budget"
   },
   "dependencies": {
     "@fontsource/bricolage-grotesque": "5.2.10",

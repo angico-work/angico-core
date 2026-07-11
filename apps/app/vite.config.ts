@@ -53,7 +53,8 @@ export default defineConfig(({ mode }) => {
       }
     },
     test: {
-      environment: 'jsdom'
+      environment: 'jsdom',
+      include: ['api/**/*.{test,spec}.ts', 'src/**/*.{test,spec}.{ts,tsx}']
     }
   };
 });

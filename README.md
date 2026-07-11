@@ -57,16 +57,14 @@ O site inicia em `http://localhost:5175`. Sem `VITE_APP_URL` ou `VITE_CONTACT_AP
 ```bash
 cd apps/site
 npm ci
-npm run typecheck
-npm test -- --run
-npm run build
+npx playwright install chromium
+npm run verify
 npm audit --audit-level=high
 
 cd ../app
 npm ci
-npm run typecheck
-npm test -- --run
-npm run build
+npx playwright install chromium
+npm run verify
 npm audit --audit-level=high
 
 cd ../api
@@ -76,6 +74,10 @@ docker build -t angico-api:local .
 ```
 
 O smoke cria um PostgreSQL temporário no Docker local, valida as migrations e remove o container ao terminar. Ele não usa banco remoto.
+
+Nos frontends, `npm run verify` reúne lint, typecheck, testes unitários, build, orçamento bruto de JavaScript/CSS e Playwright com Chromium. Os smokes cobrem 320, 375, 430 e 1440 px, movimento reduzido, teclado, overflow, console e violações axe sérias ou críticas. Fixtures de API existem apenas no diretório `e2e` do app e nunca entram no bundle de produção.
+
+Os workflows da raiz executam esses gates no monorepo. Cada frontend também mantém um workflow em seu próprio `.github/workflows/verify.yml`, pronto para uso caso o diretório seja separado em um repositório independente.
 
 ## Princípios de dados
 
