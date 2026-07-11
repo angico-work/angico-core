@@ -359,6 +359,28 @@ describe('MensagensPage', () => {
     await waitFor(() => expect(screen.queryByText('Rascunho salvo neste aparelho')).not.toBeInTheDocument());
   });
 
+  it('waits for an active draft save before capturing the message', async () => {
+    Object.defineProperty(navigator, 'onLine', { configurable: true, value: false });
+    const pendingSave = deferred<void>();
+    vi.mocked(saveMessageDraft).mockReturnValueOnce(pendingSave.promise);
+    vi.mocked(captureMessage).mockResolvedValue({ clientMessageId: 'msg-after-draft', status: 'QUEUED' });
+    renderPage();
+
+    const editor = await screen.findByLabelText('Mensagem');
+    fireEvent.change(editor, { target: { value: 'Guardar sem ressuscitar o rascunho.' } });
+    await waitFor(() => expect(saveMessageDraft).toHaveBeenCalled());
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar na fila' }));
+
+    expect(captureMessage).not.toHaveBeenCalled();
+    pendingSave.resolve();
+    await waitFor(() => expect(captureMessage).toHaveBeenCalledWith({
+      workspaceId: 'territorio-a',
+      conversationId: 12,
+      body: 'Guardar sem ressuscitar o rascunho.',
+      attachments: []
+    }));
+  });
+
   it('keeps an offline send visible in the queue after the atomic capture succeeds', async () => {
     Object.defineProperty(navigator, 'onLine', { configurable: true, value: false });
     const local = {

@@ -76,6 +76,7 @@ export default function MensagensPage() {
   const streamRef = useRef<HTMLDivElement>(null);
   const savedFilesSignature = useRef('');
   const draftSaveTimer = useRef<number | undefined>(undefined);
+  const draftSaveInFlight = useRef<{ key: string; promise: Promise<void> } | undefined>(undefined);
   const draftSaveGeneration = useRef(0);
   const activeConversationRef = useRef<number | null>(activeId);
   const activeWorkspaceRef = useRef(workspaceId);
@@ -311,6 +312,8 @@ export default function MensagensPage() {
             linkedEntityId: messageLink.linkedEntityId
           })
         : saveMessageDraft(ownerId, workspaceId, activeId, draft, filesChanged ? files : undefined);
+      const inFlight = { key: `${ownerId}:${workspaceId}:${activeId}`, promise: save };
+      draftSaveInFlight.current = inFlight;
       void save
         .then(() => {
           if (!stillCurrent()) return;
@@ -321,6 +324,9 @@ export default function MensagensPage() {
           if (!stillCurrent()) return;
           setDraftState('error');
           setMessageError(caught instanceof Error ? caught.message : 'Não foi possível salvar o rascunho.');
+        })
+        .finally(() => {
+          if (draftSaveInFlight.current === inFlight) draftSaveInFlight.current = undefined;
         });
     }, 400);
     draftSaveTimer.current = timer;
@@ -347,6 +353,7 @@ export default function MensagensPage() {
     }
     const requestedWorkspace = workspaceId;
     const requestedConversation = activeId;
+    const requestedDraftKey = `${ownerId}:${workspaceId}:${activeId}`;
     if (draftSaveTimer.current !== undefined) {
       window.clearTimeout(draftSaveTimer.current);
       draftSaveTimer.current = undefined;
@@ -354,6 +361,10 @@ export default function MensagensPage() {
     setSending(true);
     setMessageError(null);
     try {
+      const pendingSave = draftSaveInFlight.current;
+      if (pendingSave?.key === requestedDraftKey) {
+        await pendingSave.promise.catch(() => undefined);
+      }
       await captureMessage({
         workspaceId,
         conversationId: activeId,
