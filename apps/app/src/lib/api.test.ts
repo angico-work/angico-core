@@ -16,7 +16,19 @@ import {
   login,
   revalidateSession,
   apiUrl,
+  createEvidencia,
+  createIndicador,
+  createMedicao,
+  createOrganizacao,
+  createParticipacao,
+  createRecurso,
+  createRecursoUso,
+  createResultado,
   createTerritorio,
+  evidenciaFileUrl,
+  listEvidencias,
+  listParticipacoes,
+  listRecursos,
   sendMensagem
 } from './api';
 
@@ -282,6 +294,144 @@ describe('cookie session API', () => {
       credentials: 'include',
       headers: expect.objectContaining({ 'X-CSRF-Token': 'csrf-secret' })
     }));
+  });
+
+  it('creates evidence as multipart with a stable mutation key and an optional safe file', async () => {
+    localStorage.setItem('angico.session', JSON.stringify(session));
+    const fetchMock = vi.fn().mockResolvedValue(response(201, { id: 91, hasFile: true }));
+    vi.stubGlobal('fetch', fetchMock);
+    const file = new File(['relato de campo'], 'relato.txt', { type: 'text/plain' });
+
+    await createEvidencia({
+      workspaceId: 'workspace-a',
+      subjectType: 'ACAO',
+      subjectId: 44,
+      title: 'Registro da retirada',
+      description: 'Equipe concluiu o trecho norte.',
+      capturedAt: '2026-07-10T14:20:00.000Z',
+      deviceId: 'campo-2',
+      clientMutationId: 'evidencia-8f9b',
+      file
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/evidencias', expect.objectContaining({
+      method: 'POST',
+      credentials: 'include',
+      headers: expect.objectContaining({
+        'Idempotency-Key': 'evidencia-8f9b',
+        'X-CSRF-Token': 'csrf-secret'
+      })
+    }));
+    const form = fetchMock.mock.calls[0][1].body as FormData;
+    expect(Object.fromEntries(form.entries())).toEqual(expect.objectContaining({
+      workspaceId: 'workspace-a',
+      subjectType: 'ACAO',
+      subjectId: '44',
+      title: 'Registro da retirada',
+      description: 'Equipe concluiu o trecho norte.',
+      capturedAt: '2026-07-10T14:20:00.000Z',
+      deviceId: 'campo-2',
+      clientMutationId: 'evidencia-8f9b',
+      file
+    }));
+    expect((fetchMock.mock.calls[0][1].headers as Record<string, string>)['Content-Type']).toBeUndefined();
+    expect(evidenciaFileUrl(91)).toBe('/api/evidencias/91/arquivo');
+  });
+
+  it('rejects an unsupported or oversized evidence file before contacting the API', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    const base = {
+      workspaceId: 'workspace-a', subjectType: 'OBSERVACAO' as const, subjectId: 8,
+      title: 'Foto da área', clientMutationId: 'evidencia-1'
+    };
+
+    await expect(createEvidencia({
+      ...base,
+      file: new File(['conteúdo'], 'arquivo.svg', { type: 'image/svg+xml' })
+    })).rejects.toThrow('JPG, PNG, WebP, PDF ou TXT');
+    await expect(createEvidencia({
+      ...base,
+      file: new File([new Uint8Array(2 * 1024 * 1024 + 1)], 'arquivo.pdf', { type: 'application/pdf' })
+    })).rejects.toThrow('2 MB');
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('uses typed endpoints for results, indicators and measurements without adding an actor', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(response(201, { id: 1 }))
+      .mockResolvedValueOnce(response(201, { id: 2 }))
+      .mockResolvedValueOnce(response(201, { id: 3 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await createResultado({ workspaceId: 'workspace-a', acaoId: 4, titulo: 'Nascente protegida' });
+    await createIndicador({
+      workspaceId: 'workspace-a', territorioId: 9, resultadoId: 1,
+      nome: 'Trechos protegidos', unidade: 'trechos'
+    });
+    await createMedicao({
+      workspaceId: 'workspace-a', indicadorId: 2, valor: 3,
+      unidade: 'trechos', fonte: 'Contagem de campo'
+    });
+
+    expect(fetchMock.mock.calls.map((call) => call[0])).toEqual([
+      '/api/resultados', '/api/indicadores', '/api/medicoes'
+    ]);
+    for (const [, init] of fetchMock.mock.calls) {
+      expect(JSON.parse(String(init.body))).not.toHaveProperty('actorId');
+    }
+    expect(JSON.parse(String(fetchMock.mock.calls[1][1].body))).toEqual(expect.objectContaining({
+      territorioId: 9,
+      resultadoId: 1
+    }));
+  });
+
+  it('uses typed endpoints for organizations, active participation, resources and action usage', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(response(201, { id: 11 }))
+      .mockResolvedValueOnce(response(201, { id: 12 }))
+      .mockResolvedValueOnce(response(201, { id: 21 }))
+      .mockResolvedValueOnce(response(201, { id: 22 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await createOrganizacao({ workspaceId: 'workspace-a', nome: 'Coletivo da Serra', tipo: 'COLETIVO' });
+    await createParticipacao(11, {
+      workspaceId: 'workspace-a', pessoaId: 7, papel: 'COORDENACAO',
+      status: 'ATIVA', startedAt: '2026-07-10'
+    });
+    await createRecurso({
+      workspaceId: 'workspace-a', nome: 'Enxada', categoria: 'EQUIPAMENTO', unidade: 'unidade'
+    });
+    await createRecursoUso(21, {
+      workspaceId: 'workspace-a', acaoId: 4, quantidade: 2, unidade: 'unidade'
+    });
+
+    expect(fetchMock.mock.calls.map((call) => call[0])).toEqual([
+      '/api/organizacoes',
+      '/api/organizacoes/11/participacoes',
+      '/api/recursos',
+      '/api/recursos/21/usos'
+    ]);
+    expect(JSON.parse(String(fetchMock.mock.calls[1][1].body))).toEqual(expect.objectContaining({
+      status: 'ATIVA',
+      pessoaId: 7
+    }));
+    expect(JSON.parse(String(fetchMock.mock.calls[3][1].body))).not.toHaveProperty('actorId');
+  });
+
+  it('keeps workspace filters encoded on the new operational reads', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(response(200, []));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await listEvidencias('campo norte/um');
+    await listParticipacoes(11, 'campo norte/um');
+    await listRecursos('campo norte/um');
+
+    expect(fetchMock.mock.calls.map((call) => call[0])).toEqual([
+      '/api/evidencias?workspaceId=campo%20norte%2Fum',
+      '/api/organizacoes/11/participacoes?workspaceId=campo%20norte%2Fum',
+      '/api/recursos?workspaceId=campo%20norte%2Fum'
+    ]);
   });
 
   it('searches messages inside the authorized workspace with an encoded query', async () => {

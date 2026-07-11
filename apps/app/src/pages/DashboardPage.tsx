@@ -130,7 +130,7 @@ export default function DashboardPage() {
                 <div className="mission-ledger">
                   {data.missions.map((mission) => (
                     <article key={mission.title}>
-                      <div><b>{mission.title}</b><span>{mission.actions} · {mission.participants}</span></div>
+                      <div><b>{mission.title}</b><span>{mission.actions} · {mission.status}</span></div>
                       <div className="progress-line"><span style={{ width: `${mission.progress}%` }} /></div>
                       <strong>{mission.progress}%</strong>
                     </article>

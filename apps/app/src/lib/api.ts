@@ -1,7 +1,9 @@
 import type {
   Acao, AcaoInput, DashboardData, ObservacaoInput, Observacao, MapPoint, MemoriaEvent, GeoResult,
   GeoSearchResponse, PessoaHit, Conversa, Mensagem, MensagemBusca, RastroResponse, RastroRootType,
-  MissaoInput, MissaoRegistro, Problema, ProblemaInput, Territorio, TerritorioInput, Workspace, WorkspaceMember
+  MissaoInput, MissaoRegistro, Problema, ProblemaInput, Territorio, TerritorioInput, Workspace, WorkspaceMember,
+  Evidencia, EvidenciaInput, Resultado, ResultadoInput, Indicador, IndicadorInput, Medicao, MedicaoInput,
+  Organizacao, OrganizacaoInput, Participacao, ParticipacaoInput, Recurso, RecursoInput, RecursoUso, RecursoUsoInput
 } from '../types';
 import { validateMessageFiles } from './messageFiles';
 
@@ -415,6 +417,132 @@ export function createMissao(input: MissaoInput): Promise<MissaoRegistro> {
 
 export function createAcao(input: AcaoInput): Promise<Acao> {
   return createJson('/api/acoes', input, 'Não foi possível criar a ação.');
+}
+
+export function listObservacoes(workspaceId = DEFAULT_WORKSPACE): Promise<Observacao[]> {
+  return listEntities<Observacao>('/api/observacoes', workspaceId);
+}
+
+export function listAcoes(workspaceId = DEFAULT_WORKSPACE): Promise<Acao[]> {
+  return listEntities<Acao>('/api/acoes', workspaceId);
+}
+
+export function listEvidencias(workspaceId = DEFAULT_WORKSPACE): Promise<Evidencia[]> {
+  return listEntities<Evidencia>('/api/evidencias', workspaceId);
+}
+
+const EVIDENCE_MAX_FILE_SIZE = 2 * 1024 * 1024;
+const EVIDENCE_FILE_TYPES = new Map<string, Set<string>>([
+  ['.jpg', new Set(['image/jpeg'])],
+  ['.jpeg', new Set(['image/jpeg'])],
+  ['.png', new Set(['image/png'])],
+  ['.webp', new Set(['image/webp'])],
+  ['.pdf', new Set(['application/pdf'])],
+  ['.txt', new Set(['text/plain'])]
+]);
+
+function validateEvidenceFile(file: File): void {
+  if (file.size > EVIDENCE_MAX_FILE_SIZE) {
+    throw new Error('O arquivo da evidência deve ter no máximo 2 MB.');
+  }
+  const dot = file.name.lastIndexOf('.');
+  const extension = dot >= 0 ? file.name.slice(dot).toLowerCase() : '';
+  const acceptedTypes = EVIDENCE_FILE_TYPES.get(extension);
+  if (!acceptedTypes?.has(file.type.toLowerCase())) {
+    throw new Error('Use um arquivo JPG, PNG, WebP, PDF ou TXT.');
+  }
+}
+
+export async function createEvidencia(input: EvidenciaInput): Promise<Evidencia> {
+  if (input.file) validateEvidenceFile(input.file);
+  const form = new FormData();
+  form.append('workspaceId', input.workspaceId);
+  form.append('subjectType', input.subjectType);
+  form.append('subjectId', String(input.subjectId));
+  form.append('title', input.title.trim());
+  if (input.description?.trim()) form.append('description', input.description.trim());
+  if (input.capturedAt) form.append('capturedAt', input.capturedAt);
+  if (input.deviceId) form.append('deviceId', input.deviceId);
+  if (input.clientMutationId) form.append('clientMutationId', input.clientMutationId);
+  if (input.file) form.append('file', input.file);
+  const response = await apiFetch(apiUrl('/api/evidencias'), {
+    method: 'POST',
+    headers: requestHeaders(input.clientMutationId ? { 'Idempotency-Key': input.clientMutationId } : {}),
+    body: form
+  });
+  if (!response.ok) {
+    throw new Error(await readError(response, 'Não foi possível registrar a evidência.'));
+  }
+  return (await response.json()) as Evidencia;
+}
+
+export function evidenciaFileUrl(evidenciaId: number): string {
+  return apiUrl(`/api/evidencias/${evidenciaId}/arquivo`);
+}
+
+export function listResultados(workspaceId = DEFAULT_WORKSPACE): Promise<Resultado[]> {
+  return listEntities<Resultado>('/api/resultados', workspaceId);
+}
+
+export function createResultado(input: ResultadoInput): Promise<Resultado> {
+  return createJson('/api/resultados', input, 'Não foi possível registrar o resultado.');
+}
+
+export function listIndicadores(workspaceId = DEFAULT_WORKSPACE): Promise<Indicador[]> {
+  return listEntities<Indicador>('/api/indicadores', workspaceId);
+}
+
+export function createIndicador(input: IndicadorInput): Promise<Indicador> {
+  return createJson('/api/indicadores', input, 'Não foi possível criar o indicador.');
+}
+
+export function listMedicoes(workspaceId = DEFAULT_WORKSPACE): Promise<Medicao[]> {
+  return listEntities<Medicao>('/api/medicoes', workspaceId);
+}
+
+export function createMedicao(input: MedicaoInput): Promise<Medicao> {
+  return createJson('/api/medicoes', input, 'Não foi possível registrar a medição.');
+}
+
+export function listOrganizacoes(workspaceId = DEFAULT_WORKSPACE): Promise<Organizacao[]> {
+  return listEntities<Organizacao>('/api/organizacoes', workspaceId);
+}
+
+export function createOrganizacao(input: OrganizacaoInput): Promise<Organizacao> {
+  return createJson('/api/organizacoes', input, 'Não foi possível criar a organização.');
+}
+
+export function listParticipacoes(
+  organizacaoId: number, workspaceId = DEFAULT_WORKSPACE
+): Promise<Participacao[]> {
+  return listEntities<Participacao>(`/api/organizacoes/${organizacaoId}/participacoes`, workspaceId);
+}
+
+export function createParticipacao(
+  organizacaoId: number, input: ParticipacaoInput
+): Promise<Participacao> {
+  return createJson(
+    `/api/organizacoes/${organizacaoId}/participacoes`, input,
+    'Não foi possível registrar a participação.'
+  );
+}
+
+export function listRecursos(workspaceId = DEFAULT_WORKSPACE): Promise<Recurso[]> {
+  return listEntities<Recurso>('/api/recursos', workspaceId);
+}
+
+export function createRecurso(input: RecursoInput): Promise<Recurso> {
+  return createJson('/api/recursos', input, 'Não foi possível criar o recurso.');
+}
+
+export function listRecursoUsos(
+  recursoId: number, workspaceId = DEFAULT_WORKSPACE
+): Promise<RecursoUso[]> {
+  return listEntities<RecursoUso>(`/api/recursos/${recursoId}/usos`, workspaceId);
+}
+
+export function createRecursoUso(recursoId: number, input: RecursoUsoInput): Promise<RecursoUso> {
+  return createJson(`/api/recursos/${recursoId}/usos`, input, 'Não foi possível registrar o uso.');
 }
 
 export async function listConversas(workspaceId = DEFAULT_WORKSPACE): Promise<Conversa[]> {

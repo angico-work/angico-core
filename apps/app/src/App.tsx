@@ -12,6 +12,8 @@ import { hasFreshOfflineSession, isAuthenticated } from './lib/api';
 
 const RastroPage = lazy(() => import('./pages/RastroPage'));
 const TerritoriosPage = lazy(() => import('./pages/TerritoriosPage'));
+const EvidenciasPage = lazy(() => import('./pages/EvidenciasPage'));
+const ResultadosPage = lazy(() => import('./pages/ResultadosPage'));
 
 function RouteFallback({ label }: { label: string }) {
   return <div className="loading-state" role="status"><span aria-hidden="true" />{label}</div>;
@@ -39,6 +41,8 @@ export default function App() {
         <Route path="problemas" element={<ModulePage configKey="problemas" />} />
         <Route path="missoes" element={<ModulePage configKey="missoes" />} />
         <Route path="acoes" element={<ModulePage configKey="acoes" />} />
+        <Route path="evidencias" element={<LazyRoute label="Abrindo evidências…"><EvidenciasPage /></LazyRoute>} />
+        <Route path="resultados" element={<LazyRoute label="Abrindo resultados…"><ResultadosPage /></LazyRoute>} />
         <Route path="potencialidades" element={<ModulePage configKey="potencialidades" />} />
         <Route path="pessoas" element={<ModulePage configKey="pessoas" />} />
         <Route path="mensagens" element={<MensagensPage />} />

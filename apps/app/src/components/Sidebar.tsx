@@ -20,7 +20,9 @@ const NAV_GROUPS = [
       { to: '/app/problemas', label: 'Problemas', icon: 'warning' },
       { to: '/app/potencialidades', label: 'Potencialidades', icon: 'sprout' },
       { to: '/app/missoes', label: 'Missões', icon: 'mission' },
-      { to: '/app/acoes', label: 'Ações', icon: 'action' }
+      { to: '/app/acoes', label: 'Ações', icon: 'action' },
+      { to: '/app/resultados', label: 'Resultados', icon: 'check' },
+      { to: '/app/evidencias', label: 'Evidências', icon: 'report' }
     ]
   },
   {

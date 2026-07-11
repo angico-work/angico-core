@@ -23,7 +23,7 @@ export interface Mission {
   title: string;
   progress: number;
   actions: string;
-  participants: string;
+  status: string;
 }
 
 export interface ImpactItem {
@@ -143,6 +143,195 @@ export interface Acao {
   descricao: string | null;
   status: string;
   createdAt: string;
+}
+
+export type EvidenceSubjectType = 'OBSERVACAO' | 'ACAO' | 'RESULTADO';
+
+export interface EvidenciaInput {
+  workspaceId: string;
+  subjectType: EvidenceSubjectType;
+  subjectId: number;
+  title: string;
+  description?: string;
+  capturedAt?: string;
+  deviceId?: string;
+  clientMutationId?: string;
+  file?: File;
+}
+
+export interface Evidencia {
+  id: number;
+  workspaceId: string;
+  subjectType: EvidenceSubjectType;
+  subjectId: number;
+  title: string;
+  description: string | null;
+  originalFilename: string | null;
+  contentType: string | null;
+  sizeBytes: number | null;
+  sha256: string | null;
+  capturedAt: string;
+  recordedAt: string;
+  actorId: string;
+  deviceId: string | null;
+  clientMutationId: string | null;
+  hasFile: boolean;
+}
+
+export interface ResultadoInput {
+  workspaceId: string;
+  acaoId: number;
+  titulo: string;
+  descricao?: string;
+  occurredAt?: string;
+}
+
+export interface Resultado {
+  id: number;
+  workspaceId: string;
+  acaoId: number;
+  titulo: string;
+  descricao: string | null;
+  status: string;
+  actorId: string;
+  occurredAt: string;
+  createdAt: string;
+}
+
+export interface IndicadorInput {
+  workspaceId: string;
+  territorioId: number;
+  resultadoId?: number;
+  nome: string;
+  unidade?: string;
+  descricao?: string;
+}
+
+export interface Indicador {
+  id: number;
+  workspaceId: string;
+  territorioId: number;
+  nome: string;
+  unidade: string | null;
+  descricao: string | null;
+  status: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface MedicaoInput {
+  workspaceId: string;
+  indicadorId: number;
+  valor: number;
+  unidade?: string;
+  fonte?: string;
+  measuredAt?: string;
+}
+
+export interface Medicao {
+  id: number;
+  workspaceId: string;
+  indicadorId: number;
+  valor: number;
+  unidade: string | null;
+  fonte: string | null;
+  actorId: string;
+  measuredAt: string;
+  createdAt: string;
+}
+
+export type OrganizacaoTipo =
+  | 'COLETIVO' | 'ASSOCIACAO' | 'ONG' | 'COOPERATIVA' | 'ESCOLA'
+  | 'PODER_PUBLICO' | 'EMPRESA' | 'OUTRA';
+
+export type OrganizationMissionRelation = 'CONDUZ' | 'MOBILIZA';
+
+export interface OrganizacaoInput {
+  workspaceId: string;
+  nome: string;
+  tipo: OrganizacaoTipo;
+  missaoId?: number;
+  missionRelation?: OrganizationMissionRelation;
+}
+
+export interface Organizacao {
+  id: number;
+  workspaceId: string;
+  nome: string;
+  tipo: OrganizacaoTipo;
+  status: string;
+  missaoId: number | null;
+  missionRelation: OrganizationMissionRelation | null;
+  actorId: string;
+  createdAt: string;
+}
+
+export type ParticipacaoPapel =
+  | 'MEMBRO' | 'COORDENACAO' | 'VOLUNTARIADO' | 'REPRESENTACAO' | 'PARCEIRO';
+
+export interface ParticipacaoInput {
+  workspaceId: string;
+  pessoaId: number;
+  papel: ParticipacaoPapel;
+  status: 'ATIVA';
+  startedAt: string;
+  endedAt?: string | null;
+}
+
+export interface Participacao {
+  id: number;
+  workspaceId: string;
+  organizationId: number;
+  pessoaId: number;
+  papel: ParticipacaoPapel;
+  status: string;
+  startedAt: string;
+  endedAt: string | null;
+  recordedAt: string;
+  actorId: string;
+}
+
+export type RecursoCategoria =
+  | 'MATERIAL' | 'EQUIPAMENTO' | 'FINANCEIRO' | 'ESPACO' | 'SERVICO' | 'OUTRO';
+
+export interface RecursoInput {
+  workspaceId: string;
+  nome: string;
+  categoria: RecursoCategoria;
+  unidade: string;
+  descricao?: string;
+}
+
+export interface Recurso {
+  id: number;
+  workspaceId: string;
+  nome: string;
+  categoria: RecursoCategoria;
+  unidade: string;
+  descricao: string | null;
+  status: string;
+  actorId: string;
+  createdAt: string;
+}
+
+export interface RecursoUsoInput {
+  workspaceId: string;
+  acaoId: number;
+  quantidade: number;
+  unidade: string;
+  occurredAt?: string;
+}
+
+export interface RecursoUso {
+  id: number;
+  workspaceId: string;
+  recursoId: number;
+  acaoId: number;
+  quantidade: number;
+  unidade: string;
+  occurredAt: string;
+  recordedAt: string;
+  actorId: string;
 }
 
 export interface MapPoint {
