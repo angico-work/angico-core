@@ -11,7 +11,7 @@
   --clay: #004b6c;
   --white: #fff;
   --deep: #003952;
-  --muted: color-mix(in srgb, var(--ink) 72%, var(--paper));
+  --muted: var(--ink);
   --line: #e6dfd1;
   --control-line: color-mix(in srgb, var(--forest) 60%, var(--surface));
   --line-dark: rgba(255, 255, 255, .13);

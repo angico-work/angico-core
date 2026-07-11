@@ -103,7 +103,7 @@ export default function Sidebar(props: Props) {
           <span className="avatar">{props.userFoto ? <img src={props.userFoto} alt="" /> : initials(props.userName)}</span>
           <span><strong>{props.userName}</strong><small>{roleLabel(props.userRole)}</small></span>
         </button>
-        <button type="button" className="logout" onClick={props.onLogout}>{icon('exit')}<span>Sair</span></button>
+        <button type="button" className="logout" aria-label="Sair" onClick={props.onLogout}>{icon('exit')}<span>Sair</span></button>
       </div>
     </aside>
   );
