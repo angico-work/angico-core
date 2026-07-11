@@ -25,8 +25,13 @@ vi.mock('../components/MapView', () => ({
 }));
 
 vi.mock('../components/AddressField', () => ({
-  default: ({ onSelect }: { onSelect: (result: { displayName: string }) => void }) => (
+  default: ({ value, onChange, onSelect }: {
+    value: string;
+    onChange: (value: string) => void;
+    onSelect: (result: { displayName: string }) => void;
+  }) => (
     <div>
+      <input aria-label="Buscar localização" value={value} onChange={(event) => onChange(event.target.value)} />
       <button type="button" onClick={() => onSelect({ displayName: 'Endereço A' })}>Endereço A</button>
       <button type="button" onClick={() => onSelect({ displayName: 'Endereço B' })}>Endereço B</button>
     </div>
@@ -141,5 +146,21 @@ describe('MapPage real location boundaries', () => {
 
     await act(async () => { first.resolve([-8, -34]); });
     expect(screen.getByTestId('map-view')).toHaveAttribute('data-center', '-9,-35');
+  });
+
+  it('ignores geocoding after the selected address text is edited', async () => {
+    const pending = deferred<[number, number] | null>();
+    vi.mocked(resolveCoords).mockReturnValue(pending.promise);
+    renderPage();
+    await screen.findByText('Nenhuma localização real disponível');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Endereço A' }));
+    fireEvent.change(screen.getByRole('textbox', { name: 'Buscar localização' }), {
+      target: { value: 'Endereço em edição' }
+    });
+    await act(async () => { pending.resolve([-8, -34]); });
+
+    expect(screen.queryByTestId('map-view')).not.toBeInTheDocument();
+    expect(screen.getByText('Nenhuma localização real disponível')).toBeInTheDocument();
   });
 });

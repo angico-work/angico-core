@@ -74,7 +74,7 @@ export default function MapPage() {
     <div className="page map-page">
       <header className="page-head map-page-head">
         <div><span className="overline">Territorialidade</span><h1>Mapa do território</h1><p>Uma projeção dos registros que possuem localização confirmada.</p></div>
-        <div className="map-search"><AddressField value={query} onChange={(value) => { setQuery(value); if (!value) { geocodeRequest.current += 1; setFlyTo(null); } }} onSelect={onSearchSelect} placeholder="Buscar endereço ou comunidade" /></div>
+        <div className="map-search"><AddressField value={query} onChange={(value) => { geocodeRequest.current += 1; setQuery(value); if (!value) setFlyTo(null); }} onSelect={onSearchSelect} placeholder="Buscar endereço ou comunidade" /></div>
       </header>
 
       <div className="map-toolbar">
