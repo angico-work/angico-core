@@ -188,8 +188,8 @@ test('keeps all four desktop map markers outside the hero copy', async ({ page }
   }
 });
 
-test('keeps tablet hero copy and trace in separate regions', async ({ page }, testInfo) => {
-  test.skip(!['tablet-768', 'tablet-834'].includes(testInfo.project.name));
+test('keeps mid-width hero copy and trace in separate regions', async ({ page }, testInfo) => {
+  test.skip(!['tablet-768', 'tablet-834', 'desktop-1024'].includes(testInfo.project.name));
   await page.goto('/');
 
   const heroCopy = await page.locator('.territory-hero__copy').evaluate((copy) => {

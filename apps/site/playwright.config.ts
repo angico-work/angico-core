@@ -6,6 +6,7 @@ const viewports = [
   { name: 'mobile-430', width: 430, height: 932 },
   { name: 'tablet-768', width: 768, height: 1024 },
   { name: 'tablet-834', width: 834, height: 1112 },
+  { name: 'desktop-1024', width: 1024, height: 1024 },
   { name: 'desktop', width: 1440, height: 1000 }
 ];
 
