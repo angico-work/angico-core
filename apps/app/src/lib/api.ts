@@ -310,11 +310,44 @@ export async function searchPessoas(workspaceId: string, q: string, signal?: Abo
   }
 }
 
-export async function loadMemoria(workspaceId = DEFAULT_WORKSPACE): Promise<MemoriaEvent[]> {
+export interface MemoryFilters {
+  entityType?: string;
+  entityId?: string;
+  from?: string;
+  to?: string;
+  eventType?: string;
+  actorId?: string;
+  source?: string;
+  syncStatus?: string;
+}
+
+function memoryFilters(filters: MemoryFilters): Record<string, string> {
+  const normalized: Record<string, string> = {};
+  const values: Array<[keyof MemoryFilters, string | undefined]> = [
+    ['entityType', filters.entityType?.trim().toUpperCase()],
+    ['entityId', filters.entityId?.trim()],
+    ['from', filters.from?.trim()],
+    ['to', filters.to?.trim()],
+    ['eventType', filters.eventType?.trim()],
+    ['actorId', filters.actorId?.trim().replace(/^@/, '')],
+    ['source', filters.source?.trim()],
+    ['syncStatus', filters.syncStatus?.trim().toUpperCase()]
+  ];
+  values.forEach(([key, value]) => { if (value) normalized[key] = value; });
+  return normalized;
+}
+
+export async function loadMemoria(
+  workspaceId = DEFAULT_WORKSPACE,
+  filters: MemoryFilters = {}
+): Promise<MemoriaEvent[]> {
+  const query = memoryFilters(filters);
+  const params = new URLSearchParams(query);
+  const path = `/api/history/workspaces/${encodeURIComponent(workspaceId)}${params.size ? `?${params}` : ''}`;
   const result = await loadConfirmedOrSnapshot(
-    { workspaceId, resource: 'memory-events', contractVersion: 2 },
+    { workspaceId, resource: 'memory-events', query, contractVersion: 2 },
     () => requestJson(
-      apiUrl(`/api/history/workspaces/${encodeURIComponent(workspaceId)}`),
+      apiUrl(path),
       { headers: requestHeaders() },
       'Não foi possível carregar a memória do território.'
     ),

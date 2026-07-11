@@ -148,6 +148,26 @@ describe('cookie session API', () => {
     expect(fetchMock).toHaveBeenCalledWith('/api/history/workspaces/workspace-a', expect.any(Object));
   });
 
+  it('encodes explicit memory filters without changing the workspace path', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(response(200, []));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await loadMemoria('workspace-a', {
+      entityType: 'ACAO',
+      entityId: '42/campo',
+      from: '2026-07-01T03:00:00.000Z',
+      to: '2026-08-01T02:59:59.999Z',
+      eventType: 'acao.iniciada',
+      actorId: 'ana.sp',
+      source: 'offline',
+      syncStatus: 'SYNCED_FROM_OFFLINE'
+    });
+
+    expect(fetchMock.mock.calls[0][0]).toBe(
+      '/api/history/workspaces/workspace-a?entityType=ACAO&entityId=42%2Fcampo&from=2026-07-01T03%3A00%3A00.000Z&to=2026-08-01T02%3A59%3A59.999Z&eventType=acao.iniciada&actorId=ana.sp&source=offline&syncStatus=SYNCED_FROM_OFFLINE'
+    );
+  });
+
   it('loads a bounded Rastro for an authorized root', async () => {
     const fetchMock = vi.fn().mockResolvedValue(response(200, {
       workspaceId: 'workspace-a',
