@@ -7,13 +7,14 @@ import MapPage from './pages/MapPage';
 import ModulePage from './pages/ModulePage';
 import MemoriaPage from './pages/MemoriaPage';
 import MensagensPage from './pages/MensagensPage';
-import { IndicadoresPage, RelatoriosPage } from './pages/SummaryPages';
+import { RelatoriosPage } from './pages/SummaryPages';
 import { hasFreshOfflineSession, isAuthenticated } from './lib/api';
 
 const RastroPage = lazy(() => import('./pages/RastroPage'));
 const TerritoriosPage = lazy(() => import('./pages/TerritoriosPage'));
 const EvidenciasPage = lazy(() => import('./pages/EvidenciasPage'));
 const ResultadosPage = lazy(() => import('./pages/ResultadosPage'));
+const ImpactoPage = lazy(() => import('./pages/ImpactoPage'));
 
 function RouteFallback({ label }: { label: string }) {
   return <div className="loading-state" role="status"><span aria-hidden="true" />{label}</div>;
@@ -46,7 +47,7 @@ export default function App() {
         <Route path="potencialidades" element={<ModulePage configKey="potencialidades" />} />
         <Route path="pessoas" element={<ModulePage configKey="pessoas" />} />
         <Route path="mensagens" element={<MensagensPage />} />
-        <Route path="indicadores" element={<IndicadoresPage />} />
+        <Route path="indicadores" element={<LazyRoute label="Abrindo indicadores…"><ImpactoPage /></LazyRoute>} />
         <Route path="memoria" element={<MemoriaPage />} />
         <Route path="rastro" element={<LazyRoute label="Abrindo o Rastro…"><RastroPage /></LazyRoute>} />
         <Route path="rastro/:rootType/:rootId" element={<LazyRoute label="Abrindo o Rastro…"><RastroPage /></LazyRoute>} />

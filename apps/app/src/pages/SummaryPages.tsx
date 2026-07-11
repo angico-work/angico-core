@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import type { AppContext } from '../components/AppShell';
-import { EmptyState, ErrorState, LoadingState } from '../components/PageFeedback';
+import { ErrorState, LoadingState } from '../components/PageFeedback';
 import { loadDashboard } from '../lib/api';
 import type { DashboardData } from '../types';
 
@@ -23,21 +23,6 @@ function useDashboard(workspaceId: string) {
   }, [workspaceId]);
   useEffect(() => { void refresh(); }, [refresh]);
   return { data, loading, error, refresh };
-}
-
-export function IndicadoresPage() {
-  const { workspaceId } = useOutletContext<AppContext>();
-  const { data, loading, error, refresh } = useDashboard(workspaceId);
-  return (
-    <div className="page">
-      <header className="page-head"><div><span className="overline">Sinais de transformação</span><h1>Indicadores</h1><p>Medições existentes no território. Nenhum valor é estimado pela interface.</p></div></header>
-      {loading ? <LoadingState /> : error ? <ErrorState message={error} onRetry={() => void refresh()} /> : !data?.impact.length ? (
-        <EmptyState title="Ainda não há indicadores medidos" message="Resultados precisam ser registrados antes que uma medição possa aparecer aqui." />
-      ) : (
-        <section className="indicator-sheet"><header><span>Indicador</span><span>Período</span><span>Valor registrado</span></header>{data.impact.map((item) => <article key={item.label}><b>{item.label}</b><span>{item.period}</span><strong>{item.value}</strong></article>)}</section>
-      )}
-    </div>
-  );
 }
 
 export function RelatoriosPage() {
