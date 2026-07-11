@@ -17,6 +17,7 @@ vi.mock('../lib/api', () => ({
     bairro: null, estado: null, pais: null, latitude: null, longitude: null, boundingBox: [], status: 'ATIVO', updatedAt: null
   }]),
   getSession: vi.fn().mockReturnValue({ pessoaId: 7, angicoId: 'ana.sp' }),
+  sessionOwnerId: vi.fn().mockReturnValue('stable-owner'),
   createEntity: vi.fn(),
   createAcao: vi.fn(),
   createMissao: vi.fn(),
@@ -77,6 +78,8 @@ describe('ModulePage offline observations', () => {
     expect(await screen.findByText('Nascente sem proteção')).toBeInTheDocument();
     expect(screen.getByRole('alert')).toHaveTextContent('Sem conexão com o servidor');
     expect(screen.getByText('Salvo neste aparelho')).toBeInTheDocument();
+    const { listLocalObservations } = await import('../lib/offlineStore');
+    expect(listLocalObservations).toHaveBeenCalledWith('stable-owner', 'territorio-a');
   });
 
   it('keeps the last synchronized snapshot visible when the server is unavailable', async () => {

@@ -45,6 +45,7 @@ vi.mock('../lib/api', async (importOriginal) => {
     listMensagens: vi.fn(),
     listTerritorios: vi.fn(),
     markConversaRead: vi.fn(),
+    sessionOwnerId: vi.fn(() => 'stable-owner'),
     searchMensagens: vi.fn()
   };
 });
@@ -173,7 +174,7 @@ describe('MensagensPage', () => {
     expect(screen.getByText('2 novas')).toBeInTheDocument();
     expect(screen.getByText('Território relacionado')).toBeInTheDocument();
     expect(markConversaRead).toHaveBeenCalledWith(12);
-    expect(cacheRemoteMessages).toHaveBeenCalledWith('ana.sp', 'territorio-a', 12, 7, [remoteMessage]);
+    expect(cacheRemoteMessages).toHaveBeenCalledWith('stable-owner', 'territorio-a', 12, 7, [remoteMessage]);
   });
 
   it('restores a saved draft and its local attachment', async () => {

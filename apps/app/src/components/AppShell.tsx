@@ -6,7 +6,7 @@ import ProfileModal from './ProfileModal';
 import {
   DEFAULT_WORKSPACE, createWorkspace, deleteWorkspace, getProfile, getSession,
   hasFreshOfflineSession, isAuthenticated, listWorkspaces, logout, revalidateSession,
-  setSessionWorkspace
+  sessionOwnerId, setSessionWorkspace
 } from '../lib/api';
 import { startSyncEngine } from '../lib/offlineSync';
 import { clearOfflineOwner, getOfflineOwnerState } from '../lib/offlineStore';
@@ -97,7 +97,7 @@ export default function AppShell() {
 
   async function handleLogout() {
     const current = getSession();
-    const ownerId = current?.angicoId || (current ? `pessoa-${current.pessoaId}` : undefined);
+    const ownerId = sessionOwnerId(current);
     if (ownerId) {
       const offline = await getOfflineOwnerState(ownerId);
       if (offline.unsynced > 0) {
@@ -170,7 +170,7 @@ export default function AppShell() {
       <Topbar
         workspaceLabel={activeName}
         workspaceId={activeSlug}
-        ownerId={session?.angicoId || (session ? `pessoa-${session.pessoaId}` : undefined)}
+        ownerId={sessionOwnerId(session)}
         onToggleSidebar={() => setSidebarOpen((v) => !v)}
         onWorkspaceClick={() => setShowProfile(true)}
       />

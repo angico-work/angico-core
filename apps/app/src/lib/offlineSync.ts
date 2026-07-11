@@ -1,5 +1,5 @@
 import type { Evidencia, EvidenciaInput, Mensagem, Observacao, ObservacaoInput } from '../types';
-import { apiFetch, apiUrl, getSession, hasFreshOfflineSession, isAuthenticated } from './api';
+import { apiFetch, apiUrl, hasFreshOfflineSession, isAuthenticated, sessionOwnerId } from './api';
 import {
   claimOutboxEntry,
   enqueueMessage,
@@ -60,12 +60,6 @@ interface SyncFilter {
   ownerId?: string;
   workspaceId?: string;
   entryId?: string;
-}
-
-function ownerFromSession(): string | undefined {
-  const session = getSession();
-  if (!session) return undefined;
-  return session.angicoId || `pessoa-${session.pessoaId}`;
 }
 
 async function errorMessage(response: Response, fallback: string): Promise<string> {
@@ -250,9 +244,9 @@ async function syncPendingByOperation(
   operation: OutboxEntry['operation'] | undefined,
   filter: SyncFilter
 ): Promise<SyncSummary> {
-  const ownerId = filter.ownerId ?? ownerFromSession();
+  const ownerId = filter.ownerId ?? sessionOwnerId();
   const summary = emptySummary();
-  const activeOwner = ownerFromSession();
+  const activeOwner = sessionOwnerId();
   if (!ownerId || !activeOwner || ownerId !== activeOwner
     || !isAuthenticated() || !hasFreshOfflineSession()) {
     return summary;
@@ -298,13 +292,13 @@ function requireManualRetry(ownerId: string): void {
   if (!isAuthenticated() || !hasFreshOfflineSession()) {
     throw new Error('Entre novamente com uma sessão validada antes de tentar enviar registros bloqueados.');
   }
-  if (ownerFromSession() !== ownerId) {
+  if (sessionOwnerId() !== ownerId) {
     throw new Error('Os dados locais pertencem a outra pessoa neste aparelho.');
   }
 }
 
 export async function captureObservation(input: ObservacaoInput): Promise<CaptureResult> {
-  const ownerId = ownerFromSession();
+  const ownerId = sessionOwnerId();
   if (!ownerId) throw new Error('Entre novamente para identificar o autor do registro.');
   const queued = await enqueueObservation(input, ownerId);
   if (typeof navigator === 'undefined' || navigator.onLine !== false) {
@@ -328,7 +322,7 @@ export async function captureMessage(input: {
   body: string;
   attachments: File[];
 }): Promise<CaptureMessageResult> {
-  const ownerId = ownerFromSession();
+  const ownerId = sessionOwnerId();
   if (!ownerId) throw new Error('Entre novamente para identificar o autor da mensagem.');
   const queued = await enqueueMessage(input, ownerId);
   if (typeof navigator === 'undefined' || navigator.onLine !== false) {
@@ -347,7 +341,7 @@ export async function captureMessage(input: {
 }
 
 export async function captureEvidence(input: EvidenciaInput): Promise<CaptureEvidenceResult> {
-  const ownerId = ownerFromSession();
+  const ownerId = sessionOwnerId();
   if (!ownerId || !isAuthenticated() || !hasFreshOfflineSession()) {
     throw new Error('Entre novamente para registrar a evidência neste aparelho.');
   }

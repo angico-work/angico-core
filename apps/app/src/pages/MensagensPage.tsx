@@ -15,7 +15,8 @@ import {
   listMensagens,
   listTerritorios,
   markConversaRead,
-  searchMensagens
+  searchMensagens,
+  sessionOwnerId
 } from '../lib/api';
 import { validateMessageFiles } from '../lib/messageFiles';
 import { startOnlinePolling } from '../lib/messagePolling';
@@ -45,14 +46,9 @@ import {
   type TimelineItem
 } from './messages/messageView';
 
-function ownerFromSession(): string | undefined {
-  const session = getSession();
-  return session?.angicoId || (session ? `pessoa-${session.pessoaId}` : undefined);
-}
-
 export default function MensagensPage() {
   const { workspaceId } = useOutletContext<AppContext>();
-  const ownerId = ownerFromSession();
+  const ownerId = sessionOwnerId();
   const meId = getSession()?.pessoaId ?? null;
   const [conversations, setConversations] = useState<Conversa[]>([]);
   const [contexts, setContexts] = useState<ConversationContext[]>([]);

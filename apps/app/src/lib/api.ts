@@ -11,12 +11,30 @@ export const DEFAULT_WORKSPACE = 'coletivo-jardim-novo';
 
 export const API_BASE = '';
 
+export class ApiHttpError extends Error {
+  constructor(readonly status: number, message: string) {
+    super(message);
+    this.name = 'ApiHttpError';
+  }
+}
+
+export class ApiNetworkError extends Error {
+  readonly cause: TypeError;
+
+  constructor(cause: TypeError) {
+    super('Não foi possível acessar o servidor.');
+    this.name = 'ApiNetworkError';
+    this.cause = cause;
+  }
+}
+
 export function apiUrl(path: string): string {
   return `${API_BASE}${path}`;
 }
 
 const SESSION_KEY = 'angico.session';
 const SESSION_VALIDATED_KEY = 'angico.session.validatedAt';
+const OWNER_ALIAS_PREFIX = 'angico.offlineOwner.';
 const OFFLINE_SESSION_LEASE_MS = 7 * 24 * 60 * 60 * 1000;
 
 export interface AuthSession {
@@ -50,6 +68,16 @@ export function isAuthenticated(): boolean {
   return Boolean(session && Date.parse(session.expiresAt) > Date.now());
 }
 
+export function sessionOwnerId(session = getSession()): string | undefined {
+  if (!session) return undefined;
+  const key = `${OWNER_ALIAS_PREFIX}${session.pessoaId}`;
+  const existing = localStorage.getItem(key)?.trim();
+  if (existing) return existing;
+  const ownerId = session.angicoId || `pessoa-${session.pessoaId}`;
+  localStorage.setItem(key, ownerId);
+  return ownerId;
+}
+
 function saveSession(session: AuthSession, validated = false): AuthSession {
   localStorage.setItem(SESSION_KEY, JSON.stringify(session, (key, value) => key === 'token' ? undefined : value));
   if (validated) localStorage.setItem(SESSION_VALIDATED_KEY, new Date().toISOString());
@@ -62,14 +90,17 @@ export function clearSession(): void {
   localStorage.removeItem('angico_session');
 }
 
-export function hasFreshOfflineSession(): boolean {
-  const session = getSession();
-  if (!session) return false;
+export function offlineSessionExpiresAt(session = getSession()): number | undefined {
+  if (!session) return undefined;
   const validatedAt = Date.parse(localStorage.getItem(SESSION_VALIDATED_KEY) ?? '');
   const serverExpiry = Date.parse(session.expiresAt);
-  if (!Number.isFinite(validatedAt) || !Number.isFinite(serverExpiry)) return false;
-  const offlineExpiry = Math.min(serverExpiry, validatedAt + OFFLINE_SESSION_LEASE_MS);
-  return Date.now() < offlineExpiry;
+  if (!Number.isFinite(validatedAt) || !Number.isFinite(serverExpiry)) return undefined;
+  return Math.min(serverExpiry, validatedAt + OFFLINE_SESSION_LEASE_MS);
+}
+
+export function hasFreshOfflineSession(): boolean {
+  const expiresAt = offlineSessionExpiresAt();
+  return expiresAt !== undefined && Date.now() < expiresAt;
 }
 
 export function setSessionWorkspace(slug: string): void {
@@ -107,6 +138,24 @@ async function readError(response: Response, fallback: string): Promise<string> 
   } catch {
     return fallback;
   }
+}
+
+export async function requestJson<T = unknown>(
+  input: RequestInfo | URL,
+  init: RequestInit = {},
+  fallback = 'A solicitação não pôde ser concluída.'
+): Promise<T> {
+  let response: Response;
+  try {
+    response = await apiFetch(input, init);
+  } catch (error) {
+    if (error instanceof TypeError) throw new ApiNetworkError(error);
+    throw error;
+  }
+  if (!response.ok) {
+    throw new ApiHttpError(response.status, await readError(response, fallback));
+  }
+  return (await response.json()) as T;
 }
 
 export async function login(email: string, password: string): Promise<AuthSession> {

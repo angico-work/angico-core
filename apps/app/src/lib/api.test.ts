@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  ApiHttpError,
+  ApiNetworkError,
   createEntity,
   ensureTerritorio,
   getSession,
@@ -32,6 +34,9 @@ import {
   listParticipacoes,
   listPessoas,
   listRecursos,
+  offlineSessionExpiresAt,
+  requestJson,
+  sessionOwnerId,
   sendMensagem
 } from './api';
 
@@ -244,6 +249,61 @@ describe('cookie session API', () => {
     localStorage.setItem('angico.session.validatedAt', new Date().toISOString());
 
     expect(hasFreshOfflineSession()).toBe(false);
+  });
+
+  it('derives one stable local owner key from the active session metadata', () => {
+    localStorage.setItem('angico.session', JSON.stringify(session));
+    expect(sessionOwnerId()).toBe('ana.sp');
+
+    localStorage.setItem('angico.session', JSON.stringify({ ...session, angicoId: 'ana.atualizada' }));
+    expect(sessionOwnerId()).toBe('ana.sp');
+
+    localStorage.setItem('angico.session', JSON.stringify({ ...session, angicoId: null, pessoaId: 19 }));
+    expect(sessionOwnerId()).toBe('pessoa-19');
+  });
+
+  it('uses the earlier server or offline lease deadline', () => {
+    localStorage.setItem('angico.session', JSON.stringify({
+      ...session, expiresAt: '2026-07-20T12:00:00.000Z'
+    }));
+    localStorage.setItem('angico.session.validatedAt', '2026-07-10T12:00:00.000Z');
+
+    expect(offlineSessionExpiresAt()).toBe(Date.parse('2026-07-17T12:00:00.000Z'));
+
+    localStorage.setItem('angico.session', JSON.stringify({
+      ...session, expiresAt: '2026-07-12T12:00:00.000Z'
+    }));
+    expect(offlineSessionExpiresAt()).toBe(Date.parse('2026-07-12T12:00:00.000Z'));
+  });
+
+  it('classifies only a fetch TypeError as a network failure', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Failed to fetch')));
+
+    await expect(requestJson('/api/territorios')).rejects.toBeInstanceOf(ApiNetworkError);
+  });
+
+  it('preserves HTTP status without classifying it as an offline failure', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response(403, { detail: 'sem acesso' })));
+
+    const error = await requestJson('/api/territorios').catch((caught) => caught);
+
+    expect(error).toBeInstanceOf(ApiHttpError);
+    expect(error).toMatchObject({ status: 403, message: 'sem acesso' });
+    expect(error).not.toBeInstanceOf(ApiNetworkError);
+  });
+
+  it('does not classify invalid JSON or request abortion as a network failure', async () => {
+    const parseFailure = new SyntaxError('invalid json');
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: vi.fn().mockRejectedValue(parseFailure)
+    } as unknown as Response));
+    await expect(requestJson('/api/territorios')).rejects.toBe(parseFailure);
+
+    const abort = new DOMException('aborted', 'AbortError');
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(abort));
+    await expect(requestJson('/api/territorios')).rejects.toBe(abort);
   });
 
   it('rejects attachments that exceed the API per-file limit before upload', async () => {

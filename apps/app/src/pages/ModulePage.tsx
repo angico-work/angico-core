@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { useOutletContext, useSearchParams } from 'react-router-dom';
 import type { AppContext } from '../components/AppShell';
-import { createEntity, getSession, listEntities } from '../lib/api';
+import { createEntity, listEntities, sessionOwnerId } from '../lib/api';
 import { listLocalObservations } from '../lib/offlineStore';
 import AngicoIdField from '../components/AngicoIdField';
 import NewEntityModal, { type EntityType } from '../components/NewEntityModal';
@@ -109,8 +109,7 @@ export default function ModulePage({ configKey }: { configKey: string }) {
     let localSnapshots: Item[] = [];
     try {
       if (configKey === 'observacoes') {
-        const session = getSession();
-        const ownerId = session?.angicoId || (session ? `pessoa-${session.pessoaId}` : undefined);
+        const ownerId = sessionOwnerId();
         const local = ownerId ? await listLocalObservations(ownerId, workspaceId) : [];
         localSnapshots = local
           .filter((record) => !['SUPERSEDED', 'DISCARDED'].includes(record.syncStatus))
