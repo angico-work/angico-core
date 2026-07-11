@@ -49,7 +49,7 @@ public class RecursoService {
 
     @Transactional
     public Recurso create(RecursoRequest request) {
-        String workspaceId = authorization.requireAuthorizedWorkspace(request.workspaceId());
+        String workspaceId = authorization.requireWritableWorkspace(request.workspaceId());
         String category = canonicalCategory(request.categoria());
         Instant now = clock.now();
         Recurso resource = new Recurso(
@@ -75,7 +75,7 @@ public class RecursoService {
 
     @Transactional
     public UsoRecurso use(Long resourceId, UsoRecursoRequest request) {
-        String workspaceId = authorization.requireAuthorizedWorkspace(request.workspaceId());
+        String workspaceId = authorization.requireWritableWorkspace(request.workspaceId());
         Recurso resource = requireResource(resourceId, workspaceId);
         references.requireAcao(String.valueOf(request.acaoId()), workspaceId);
         String unit = request.unidade().strip();

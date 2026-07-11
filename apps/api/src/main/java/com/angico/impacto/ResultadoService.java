@@ -34,7 +34,7 @@ public class ResultadoService {
 
     @Transactional
     public ResultadoResponse create(ResultadoRequest request) {
-        String workspaceId = authorization.requireAuthorizedWorkspace(request.workspaceId());
+        String workspaceId = authorization.requireWritableWorkspace(request.workspaceId());
         references.requireAcao(String.valueOf(request.acaoId()), workspaceId);
         Instant now = clock.now();
         Instant occurredAt = validateOccurredAt(request.occurredAt(), now);

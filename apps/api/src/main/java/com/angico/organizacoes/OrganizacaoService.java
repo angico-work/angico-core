@@ -55,7 +55,7 @@ public class OrganizacaoService {
 
     @Transactional
     public OrganizacaoResponse create(OrganizacaoCreateRequest request) {
-        String workspaceId = authorization.requireAuthorizedWorkspace(request.workspaceId());
+        String workspaceId = authorization.requireWritableWorkspace(request.workspaceId());
         String type = enumValue(request.tipo(), ORGANIZATION_TYPES, "tipo");
         MissionLink mission = validateMissionLink(request.missaoId(), request.missionRelation(), workspaceId);
 
@@ -83,7 +83,7 @@ public class OrganizacaoService {
 
     @Transactional
     public ParticipacaoResponse createParticipation(Long organizationId, ParticipacaoRequest request) {
-        String workspaceId = authorization.requireAuthorizedWorkspace(request.workspaceId());
+        String workspaceId = authorization.requireWritableWorkspace(request.workspaceId());
         Organizacao organization = requireOrganization(organizationId, workspaceId);
         Pessoa person = references.requirePessoa(String.valueOf(request.pessoaId()), workspaceId);
         String role = enumValue(request.papel(), PARTICIPATION_ROLES, "papel");
@@ -125,7 +125,7 @@ public class OrganizacaoService {
             Long participationId,
             ParticipacaoEndRequest request
     ) {
-        String workspaceId = authorization.requireAuthorizedWorkspace(request.workspaceId());
+        String workspaceId = authorization.requireWritableWorkspace(request.workspaceId());
         requireOrganization(organizationId, workspaceId);
         Participacao participation = participationRepository
                 .findByIdAndWorkspaceIdAndOrganizationId(participationId, workspaceId, organizationId)

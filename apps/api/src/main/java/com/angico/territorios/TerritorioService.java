@@ -63,7 +63,7 @@ public class TerritorioService {
         validateBoundingBox(request.boundingBox());
         Instant now = clock.now();
         Territorio territorio = new Territorio();
-        territorio.setWorkspaceId(authorizationService.requireAuthorizedWorkspace(request.workspaceId()));
+        territorio.setWorkspaceId(authorizationService.requireWritableWorkspace(request.workspaceId()));
         territorio.setNome(requireText(request.nome(), "nome"));
         territorio.setTipo(defaultText(request.tipo(), "BAIRRO"));
         territorio.setCidade(request.cidade());

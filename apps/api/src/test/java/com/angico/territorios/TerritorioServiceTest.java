@@ -30,7 +30,7 @@ class TerritorioServiceTest {
     @Test
     void creationRecordsTheAuthenticatedActorAndClock() {
         Instant now = Instant.parse("2026-07-10T18:00:00Z");
-        when(authorization.requireAuthorizedWorkspace("workspace-a")).thenReturn("workspace-a");
+        when(authorization.requireWritableWorkspace("workspace-a")).thenReturn("workspace-a");
         when(authorization.currentActorId()).thenReturn("ana.silva");
         when(clock.now()).thenReturn(now);
         when(repository.save(any(Territorio.class))).thenAnswer(invocation -> invocation.getArgument(0));

@@ -53,7 +53,7 @@ public class ObservacaoService {
     }
 
     public ObservacaoResponse registrar(ObservacaoCreateRequest request, String rawIdempotencyKey) {
-        String workspaceId = authorizationService.requireAuthorizedWorkspace(request.workspaceId());
+        String workspaceId = authorizationService.requireWritableWorkspace(request.workspaceId());
         String actorId = authorizationService.currentActorId();
         String idempotencyKey = idempotencyService.normalizeKey(rawIdempotencyKey);
         String requestHash = idempotencyKey == null

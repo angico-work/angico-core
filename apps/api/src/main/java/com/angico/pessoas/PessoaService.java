@@ -36,7 +36,7 @@ public class PessoaService {
 
     @Transactional
     public PessoaResponse registrar(PessoaRequest request) {
-        String workspaceId = authorizationService.requireAuthorizedWorkspace(request.workspaceId());
+        String workspaceId = authorizationService.requireWritableWorkspace(request.workspaceId());
         String angicoId = safeNormalize(request.angicoId());
         if (angicoId != null) {
             var existing = pessoaRepository

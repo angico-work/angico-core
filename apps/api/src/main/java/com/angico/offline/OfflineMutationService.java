@@ -196,7 +196,7 @@ public class OfflineMutationService {
             Supplier<T> mutation,
             Function<T, String> resourceId
     ) {
-        String workspaceId = authorization.requireAuthorizedWorkspace(requestedWorkspaceId);
+        String workspaceId = authorization.requireWritableWorkspace(requestedWorkspaceId);
         String actorId = authorization.currentActorId();
         String key = idempotency.normalizeKey(rawKey);
         if (key == null) {

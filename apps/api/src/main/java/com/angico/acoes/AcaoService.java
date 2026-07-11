@@ -34,7 +34,7 @@ public class AcaoService {
 
     @Transactional
     public AcaoResponse registrar(AcaoCreateRequest request) {
-        String workspaceId = authorizationService.requireAuthorizedWorkspace(request.workspaceId());
+        String workspaceId = authorizationService.requireWritableWorkspace(request.workspaceId());
         referenceValidator.requireMissao(request.missaoId(), workspaceId);
         referenceValidator.requirePessoa(request.responsavelId(), workspaceId);
         Acao acao = new Acao(

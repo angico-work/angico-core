@@ -159,6 +159,27 @@ class WorkspaceIsolationSecurityTest {
     }
 
     @Test
+    void viewerCanReadButCannotCreateInAnAuthorizedWorkspace() throws Exception {
+        int id = IDS.incrementAndGet();
+        Pessoa viewer = createPerson(
+                workspaceA, "viewer." + id, "viewer-" + id + "@example.test", "VIEWER", true);
+        SessionCredentials credentials = login(viewer);
+
+        mvc.perform(get("/api/observacoes").param("workspaceId", workspaceA)
+                        .cookie(credentials.cookie()))
+                .andExpect(status().isOk());
+        mvc.perform(post("/api/observacoes")
+                        .cookie(credentials.cookie())
+                        .header("X-CSRF-Token", credentials.csrfToken())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"workspaceId":"%s","categoria":"AMBIENTE","titulo":"Escrita indevida"}
+                                """.formatted(workspaceA)))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.status").value(403));
+    }
+
+    @Test
     void territoryWithoutCoordinatesDoesNotReceiveInventedLocation() throws Exception {
         mvc.perform(post("/api/territorios")
                         .cookie(memberA.cookie())

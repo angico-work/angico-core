@@ -35,7 +35,7 @@ public class MissaoService {
 
     @Transactional
     public MissaoResponse registrar(MissaoRequest request) {
-        String workspaceId = authorizationService.requireAuthorizedWorkspace(request.workspaceId());
+        String workspaceId = authorizationService.requireWritableWorkspace(request.workspaceId());
         referenceValidator.requireTerritorio(request.territorioId(), workspaceId);
         referenceValidator.requireProblema(request.problemaId(), workspaceId);
         referenceValidator.requirePessoa(request.responsavelId(), workspaceId);

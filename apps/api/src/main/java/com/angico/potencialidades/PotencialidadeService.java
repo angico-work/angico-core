@@ -34,7 +34,7 @@ public class PotencialidadeService {
 
     @Transactional
     public PotencialidadeResponse registrar(PotencialidadeCreateRequest request) {
-        String workspaceId = authorizationService.requireAuthorizedWorkspace(request.workspaceId());
+        String workspaceId = authorizationService.requireWritableWorkspace(request.workspaceId());
         referenceValidator.requireTerritorio(request.territorioId(), workspaceId);
         PotencialidadeTerritorial potencialidade = new PotencialidadeTerritorial(
                 workspaceId,

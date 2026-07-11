@@ -13,6 +13,9 @@ import org.springframework.stereotype.Service;
 @Service
 public final class WorkspaceAuthorizationService {
 
+    private static final Set<String> WRITE_ROLES = Set.of(
+            "OWNER", "ADMIN", "COORDINATOR", "MAPPER", "MEMBER");
+
     private final WorkspaceMemberRepository memberRepository;
     private final PessoaRepository pessoaRepository;
     private final CurrentActorProvider currentActorProvider;
@@ -42,11 +45,14 @@ public final class WorkspaceAuthorizationService {
     }
 
     public String requireAuthorizedWorkspace(String requestedWorkspaceId) {
-        String workspaceId = requestedWorkspaceId == null || requestedWorkspaceId.isBlank()
-                ? currentActorProvider.currentWorkspaceId()
-                        .orElseThrow(() -> new ForbiddenException("Nenhum workspace ativo na sessão."))
-                : requestedWorkspaceId.trim();
+        String workspaceId = requestedWorkspace(requestedWorkspaceId);
         requireMember(workspaceId);
+        return workspaceId;
+    }
+
+    public String requireWritableWorkspace(String requestedWorkspaceId) {
+        String workspaceId = requestedWorkspace(requestedWorkspaceId);
+        requireRole(workspaceId, WRITE_ROLES);
         return workspaceId;
     }
 
@@ -83,6 +89,13 @@ public final class WorkspaceAuthorizationService {
         return memberRepository.findByWorkspaceIdAndActorId(workspaceId.trim(), currentActorId())
                 .filter(member -> "ACTIVE".equalsIgnoreCase(member.getStatus()))
                 .orElseThrow(() -> new ForbiddenException("Acesso negado ao workspace informado."));
+    }
+
+    private String requestedWorkspace(String requestedWorkspaceId) {
+        return requestedWorkspaceId == null || requestedWorkspaceId.isBlank()
+                ? currentActorProvider.currentWorkspaceId()
+                        .orElseThrow(() -> new ForbiddenException("Nenhum workspace ativo na sessão."))
+                : requestedWorkspaceId.trim();
     }
 
     private String missingAngicoId() {

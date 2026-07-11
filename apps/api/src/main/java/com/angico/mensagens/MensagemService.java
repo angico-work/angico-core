@@ -214,7 +214,7 @@ public class MensagemService {
     @Transactional
     public ConversaResponse create(ConversaRequest request) {
         Pessoa actor = currentPessoa();
-        String workspaceId = authorizationService.requireAuthorizedWorkspace(request.workspaceId());
+        String workspaceId = authorizationService.requireWritableWorkspace(request.workspaceId());
         ContextReference context = resolveContext(request, workspaceId);
         Territorio territorio = request.territorioId() == null
                 ? null
@@ -322,6 +322,7 @@ public class MensagemService {
         Pessoa actor = currentPessoa();
         Conversa conversa = requireConversa(conversaId);
         requireConversationAccess(conversa);
+        authorizationService.requireWritableWorkspace(conversa.getWorkspaceId());
         validateMessage(corpo, latitude, longitude, attachments);
         String normalizedLinkedType = normalizeLinkedType(linkedEntityType, linkedEntityId);
         if (normalizedLinkedType != null) {
@@ -390,6 +391,7 @@ public class MensagemService {
     ) {
         Conversa conversa = requireConversa(conversaId);
         requireConversationAccess(conversa);
+        authorizationService.requireWritableWorkspace(conversa.getWorkspaceId());
         if (idempotencyKey != null) {
             var existing = idempotencyService.find(
                     conversa.getWorkspaceId(),

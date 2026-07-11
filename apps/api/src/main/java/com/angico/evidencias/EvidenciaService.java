@@ -74,7 +74,7 @@ public class EvidenciaService {
             String rawIdempotencyKey,
             MultipartFile file
     ) {
-        String workspaceId = authorization.requireAuthorizedWorkspace(requestedWorkspaceId);
+        String workspaceId = authorization.requireWritableWorkspace(requestedWorkspaceId);
         String actorId = authorization.currentActorId();
         String subjectType = normalizeSubject(requestedSubjectType, subjectId);
         String safeTitle = requiredText(title, "title", 200);

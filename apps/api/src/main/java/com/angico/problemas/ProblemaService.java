@@ -35,7 +35,7 @@ public class ProblemaService {
 
     @Transactional
     public ProblemaResponse registrar(ProblemaRequest request) {
-        String workspaceId = authorizationService.requireAuthorizedWorkspace(request.workspaceId());
+        String workspaceId = authorizationService.requireWritableWorkspace(request.workspaceId());
         referenceValidator.requireTerritorio(request.territorioId(), workspaceId);
         referenceValidator.requireObservacao(request.origemObservacaoId(), workspaceId);
         ProblemaSocioambiental problema = new ProblemaSocioambiental(

@@ -60,7 +60,7 @@ public class ImpactoService {
 
     @Transactional
     public Indicador createIndicador(IndicadorRequest request) {
-        String workspaceId = authorizationService.requireAuthorizedWorkspace(request.workspaceId());
+        String workspaceId = authorizationService.requireWritableWorkspace(request.workspaceId());
         String actorId = authorizationService.currentActorId();
         Territorio territorio = territorioService.requireTerritorio(request.territorioId());
         if (!workspaceId.equals(territorio.getWorkspaceId())) {
@@ -128,7 +128,7 @@ public class ImpactoService {
 
     @Transactional
     public Medicao createMedicao(MedicaoRequest request) {
-        String workspaceId = authorizationService.requireAuthorizedWorkspace(request.workspaceId());
+        String workspaceId = authorizationService.requireWritableWorkspace(request.workspaceId());
         double value = requireFiniteValue(request.valor());
         Indicador indicador = indicadorRepository.findById(request.indicadorId())
                 .orElseThrow(() -> new IllegalArgumentException("Indicador nao encontrado: " + request.indicadorId()));

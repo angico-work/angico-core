@@ -34,7 +34,7 @@ class PessoaServiceTest {
 
     @Test
     void directRegistrationRejectsAnInvalidAngicoId() {
-        when(authorization.requireAuthorizedWorkspace("workspace-a")).thenReturn("workspace-a");
+        when(authorization.requireWritableWorkspace("workspace-a")).thenReturn("workspace-a");
         when(repository.saveAndFlush(any(Pessoa.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         assertThrows(IllegalArgumentException.class, () -> service.registrar(
