@@ -134,6 +134,15 @@ class SecurityDefaultsTest {
         assertTrue(contents.contains("archive \"$UPGRADE_FROM_REF\""));
     }
 
+    @Test
+    void runtimeContainerDoesNotRunAsRoot() throws IOException {
+        Path dockerfile = Files.exists(Path.of("Dockerfile"))
+                ? Path.of("Dockerfile")
+                : Path.of("apps/api/Dockerfile");
+
+        assertTrue(Files.readString(dockerfile).contains("USER 10001:10001"));
+    }
+
     private int occurrences(String value, String needle) {
         int count = 0;
         int offset = 0;
