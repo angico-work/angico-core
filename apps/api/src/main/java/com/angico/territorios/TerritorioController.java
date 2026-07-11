@@ -1,5 +1,6 @@
 package com.angico.territorios;
 
+import jakarta.validation.Valid;
 import java.util.List;
 
 import org.springframework.web.bind.annotation.GetMapping;
@@ -28,7 +29,7 @@ public class TerritorioController {
     }
 
     @PostMapping
-    public TerritorioResponse create(@RequestBody TerritorioCreateRequest request) {
+    public TerritorioResponse create(@Valid @RequestBody TerritorioCreateRequest request) {
         return territorioService.create(request);
     }
 

@@ -1,7 +1,7 @@
 package com.angico.mensagens;
 
+import jakarta.validation.Valid;
 import java.util.List;
-import java.time.Instant;
 
 import org.springframework.core.io.Resource;
 import org.springframework.http.ContentDisposition;
@@ -9,6 +9,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -16,7 +17,6 @@ import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
-import org.springframework.web.multipart.MultipartFile;
 
 @RestController
 @RequestMapping("/api/mensagens")
@@ -34,7 +34,7 @@ public class MensagemController {
     }
 
     @PostMapping("/conversas")
-    public ConversaResponse createConversa(@RequestBody ConversaRequest request) {
+    public ConversaResponse createConversa(@Valid @RequestBody ConversaRequest request) {
         return mensagemService.create(request);
     }
 
@@ -51,31 +51,22 @@ public class MensagemController {
     @PostMapping(value = "/conversas/{id}/mensagens", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public MensagemResponse send(
             @PathVariable Long id,
-            @RequestParam(required = false) String corpo,
-            @RequestParam(required = false) Double latitude,
-            @RequestParam(required = false) Double longitude,
-            @RequestParam(required = false) String localDescricao,
-            @RequestParam(required = false) String linkedEntityType,
-            @RequestParam(required = false) String linkedEntityId,
-            @RequestParam(required = false) String clientMessageId,
-            @RequestParam(required = false) String deviceId,
-            @RequestParam(required = false) Instant occurredAt,
-            @RequestHeader(name = "Idempotency-Key", required = false) String idempotencyKey,
-            @RequestParam(required = false) List<MultipartFile> attachments
+            @Valid @ModelAttribute MensagemRequest request,
+            @RequestHeader(name = "Idempotency-Key", required = false) String idempotencyKey
     ) {
         return mensagemService.send(
                 id,
-                corpo,
-                latitude,
-                longitude,
-                localDescricao,
-                linkedEntityType,
-                linkedEntityId,
-                clientMessageId,
-                deviceId,
-                occurredAt,
+                request.corpo(),
+                request.latitude(),
+                request.longitude(),
+                request.localDescricao(),
+                request.linkedEntityType(),
+                request.linkedEntityId(),
+                request.clientMessageId(),
+                request.deviceId(),
+                request.occurredAt(),
                 idempotencyKey,
-                attachments
+                request.attachments()
         );
     }
 

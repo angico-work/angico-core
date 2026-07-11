@@ -1,18 +1,21 @@
 package com.angico.problemas;
 
+import com.angico.common.validation.CoordinatePair;
+import com.angico.common.validation.ValidCoordinatePair;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
 
+@ValidCoordinatePair
 public record ProblemaRequest(
-        @NotBlank String workspaceId,
-        String territorioId,
-        @NotBlank String categoria,
-        @NotBlank String titulo,
-        String descricao,
-        String localizacao,
+        @NotBlank @Size(max = 255) String workspaceId,
+        @Size(max = 255) String territorioId,
+        @NotBlank @Size(max = 255) String categoria,
+        @NotBlank @Size(max = 255) String titulo,
+        @Size(max = 2000) String descricao,
+        @Size(max = 255) String localizacao,
         Double latitude,
         Double longitude,
-        String severidade,
-        String origemObservacaoId,
-        String autorId
-) {
+        @Size(max = 255) String severidade,
+        @Size(max = 255) String origemObservacaoId
+) implements CoordinatePair {
 }
