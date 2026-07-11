@@ -302,12 +302,17 @@ class WorkspaceIsolationSecurityTest {
     void activeMemberAppearsInTheAuthorizedSecondaryWorkspacePeopleDirectory() throws Exception {
         memberRepository.save(new WorkspaceMember(
                 workspaceB, pessoaA.getAngicoId(), pessoaA.getNome(), "MEMBER", "ACTIVE", Instant.now()));
+        Pessoa localParticipant = new Pessoa(
+                workspaceB, "Mara territorial", "Mobilizadora", Instant.now());
+        localParticipant.setStatus("ATIVA");
+        localParticipant = pessoaRepository.save(localParticipant);
 
         mvc.perform(get("/api/pessoas")
                         .param("workspaceId", workspaceB)
                         .cookie(memberA.cookie()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[*].id", hasItem(pessoaA.getId().intValue())))
+                .andExpect(jsonPath("$[*].id", hasItem(localParticipant.getId().intValue())))
                 .andExpect(jsonPath("$[*].workspaceId", everyItem(is(workspaceB))));
         mvc.perform(get("/api/pessoas/search")
                         .param("workspaceId", workspaceB)
@@ -315,6 +320,13 @@ class WorkspaceIsolationSecurityTest {
                         .cookie(memberA.cookie()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[*].id", hasItem(pessoaA.getId().intValue())))
+                .andExpect(jsonPath("$[*].workspaceId", everyItem(is(workspaceB))));
+        mvc.perform(get("/api/pessoas/search")
+                        .param("workspaceId", workspaceB)
+                        .param("q", "Mara territorial")
+                        .cookie(memberA.cookie()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[*].id", hasItem(localParticipant.getId().intValue())))
                 .andExpect(jsonPath("$[*].workspaceId", everyItem(is(workspaceB))));
     }
 
