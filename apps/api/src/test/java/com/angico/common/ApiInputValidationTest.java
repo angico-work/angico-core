@@ -1,6 +1,7 @@
 package com.angico.common;
 
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -218,7 +219,31 @@ class ApiInputValidationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"nome":"%s","telefone":"%s","foto":"%s"}
-                                """.formatted("p".repeat(256), "1".repeat(51), "u".repeat(256))))
+                                """.formatted("p".repeat(256), "1".repeat(51), "data:image/jpeg;base64,eA==")))
+                .andExpect(status().isBadRequest());
+
+        verifyNoInteractions(pessoaService);
+    }
+
+    @Test
+    void acceptsACompressedProfilePhotoDataUrl() throws Exception {
+        mvc.perform(put("/api/pessoas/me")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"nome":"Ana","foto":"data:image/jpeg;base64,%s"}
+                                """.formatted("a".repeat(1024))))
+                .andExpect(status().isOk());
+
+        verify(pessoaService).updateCurrent(org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test
+    void rejectsProfilePhotoBeyondTheStorageLimit() throws Exception {
+        mvc.perform(put("/api/pessoas/me")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"nome":"Ana","foto":"%s"}
+                                """.formatted("a".repeat(500_001))))
                 .andExpect(status().isBadRequest());
 
         verifyNoInteractions(pessoaService);
