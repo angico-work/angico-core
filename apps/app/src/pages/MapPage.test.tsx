@@ -3,7 +3,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-libra
 import { MemoryRouter, Outlet, Route, Routes } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import MapPage from './MapPage';
-import { loadMapPoints } from '../lib/api';
+import { loadMapPoints, resolveCoords } from '../lib/api';
 
 vi.mock('../lib/api', () => ({
   loadMapPoints: vi.fn(),
@@ -21,6 +21,15 @@ vi.mock('../components/MapView', () => ({
     <button type="button" data-testid="map-view" data-center={center.join(',')} onClick={() => onMapClick?.(-8, -34)}>
       Mapa
     </button>
+  )
+}));
+
+vi.mock('../components/AddressField', () => ({
+  default: ({ onSelect }: { onSelect: (result: { displayName: string }) => void }) => (
+    <div>
+      <button type="button" onClick={() => onSelect({ displayName: 'Endereço A' })}>Endereço A</button>
+      <button type="button" onClick={() => onSelect({ displayName: 'Endereço B' })}>Endereço B</button>
+    </div>
   )
 }));
 
@@ -114,5 +123,23 @@ describe('MapPage real location boundaries', () => {
     view.rerender(mapView('territorio-b'));
 
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+  });
+
+  it('ignores geocoding that finishes after a newer selection', async () => {
+    const first = deferred<[number, number] | null>();
+    const second = deferred<[number, number] | null>();
+    vi.mocked(resolveCoords).mockImplementation((result) => (
+      result.displayName === 'Endereço A' ? first.promise : second.promise
+    ));
+    renderPage();
+    await screen.findByText('Nenhuma localização real disponível');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Endereço A' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Endereço B' }));
+    await act(async () => { second.resolve([-9, -35]); });
+    expect(await screen.findByTestId('map-view')).toHaveAttribute('data-center', '-9,-35');
+
+    await act(async () => { first.resolve([-8, -34]); });
+    expect(screen.getByTestId('map-view')).toHaveAttribute('data-center', '-9,-35');
   });
 });

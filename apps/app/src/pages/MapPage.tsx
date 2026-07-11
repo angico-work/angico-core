@@ -24,6 +24,7 @@ export default function MapPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const refreshRequest = useRef(0);
+  const geocodeRequest = useRef(0);
 
   const refresh = useCallback(async () => {
     const request = ++refreshRequest.current;
@@ -46,9 +47,11 @@ export default function MapPage() {
     return () => { refreshRequest.current += 1; };
   }, [refresh]);
   useEffect(() => {
+    geocodeRequest.current += 1;
     setPending(null);
     setQuery('');
     setFlyTo(null);
+    return () => { geocodeRequest.current += 1; };
   }, [workspaceId]);
   const visible = useMemo(() => points.filter((point) => active.has(point.type)), [points, active]);
   const center = flyTo ?? (points[0] ? [points[0].latitude, points[0].longitude] as [number, number] : null);
@@ -62,15 +65,16 @@ export default function MapPage() {
   }
 
   async function onSearchSelect(result: GeoResult) {
+    const request = ++geocodeRequest.current;
     const coords = await resolveCoords(result);
-    if (coords) setFlyTo(coords);
+    if (request === geocodeRequest.current && coords) setFlyTo(coords);
   }
 
   return (
     <div className="page map-page">
       <header className="page-head map-page-head">
         <div><span className="overline">Territorialidade</span><h1>Mapa do território</h1><p>Uma projeção dos registros que possuem localização confirmada.</p></div>
-        <div className="map-search"><AddressField value={query} onChange={(value) => { setQuery(value); if (!value) setFlyTo(null); }} onSelect={onSearchSelect} placeholder="Buscar endereço ou comunidade" /></div>
+        <div className="map-search"><AddressField value={query} onChange={(value) => { setQuery(value); if (!value) { geocodeRequest.current += 1; setFlyTo(null); } }} onSelect={onSearchSelect} placeholder="Buscar endereço ou comunidade" /></div>
       </header>
 
       <div className="map-toolbar">
