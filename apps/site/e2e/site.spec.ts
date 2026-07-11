@@ -165,8 +165,11 @@ test('keeps the animated leaf below the footer before restarting', async ({ page
 });
 
 test('keeps all route markers clear of visible copy and trace', async ({ page }, testInfo) => {
-  test.skip(!['desktop-1024', 'desktop-1100', 'desktop'].includes(testInfo.project.name));
   await page.goto('/');
+
+  const markers = page.locator('.territory-map__marker');
+  await expect(markers).toHaveCount(4);
+  for (let index = 0; index < 4; index += 1) await expect(markers.nth(index)).toBeVisible();
 
   const obstacles = await page.locator('.territory-hero').evaluate((hero) => {
     const toRectangle = (rect: DOMRect) => {
@@ -175,7 +178,11 @@ test('keeps all route markers clear of visible copy and trace', async ({ page },
     };
     const copy = hero.querySelector<HTMLElement>('.territory-hero__copy');
     const trace = hero.querySelector<HTMLElement>('.territory-trace');
-    if (!copy || !trace) throw new Error('Expected hero copy and trace.');
+    const demoLabel = hero.querySelector<HTMLElement>('.territory-map__demo-label');
+    const map = hero.querySelector<SVGElement>('.territory-map__svg');
+    if (!copy || !trace || !demoLabel || !map) {
+      throw new Error('Expected hero copy, trace, demonstration label, and map.');
+    }
 
     const copyRects = Array.from(copy.children).flatMap((element) => {
       const styles = getComputedStyle(element);
@@ -194,11 +201,14 @@ test('keeps all route markers clear of visible copy and trace', async ({ page },
     });
     return {
       copyRects,
-      traceRect: { ...toRectangle(trace.getBoundingClientRect()), label: 'trace' }
+      traceRect: { ...toRectangle(trace.getBoundingClientRect()), label: 'trace' },
+      demoLabelRect: { ...toRectangle(demoLabel.getBoundingClientRect()), label: 'demo-label' },
+      mapRect: toRectangle(map.getBoundingClientRect()),
+      viewport: { width: window.innerWidth, height: window.innerHeight }
     };
   });
-  const markerRects = await page.locator('.territory-map__marker').evaluateAll((markers) =>
-    markers.map((marker) => {
+  const markerRects = await markers.evaluateAll((markerElements) =>
+    markerElements.map((marker) => {
       const { top, right, bottom, left, width, height } = marker.getBoundingClientRect();
       return { top, right, bottom, left, width, height, label: marker.getAttribute('class') ?? 'marker' };
     })
@@ -209,12 +219,23 @@ test('keeps all route markers clear of visible copy and trace', async ({ page },
   for (const markerRect of markerRects) {
     expect(markerRect.width).toBeGreaterThan(0);
     expect(markerRect.height).toBeGreaterThan(0);
-    for (const obstacle of [...obstacles.copyRects, obstacles.traceRect]) {
+    expect(markerRect.left).toBeGreaterThanOrEqual(0);
+    expect(markerRect.right).toBeLessThanOrEqual(obstacles.viewport.width);
+    expect(markerRect.top).toBeGreaterThanOrEqual(0);
+    expect(markerRect.bottom).toBeLessThanOrEqual(obstacles.viewport.height);
+    for (const obstacle of [
+      ...obstacles.copyRects,
+      obstacles.traceRect,
+      obstacles.demoLabelRect
+    ]) {
       expect(
         rectanglesIntersect(markerRect, obstacle),
         markerRect.label + ' intersects ' + obstacle.label
       ).toBe(false);
     }
+  }
+  if (testInfo.project.name.startsWith('mobile-') || testInfo.project.name === 'boundary-720') {
+    expect(obstacles.traceRect.top).toBeGreaterThanOrEqual(obstacles.mapRect.bottom);
   }
 });
 
