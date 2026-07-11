@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { useState } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import WorkspaceMembersModal from './WorkspaceMembersModal';
+import { listMembers } from '../lib/api';
 
 vi.mock('../lib/api', () => ({
   addMember: vi.fn(),
@@ -43,5 +44,22 @@ describe('WorkspaceMembersModal accessibility', () => {
 
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     expect(opener).toHaveFocus();
+  });
+
+  it('shows a member-list failure to a read-only viewer without claiming the workspace is empty', async () => {
+    vi.mocked(listMembers).mockRejectedValueOnce(new Error('integrantes indisponíveis'));
+
+    render(
+      <WorkspaceMembersModal
+        slug="workspace-a"
+        workspaceName="Território A"
+        canManage={false}
+        onClose={vi.fn()}
+      />
+    );
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('integrantes indisponíveis');
+    expect(screen.queryByText('Nenhum membro ainda. Adicione abaixo por Angico ID.')).not.toBeInTheDocument();
+    expect(screen.getByText('Você pode consultar os membros, mas não alterar esta equipe.')).toBeInTheDocument();
   });
 });

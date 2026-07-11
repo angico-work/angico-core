@@ -564,7 +564,11 @@ export default function MensagensPage() {
                 </div>
                 <form className="message-composer" onSubmit={handleSend}>
                   {files.length > 0 && <div className="selected-files">{files.map((file, index) => (
-                    <SelectedMessageFile key={`${file.name}-${file.size}-${index}`} file={file} onRemove={() => setFiles((current) => current.filter((_, fileIndex) => fileIndex !== index))} />
+                    <SelectedMessageFile
+                      key={`${file.name}-${file.size}-${index}`}
+                      file={file}
+                      onRemove={canWrite ? () => setFiles((current) => current.filter((_, fileIndex) => fileIndex !== index)) : undefined}
+                    />
                   ))}</div>}
                   {messageError && <div className="form-error" role="alert">{messageError}</div>}
                   <div className="draft-state" role="status">

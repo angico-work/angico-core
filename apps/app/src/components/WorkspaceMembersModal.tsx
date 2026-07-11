@@ -91,8 +91,8 @@ export default function WorkspaceMembersModal({ slug, workspaceName, canManage, 
         <div className="member-list">
           {loading ? (
             <span className="entity-meta">Carregando…</span>
-          ) : members.length === 0 ? (
-            <span className="entity-meta">Nenhum membro ainda. Adicione abaixo por Angico ID.</span>
+          ) : error ? null : members.length === 0 ? (
+            <span className="entity-meta">{canManage ? 'Nenhum membro ainda. Adicione abaixo por Angico ID.' : 'Nenhum membro disponível neste espaço.'}</span>
           ) : (
             members.map((m) => (
               <div className="member-row" key={m.id}>
@@ -110,6 +110,7 @@ export default function WorkspaceMembersModal({ slug, workspaceName, canManage, 
             ))
           )}
         </div>
+        {error && <div className="member-error" role="alert">{error}</div>}
 
         {canManage ? <form className="member-add" onSubmit={submit}>
           <div className="field">
@@ -132,7 +133,6 @@ export default function WorkspaceMembersModal({ slug, workspaceName, canManage, 
               {busy ? 'Adicionando…' : 'Adicionar'}
             </button>
           </div>
-          {error && <div className="member-error" role="alert">{error}</div>}
         </form> : <p className="muted">Você pode consultar os membros, mas não alterar esta equipe.</p>}
 
         <div className="member-actions">

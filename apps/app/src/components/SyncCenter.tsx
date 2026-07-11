@@ -333,15 +333,27 @@ export default function SyncCenter({ ownerId, workspaceId, online, canWrite, onC
                     <strong className={status.tone}>{status.label}</strong>
                     <span>{status.detail}</span>
                     <time dateTime={entry.updatedAt}>{when(entry.updatedAt)}</time>
-                    {canWrite && isObservationEntry(entry) && REVIEWABLE.includes(entry.status) && !isReviewing && (
-                      <button
-                        type="button"
-                        className="secondary-button compact-button"
-                        aria-label={`Revisar ${entry.body.titulo}`}
-                        onClick={() => openReview(entry)}
-                      >
-                        Revisar
-                      </button>
+                    {isObservationEntry(entry) && REVIEWABLE.includes(entry.status) && !isReviewing && (
+                      canWrite ? (
+                        <button
+                          type="button"
+                          className="secondary-button compact-button"
+                          aria-label={`Revisar ${entry.body.titulo}`}
+                          onClick={() => openReview(entry)}
+                        >
+                          Revisar
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          className="danger-text-button compact-button"
+                          aria-label={`Descartar registro: ${entry.body.titulo}`}
+                          disabled={workingId === entry.id}
+                          onClick={() => void discard(entry)}
+                        >
+                          Descartar
+                        </button>
+                      )
                     )}
                     {isMessageEntry(entry) && REVIEWABLE.includes(entry.status) && (
                       <div className="sync-message-actions">

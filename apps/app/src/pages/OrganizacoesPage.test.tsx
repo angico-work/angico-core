@@ -75,11 +75,15 @@ const person = {
   createdAt: '2026-07-10T10:00:00Z'
 } satisfies PessoaHit;
 
-function Page({ workspaceId, canWrite = true }: { workspaceId: string; canWrite?: boolean }) {
+function Page({ workspaceId, canWrite = true, workspaceRole = canWrite ? 'OWNER' : 'VIEWER' }: {
+  workspaceId: string;
+  canWrite?: boolean;
+  workspaceRole?: 'OWNER' | 'VIEWER' | null;
+}) {
   return (
     <MemoryRouter>
       <Routes>
-        <Route element={<Outlet context={{ workspaceId, workspaceRole: canWrite ? 'OWNER' : 'VIEWER', canWrite, canManage: canWrite }} />}>
+        <Route element={<Outlet context={{ workspaceId, workspaceRole, canWrite }} />}>
           <Route index element={<OrganizacoesPage />} />
         </Route>
       </Routes>
@@ -239,6 +243,16 @@ describe('OrganizacoesPage', () => {
     view.rerender(<Page workspaceId="workspace-b" />);
 
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Nova participação' })).not.toBeInTheDocument());
+  });
+
+  it('keeps the participation inspection open when a pending role resolves', async () => {
+    const view = render(<Page workspaceId="workspace-a" canWrite={false} workspaceRole={null} />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Ver participação em Rede da Nascente' }));
+    expect(await screen.findByRole('dialog', { name: 'Participações' })).toBeInTheDocument();
+
+    view.rerender(<Page workspaceId="workspace-a" canWrite workspaceRole="OWNER" />);
+
+    expect(await screen.findByRole('dialog', { name: 'Nova participação' })).toBeInTheDocument();
   });
 
   it('reports a person-search failure instead of calling it an empty result', async () => {

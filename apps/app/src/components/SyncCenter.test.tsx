@@ -110,6 +110,7 @@ describe('SyncCenter', () => {
   });
 
   it('keeps inspection and discard available without allowing a viewer to resend or revise', async () => {
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
     render(
       <SyncCenter
         ownerId="ana.sp"
@@ -124,6 +125,15 @@ describe('SyncCenter', () => {
     expect(screen.queryByRole('button', { name: 'Revisar Nascente sem proteção' })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Sincronizar agora' })).toBeDisabled();
     expect(screen.getByText(/Envios e revisões ficam bloqueados/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Descartar registro: Nascente sem proteção' }));
+
+    await waitFor(() => expect(discardOutboxEntry).toHaveBeenCalledWith(
+      'conflict-1', 'ana.sp', 'territorio-a'
+    ));
+    expect(confirm).toHaveBeenCalledOnce();
+    expect(reviseObservation).not.toHaveBeenCalled();
+    expect(syncPendingObservations).not.toHaveBeenCalled();
+    expect(retryPendingOperations).not.toHaveBeenCalled();
   });
 
   it('moves focus into the dialog, closes with Escape and restores the trigger', async () => {

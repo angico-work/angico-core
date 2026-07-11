@@ -52,7 +52,10 @@ export default function MapPage() {
     setQuery('');
     setFlyTo(null);
     return () => { geocodeRequest.current += 1; };
-  }, [workspaceId, canWrite]);
+  }, [workspaceId]);
+  useEffect(() => {
+    if (!canWrite) setPending(null);
+  }, [canWrite]);
   const visible = useMemo(() => points.filter((point) => active.has(point.type)), [points, active]);
   const center = flyTo ?? (points[0] ? [points[0].latitude, points[0].longitude] as [number, number] : null);
 

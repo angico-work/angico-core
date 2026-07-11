@@ -341,7 +341,11 @@ export default function OrganizacoesPage() {
   useEffect(() => {
     setCreating(false);
     setParticipationTarget(null);
-  }, [workspaceId, canWrite]);
+  }, [workspaceId]);
+
+  useEffect(() => {
+    if (!canWrite) setCreating(false);
+  }, [canWrite]);
 
   useEffect(() => {
     let active = true;

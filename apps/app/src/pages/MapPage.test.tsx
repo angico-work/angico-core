@@ -38,11 +38,15 @@ vi.mock('../components/AddressField', () => ({
   )
 }));
 
-function mapView(workspaceId = 'workspace-a', canWrite = true) {
+function mapView(
+  workspaceId = 'workspace-a',
+  canWrite = true,
+  workspaceRole: 'OWNER' | 'VIEWER' | null = canWrite ? 'OWNER' : 'VIEWER'
+) {
   return (
     <MemoryRouter initialEntries={['/mapa']}>
       <Routes>
-        <Route element={<Outlet context={{ workspaceId, workspaceRole: canWrite ? 'OWNER' : 'VIEWER', canWrite, canManage: canWrite }} />}>
+        <Route element={<Outlet context={{ workspaceId, workspaceRole, canWrite }} />}>
           <Route path="/mapa" element={<MapPage />} />
         </Route>
       </Routes>
@@ -141,6 +145,22 @@ describe('MapPage real location boundaries', () => {
 
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     expect(screen.queryByText('Toque no mapa para registrar neste local')).not.toBeInTheDocument();
+  });
+
+  it('preserves search and fly-to when a pending role resolves', async () => {
+    vi.mocked(resolveCoords).mockResolvedValue([-8, -34]);
+    const view = render(mapView('workspace-a', false, null));
+    await screen.findByText('Nenhuma localização real disponível');
+
+    const search = screen.getByRole('textbox', { name: 'Buscar localização' });
+    fireEvent.change(search, { target: { value: 'Endereço pesquisado' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Endereço A' }));
+    expect(await screen.findByTestId('map-view')).toHaveAttribute('data-center', '-8,-34');
+
+    view.rerender(mapView('workspace-a', true, 'OWNER'));
+
+    expect(screen.getByRole('textbox', { name: 'Buscar localização' })).toHaveValue('Endereço pesquisado');
+    expect(screen.getByTestId('map-view')).toHaveAttribute('data-center', '-8,-34');
   });
 
   it('ignores geocoding that finishes after a newer selection', async () => {

@@ -118,7 +118,7 @@ function PageUnderTest({ workspaceId = 'territorio-a', canWrite = true, workspac
   return (
     <MemoryRouter initialEntries={['/']}>
       <Routes>
-        <Route element={<Outlet context={{ workspaceId, workspaceRole, canWrite, canManage: canWrite }} />}>
+        <Route element={<Outlet context={{ workspaceId, workspaceRole, canWrite }} />}>
           <Route index element={<MensagensPage />} />
         </Route>
       </Routes>
@@ -198,6 +198,19 @@ describe('MensagensPage', () => {
     expect(screen.queryByRole('button', { name: 'Nova conversa' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Enviar mensagem' })).not.toBeInTheDocument();
     expect(captureMessage).not.toHaveBeenCalled();
+  });
+
+  it('does not offer draft attachment removal to viewers', async () => {
+    vi.mocked(loadMessageDraft).mockResolvedValue({
+      body: 'Ata para consulta.',
+      attachments: [new File(['ata'], 'ata.txt', { type: 'text/plain' })],
+      updatedAt: '2026-07-10T14:00:00Z'
+    });
+
+    render(<PageUnderTest canWrite={false} />);
+
+    expect(await screen.findByText('ata.txt')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Remover ata.txt' })).not.toBeInTheDocument();
   });
 
   it('keeps loaded conversations when a pending role resolves', async () => {
@@ -373,6 +386,7 @@ describe('MensagensPage', () => {
     renderPage();
 
     const link = await screen.findByRole('combobox', { name: 'Vincular mensagem a' });
+    await screen.findByRole('option', { name: /Nascente Sul/ });
     fireEvent.change(link, { target: { value: 'TERRITORIO:4' } });
     expect(link).toHaveValue('TERRITORIO:4');
     fireEvent.click(screen.getByRole('button', { name: /Equipe de campo/ }));
