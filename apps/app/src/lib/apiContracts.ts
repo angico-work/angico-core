@@ -210,8 +210,9 @@ function isAcao(value: unknown, workspaceId: string): value is Acao {
     && nullableText(value.descricao);
 }
 
-function isPessoa(value: unknown, workspaceId: string): value is PessoaHit {
-  return workspaceRecord(value, workspaceId)
+export function isPessoaProfile(value: unknown): value is PessoaHit {
+  return object(value)
+    && presentText(value.workspaceId)
     && integer(value.id)
     && presentText(value.nome)
     && nullableText(value.papel)
@@ -219,6 +220,10 @@ function isPessoa(value: unknown, workspaceId: string): value is PessoaHit {
     && nullableText(value.telefone)
     && nullableText(value.foto)
     && validDate(value.createdAt);
+}
+
+function isPessoa(value: unknown, workspaceId: string): value is PessoaHit {
+  return isPessoaProfile(value) && value.workspaceId === workspaceId;
 }
 
 function isEvidencia(value: unknown, workspaceId: string): value is Evidencia {

@@ -41,6 +41,11 @@ public class PessoaController {
         return pessoaService.search(workspaceId, q);
     }
 
+    @GetMapping("/me")
+    public PessoaResponse me() {
+        return pessoaService.current();
+    }
+
     @PutMapping("/me")
     public PessoaResponse updateMe(@Valid @RequestBody PessoaUpdateRequest request) {
         return pessoaService.updateCurrent(request);

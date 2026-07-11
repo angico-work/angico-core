@@ -5,6 +5,8 @@ import static org.hamcrest.Matchers.not;
 import static org.hamcrest.Matchers.nullValue;
 import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.everyItem;
+import static org.hamcrest.Matchers.is;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
@@ -290,6 +292,26 @@ class WorkspaceIsolationSecurityTest {
                                 """.formatted(workspaceB, territorio.getId())))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.workspaceId").value(workspaceB));
+    }
+
+    @Test
+    void activeMemberAppearsInTheAuthorizedSecondaryWorkspacePeopleDirectory() throws Exception {
+        memberRepository.save(new WorkspaceMember(
+                workspaceB, pessoaA.getAngicoId(), pessoaA.getNome(), "MEMBER", "ACTIVE", Instant.now()));
+
+        mvc.perform(get("/api/pessoas")
+                        .param("workspaceId", workspaceB)
+                        .cookie(memberA.cookie()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[*].id", hasItem(pessoaA.getId().intValue())))
+                .andExpect(jsonPath("$[*].workspaceId", everyItem(is(workspaceB))));
+        mvc.perform(get("/api/pessoas/search")
+                        .param("workspaceId", workspaceB)
+                        .param("q", pessoaA.getAngicoId())
+                        .cookie(memberA.cookie()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[*].id", hasItem(pessoaA.getId().intValue())))
+                .andExpect(jsonPath("$[*].workspaceId", everyItem(is(workspaceB))));
     }
 
     @Test

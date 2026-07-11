@@ -47,12 +47,19 @@ const { otherSession, session, stopSyncEngine } = vi.hoisted(() => ({
 }));
 
 vi.mock('./Sidebar', () => ({
-  default: ({ onLogout }: { onLogout: () => void }) => (
-    <button type="button" onClick={onLogout}>Sair agora</button>
+  default: ({ onLogout, onEditProfile }: { onLogout: () => void; onEditProfile: () => void }) => (
+    <>
+      <button type="button" onClick={onEditProfile}>Editar perfil</button>
+      <button type="button" onClick={onLogout}>Sair agora</button>
+    </>
   )
 }));
 vi.mock('./Topbar', () => ({ default: () => null }));
-vi.mock('./ProfileModal', () => ({ default: () => null }));
+vi.mock('./ProfileModal', () => ({
+  default: ({ profile }: { profile: { telefone?: string | null } }) => (
+    <div role="dialog" aria-label="Editar perfil">{profile.telefone}</div>
+  )
+}));
 vi.mock('../lib/api', async (importOriginal) => {
   const original = await importOriginal<typeof import('../lib/api')>();
   return {
@@ -258,5 +265,31 @@ describe('AppShell local partition', () => {
     renderShell();
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Espaços indisponíveis');
+  });
+
+  it('does not open profile editing with provisional session data', async () => {
+    let resolveProfile!: (value: Awaited<ReturnType<typeof getProfile>>) => void;
+    vi.mocked(getProfile).mockReturnValue(new Promise((resolve) => { resolveProfile = resolve; }));
+    renderShell();
+    await screen.findByText('Conteúdo');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Editar perfil' }));
+    expect(screen.queryByRole('dialog', { name: 'Editar perfil' })).not.toBeInTheDocument();
+    expect(screen.getByRole('alert')).toHaveTextContent('perfil ainda não está disponível');
+
+    resolveProfile({
+      id: 7,
+      workspaceId: 'territorio-a',
+      nome: 'Ana',
+      papel: 'MEMBER',
+      angicoId: 'ana.atualizada',
+      telefone: '(81) 99999-0000',
+      foto: null,
+      createdAt: '2026-07-10T12:00:00Z'
+    });
+    await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: 'Editar perfil' }));
+
+    expect(screen.getByRole('dialog', { name: 'Editar perfil' })).toHaveTextContent('(81) 99999-0000');
   });
 });

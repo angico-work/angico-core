@@ -154,13 +154,16 @@ export default function AppShell() {
     if (authStatus !== 'authenticated') return;
     let active = true;
     setProfileError(null);
-    getProfile(activeSlug).then((p) => {
-      if (active) setProfile(p);
+    getProfile().then((p) => {
+      if (active) {
+        setProfile(p);
+        setProfileError(null);
+      }
     }).catch((caught) => {
       if (active) setProfileError(caught instanceof Error ? caught.message : 'Não foi possível carregar o perfil.');
     });
     return () => { active = false; };
-  }, [activeSlug, authStatus]);
+  }, [authStatus]);
 
   if (authStatus === 'checking') {
     return <main aria-busy="true">Validando sessão…</main>;
@@ -194,9 +197,16 @@ export default function AppShell() {
     }
   }
 
+  function openProfile() {
+    if (!profile) {
+      setProfileError('O perfil ainda não está disponível. Tente novamente em instantes.');
+      return;
+    }
+    setShowProfile(true);
+  }
+
   function switchWorkspace(slug: string) {
     if (slug === activeSlug) return;
-    setProfile(null);
     setActiveSlug(slug);
     setSessionWorkspace(slug);
   }
@@ -243,7 +253,7 @@ export default function AppShell() {
         userFoto={effectiveProfile?.foto ?? null}
         open={sidebarOpen}
         onNavigate={() => setSidebarOpen(false)}
-        onEditProfile={() => setShowProfile(true)}
+        onEditProfile={openProfile}
         onLogout={handleLogout}
       />
       {sidebarOpen && <div className="sidebar-backdrop" onClick={() => setSidebarOpen(false)} />}
@@ -253,7 +263,7 @@ export default function AppShell() {
         ownerId={activeIdentity.ownerId}
         sidebarOpen={sidebarOpen}
         onToggleSidebar={() => setSidebarOpen((v) => !v)}
-        onWorkspaceClick={() => setShowProfile(true)}
+        onWorkspaceClick={openProfile}
       />
       <main className="app-main">
         {(accountError || profileError) && (
@@ -266,9 +276,9 @@ export default function AppShell() {
         />
         <Outlet context={context} />
       </main>
-      {showProfile && effectiveProfile && (
+      {showProfile && profile && (
         <ProfileModal
-          profile={effectiveProfile}
+          profile={profile}
           onClose={() => setShowProfile(false)}
           onSaved={(p) => { setProfile(p); setShowProfile(false); }}
         />

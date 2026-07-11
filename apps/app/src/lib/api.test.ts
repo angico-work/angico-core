@@ -4,6 +4,7 @@ import {
   ApiHttpError,
   ApiNetworkError,
   createEntity,
+  getProfile,
   getSession,
   hasFreshOfflineSession,
   isAuthenticated,
@@ -230,6 +231,26 @@ describe('cookie session API', () => {
       credentials: 'include'
     }));
     expect(getSession()?.nome).toBe('Ana Atualizada');
+  });
+
+  it('loads the current profile independently from the selected workspace directory', async () => {
+    const profile = {
+      id: 7,
+      workspaceId: 'workspace-a',
+      nome: 'Ana',
+      papel: 'MEMBER',
+      angicoId: 'ana.sp',
+      telefone: '(81) 99999-0000',
+      foto: null,
+      createdAt: '2026-07-10T12:00:00Z'
+    };
+    const fetchMock = vi.fn().mockResolvedValue(response(200, profile));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(getProfile()).resolves.toEqual(profile);
+    expect(fetchMock).toHaveBeenCalledWith('/api/pessoas/me', expect.objectContaining({
+      credentials: 'include'
+    }));
   });
 
   it('preserves the selected workspace while revalidating the same account', async () => {

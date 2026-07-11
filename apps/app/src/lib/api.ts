@@ -13,6 +13,7 @@ import {
   isMapPointList,
   isMemoriaEventList,
   isMensagemList,
+  isPessoaProfile,
   isRastroResponse,
   isTerritorioList,
   isWorkspaceList,
@@ -616,11 +617,15 @@ export async function searchMensagens(workspaceId: string, query: string): Promi
   return (await response.json()) as MensagemBusca[];
 }
 
-export async function getProfile(workspaceId = DEFAULT_WORKSPACE): Promise<PessoaHit | null> {
-  const session = getSession();
-  if (!session) return null;
-  const people = await listPessoas(workspaceId);
-  return people.find((person) => person.id === session.pessoaId) ?? null;
+export async function getProfile(): Promise<PessoaHit | null> {
+  if (!getSession()) return null;
+  const profile = await requestJson<unknown>(
+    apiUrl('/api/pessoas/me'),
+    {},
+    'Não foi possível carregar o perfil.'
+  );
+  if (!isPessoaProfile(profile)) throw new SyntaxError('Resposta de perfil inválida.');
+  return profile;
 }
 
 export interface ProfileUpdate {

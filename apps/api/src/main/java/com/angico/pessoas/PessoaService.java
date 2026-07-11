@@ -72,9 +72,9 @@ public class PessoaService {
     @Transactional(readOnly = true)
     public List<PessoaResponse> listar(String workspaceId) {
         String authorized = authorizationService.requireAuthorizedWorkspace(workspaceId);
-        return pessoaRepository.findByWorkspaceIdOrderByCreatedAtDesc(authorized)
+        return pessoaRepository.findVisibleInWorkspace(authorized)
                 .stream()
-                .map(PessoaResponse::from)
+                .map(pessoa -> PessoaResponse.inWorkspace(pessoa, authorized))
                 .toList();
     }
 
@@ -84,10 +84,15 @@ public class PessoaService {
         if (q == null || q.trim().length() < 2) {
             return List.of();
         }
-        return pessoaRepository.searchInWorkspace(authorized, q.trim())
+        return pessoaRepository.searchVisibleInWorkspace(authorized, q.trim())
                 .stream()
-                .map(PessoaResponse::from)
+                .map(pessoa -> PessoaResponse.inWorkspace(pessoa, authorized))
                 .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public PessoaResponse current() {
+        return PessoaResponse.from(authorizationService.currentPessoa());
     }
 
     @Transactional
