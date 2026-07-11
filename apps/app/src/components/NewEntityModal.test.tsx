@@ -2,16 +2,15 @@ import '@testing-library/jest-dom/vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import NewEntityModal from './NewEntityModal';
-import { captureObservation } from '../lib/offlineSync';
-import { createProblema, listEntities, listTerritorios } from '../lib/api';
+import { captureDomainMutation, captureObservation } from '../lib/offlineSync';
+import { listEntities, listTerritorios } from '../lib/api';
 
 vi.mock('../lib/offlineSync', () => ({
+  captureDomainMutation: vi.fn(),
   captureObservation: vi.fn()
 }));
 
 vi.mock('../lib/api', () => ({
-  createEntity: vi.fn(),
-  createProblema: vi.fn(),
   getSession: vi.fn().mockReturnValue({ pessoaId: 7, nome: 'Ana', angicoId: 'ana.sp' }),
   listEntities: vi.fn(),
   listTerritorios: vi.fn(),
@@ -33,10 +32,11 @@ const origin = {
 beforeEach(() => {
   vi.mocked(listTerritorios).mockResolvedValue([territory]);
   vi.mocked(listEntities).mockResolvedValue([origin]);
-  vi.mocked(createProblema).mockResolvedValue({
-    id: 11, workspaceId: 'territorio-teste', territorioId: '4', categoria: 'Água e Saneamento',
-    titulo: 'Água turva', descricao: null, localizacao: null, latitude: null, longitude: null,
-    severidade: 'ALTA', status: 'ABERTO', origemObservacaoId: '6', createdAt: '2026-07-10T11:00:00Z'
+  vi.mocked(captureDomainMutation).mockResolvedValue({
+    clientMutationId: 'domain-1', status: 'SYNCED', remote: {
+      operation: 'PROBLEMA_CREATE', workspaceId: 'territorio-teste',
+      clientMutationId: 'domain-1', resourceId: '11'
+    }
   });
 });
 
@@ -121,13 +121,43 @@ describe('field observation capture', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Continuar para comprovar' }));
     fireEvent.click(screen.getByRole('button', { name: 'Salvar problema' }));
 
-    await waitFor(() => expect(createProblema).toHaveBeenCalledWith(expect.objectContaining({
+    await waitFor(() => expect(captureDomainMutation).toHaveBeenCalledWith(
+      'PROBLEMA_CREATE',
+      expect.objectContaining({
       workspaceId: 'territorio-teste',
       territorioId: '4',
       origemObservacaoId: '6',
       titulo: 'Água turva',
       severidade: 'ALTA'
-    })));
-    expect(vi.mocked(createProblema).mock.calls[0]?.[0]).not.toHaveProperty('autorId');
+      })
+    ));
+    expect(await screen.findByRole('status')).toHaveTextContent('Sincronização concluída');
+    expect(vi.mocked(captureDomainMutation).mock.calls[0]?.[1]).not.toHaveProperty('autorId');
+  });
+
+  it('keeps a potentiality local while it is waiting for synchronization', async () => {
+    vi.mocked(captureDomainMutation).mockResolvedValue({
+      clientMutationId: 'potential-local-1', status: 'QUEUED'
+    });
+    render(
+      <NewEntityModal
+        workspaceId="territorio-teste"
+        initialType="potencialidade"
+        lockType
+        onClose={() => undefined}
+        onCreated={() => undefined}
+      />
+    );
+
+    fireEvent.change(screen.getByLabelText('Título'), { target: { value: 'Horta comunitária' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Continuar para ancorar' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Continuar para comprovar' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar potencialidade' }));
+
+    expect(await screen.findByRole('status')).toHaveTextContent('Salvo neste aparelho');
+    expect(captureDomainMutation).toHaveBeenCalledWith(
+      'POTENCIALIDADE_CREATE',
+      expect.objectContaining({ workspaceId: 'territorio-teste', titulo: 'Horta comunitária' })
+    );
   });
 });

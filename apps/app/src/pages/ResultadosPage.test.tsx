@@ -3,11 +3,13 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { MemoryRouter, Outlet, Route, Routes } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import ResultadosPage from './ResultadosPage';
-import { createResultado, listAcoes, listResultados } from '../lib/api';
+import { captureDomainMutation } from '../lib/offlineSync';
+import { listAcoes, listResultados } from '../lib/api';
 import type { Acao, Resultado } from '../types';
 
+vi.mock('../lib/offlineSync', () => ({ captureDomainMutation: vi.fn() }));
+
 vi.mock('../lib/api', () => ({
-  createResultado: vi.fn(),
   listAcoes: vi.fn(),
   listResultados: vi.fn()
 }));
@@ -41,7 +43,9 @@ describe('ResultadosPage', () => {
   beforeEach(() => {
     vi.mocked(listAcoes).mockResolvedValue([action]);
     vi.mocked(listResultados).mockResolvedValue([result]);
-    vi.mocked(createResultado).mockResolvedValue(result);
+    vi.mocked(captureDomainMutation).mockResolvedValue({
+      clientMutationId: 'result-local-1', status: 'QUEUED'
+    });
   });
 
   afterEach(() => {
@@ -57,11 +61,16 @@ describe('ResultadosPage', () => {
     fireEvent.change(screen.getByLabelText('Título'), { target: { value: 'Margem recuperada' } });
     fireEvent.click(screen.getByRole('button', { name: 'Salvar resultado' }));
 
-    await waitFor(() => expect(createResultado).toHaveBeenCalledWith(expect.objectContaining({
-      workspaceId: 'workspace-a',
-      acaoId: 4,
-      titulo: 'Margem recuperada'
-    })));
+    await waitFor(() => expect(captureDomainMutation).toHaveBeenCalledWith(
+      'RESULTADO_CREATE',
+      expect.objectContaining({
+        workspaceId: 'workspace-a',
+        acaoId: 4,
+        titulo: 'Margem recuperada'
+      })
+    ));
+    expect(await screen.findByRole('status')).toHaveTextContent('Salvo neste aparelho');
+    expect(screen.queryByRole('dialog', { name: 'Novo resultado' })).not.toBeInTheDocument();
   });
 
   it('keeps an API failure distinct from an empty result list', async () => {

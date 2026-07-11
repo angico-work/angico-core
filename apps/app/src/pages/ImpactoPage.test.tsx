@@ -3,14 +3,15 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { MemoryRouter, Outlet, Route, Routes } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import ImpactoPage from './ImpactoPage';
+import { captureDomainMutation } from '../lib/offlineSync';
 import {
-  createIndicador, createMedicao, listIndicadores, listMedicoes, listResultados, listTerritorios
+  listIndicadores, listMedicoes, listResultados, listTerritorios
 } from '../lib/api';
 import type { Indicador, Medicao, Resultado, Territorio } from '../types';
 
+vi.mock('../lib/offlineSync', () => ({ captureDomainMutation: vi.fn() }));
+
 vi.mock('../lib/api', () => ({
-  createIndicador: vi.fn(),
-  createMedicao: vi.fn(),
   listIndicadores: vi.fn(),
   listMedicoes: vi.fn(),
   listResultados: vi.fn(),
@@ -60,8 +61,12 @@ describe('ImpactoPage', () => {
     vi.mocked(listResultados).mockResolvedValue([result]);
     vi.mocked(listIndicadores).mockResolvedValue([indicator]);
     vi.mocked(listMedicoes).mockResolvedValue([measurement]);
-    vi.mocked(createIndicador).mockResolvedValue(indicator);
-    vi.mocked(createMedicao).mockResolvedValue(measurement);
+    vi.mocked(captureDomainMutation).mockResolvedValue({
+      clientMutationId: 'impact-1', status: 'SYNCED', remote: {
+        operation: 'INDICADOR_CREATE', workspaceId: 'workspace-a',
+        clientMutationId: 'impact-1', resourceId: '7'
+      }
+    });
   });
 
   afterEach(() => {
@@ -79,15 +84,22 @@ describe('ImpactoPage', () => {
     fireEvent.change(screen.getByLabelText('Unidade'), { target: { value: 'trechos' } });
     fireEvent.click(screen.getByRole('button', { name: 'Salvar indicador' }));
 
-    await waitFor(() => expect(createIndicador).toHaveBeenCalledWith(expect.objectContaining({
-      workspaceId: 'workspace-a',
-      territorioId: 3,
-      resultadoId: 4,
-      nome: 'Trechos protegidos'
-    })));
+    await waitFor(() => expect(captureDomainMutation).toHaveBeenCalledWith(
+      'INDICADOR_CREATE',
+      expect.objectContaining({
+        workspaceId: 'workspace-a',
+        territorioId: 3,
+        resultadoId: 4,
+        nome: 'Trechos protegidos'
+      })
+    ));
+    expect(await screen.findByRole('status')).toHaveTextContent('Sincronização concluída');
   });
 
   it('creates a measurement with the indicator selected by name and its real unit', async () => {
+    vi.mocked(captureDomainMutation).mockResolvedValue({
+      clientMutationId: 'measurement-local-1', status: 'QUEUED'
+    });
     renderPage('/indicadores?create=medicao&indicadorId=7');
 
     expect(await screen.findByRole('dialog', { name: 'Nova medição' })).toBeInTheDocument();
@@ -96,12 +108,17 @@ describe('ImpactoPage', () => {
     fireEvent.change(screen.getByLabelText('Valor'), { target: { value: '3' } });
     fireEvent.click(screen.getByRole('button', { name: 'Salvar medição' }));
 
-    await waitFor(() => expect(createMedicao).toHaveBeenCalledWith(expect.objectContaining({
-      workspaceId: 'workspace-a',
-      indicadorId: 7,
-      valor: 3,
-      unidade: 'trechos'
-    })));
+    await waitFor(() => expect(captureDomainMutation).toHaveBeenCalledWith(
+      'MEDICAO_CREATE',
+      expect.objectContaining({
+        workspaceId: 'workspace-a',
+        indicadorId: 7,
+        valor: 3,
+        unidade: 'trechos'
+      })
+    ));
+    expect(await screen.findByRole('status')).toHaveTextContent('Salvo neste aparelho');
+    expect(screen.queryByRole('dialog', { name: 'Nova medição' })).not.toBeInTheDocument();
   });
 
   it('shows measurements as real records under an accessible tab', async () => {

@@ -2,18 +2,17 @@ import '@testing-library/jest-dom/vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import RelationalEntityDialog from './RelationalEntityDialog';
+import { captureDomainMutation } from '../lib/offlineSync';
 import {
-  createAcao,
-  createMissao,
   listMissoes,
   listProblemas,
   listTerritorios,
   searchPessoas
 } from '../lib/api';
 
+vi.mock('../lib/offlineSync', () => ({ captureDomainMutation: vi.fn() }));
+
 vi.mock('../lib/api', () => ({
-  createAcao: vi.fn(),
-  createMissao: vi.fn(),
   listMissoes: vi.fn(),
   listProblemas: vi.fn(),
   listTerritorios: vi.fn(),
@@ -46,10 +45,11 @@ describe('RelationalEntityDialog', () => {
     vi.mocked(listProblemas).mockResolvedValue([problem]);
     vi.mocked(listMissoes).mockResolvedValue([mission]);
     vi.mocked(searchPessoas).mockResolvedValue([person]);
-    vi.mocked(createMissao).mockResolvedValue(mission);
-    vi.mocked(createAcao).mockResolvedValue({
-      id: 31, workspaceId: 'workspace-a', titulo: 'Limpar margem', descricao: null,
-      missaoId: '20', responsavelId: '7', status: 'EM_ANDAMENTO', createdAt: '2026-07-10T12:00:00Z'
+    vi.mocked(captureDomainMutation).mockResolvedValue({
+      clientMutationId: 'relational-1', status: 'SYNCED', remote: {
+        operation: 'MISSAO_CREATE', workspaceId: 'workspace-a',
+        clientMutationId: 'relational-1', resourceId: '20'
+      }
     });
   });
 
@@ -76,27 +76,35 @@ describe('RelationalEntityDialog', () => {
     fireEvent.change(screen.getByLabelText('Objetivo da missão'), { target: { value: 'Recuperar a nascente' } });
     fireEvent.click(screen.getByRole('button', { name: 'Criar missão' }));
 
-    await waitFor(() => expect(createMissao).toHaveBeenCalledWith({
-      workspaceId: 'workspace-a',
-      territorioId: '4',
-      problemaId: '11',
-      responsavelId: '7',
-      titulo: 'Recuperar a nascente',
-      descricao: undefined
-    }));
+    await waitFor(() => expect(captureDomainMutation).toHaveBeenCalledWith(
+      'MISSAO_CREATE',
+      {
+        workspaceId: 'workspace-a',
+        territorioId: '4',
+        problemaId: '11',
+        responsavelId: '7',
+        titulo: 'Recuperar a nascente',
+        descricao: undefined
+      }
+    ));
+    expect(await screen.findByRole('status')).toHaveTextContent('Sincronização concluída');
     expect(screen.queryByLabelText(/\bid\b/i)).not.toBeInTheDocument();
-    expect(vi.mocked(createMissao).mock.calls[0]?.[0]).not.toHaveProperty('actorId');
-    expect(vi.mocked(createMissao).mock.calls[0]?.[0]).not.toHaveProperty('autorId');
+    expect(vi.mocked(captureDomainMutation).mock.calls[0]?.[1]).not.toHaveProperty('actorId');
+    expect(vi.mocked(captureDomainMutation).mock.calls[0]?.[1]).not.toHaveProperty('autorId');
   });
 
   it('honors a mission deep link while keeping the technical id out of the form', async () => {
+    vi.mocked(captureDomainMutation).mockResolvedValue({
+      clientMutationId: 'action-local-1', status: 'QUEUED'
+    });
+    const onCreated = vi.fn();
     render(
       <RelationalEntityDialog
         type="acao"
         workspaceId="workspace-a"
         initialMissaoId="20"
         onClose={vi.fn()}
-        onCreated={vi.fn()}
+        onCreated={onCreated}
       />
     );
 
@@ -105,13 +113,20 @@ describe('RelationalEntityDialog', () => {
     fireEvent.change(screen.getByLabelText('Ação realizada'), { target: { value: 'Limpar margem' } });
     fireEvent.click(screen.getByRole('button', { name: 'Criar ação' }));
 
-    await waitFor(() => expect(createAcao).toHaveBeenCalledWith({
-      workspaceId: 'workspace-a',
-      missaoId: '20',
-      responsavelId: '7',
-      titulo: 'Limpar margem',
-      descricao: undefined
-    }));
+    await waitFor(() => expect(captureDomainMutation).toHaveBeenCalledWith(
+      'ACAO_CREATE',
+      {
+        workspaceId: 'workspace-a',
+        missaoId: '20',
+        responsavelId: '7',
+        titulo: 'Limpar margem',
+        descricao: undefined
+      }
+    ));
+    expect(await screen.findByRole('status')).toHaveTextContent('Salvo neste aparelho');
+    expect(onCreated).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Concluir' }));
+    expect(onCreated).toHaveBeenCalledOnce();
   });
 
   it('drops stale mission options when the workspace changes', async () => {
@@ -130,5 +145,29 @@ describe('RelationalEntityDialog', () => {
     expect(await screen.findByRole('option', { name: 'Missão do outro espaço' })).toBeInTheDocument();
     expect(screen.queryByRole('option', { name: 'Recuperar a nascente' })).not.toBeInTheDocument();
     expect(screen.getByLabelText('Pessoa responsável')).toHaveValue('');
+  });
+
+  it('does not show an old submission result after the workspace changes', async () => {
+    let resolveCapture!: (value: { clientMutationId: string; status: 'QUEUED' }) => void;
+    vi.mocked(captureDomainMutation).mockReturnValue(new Promise((resolve) => {
+      resolveCapture = resolve;
+    }));
+    const view = render(
+      <RelationalEntityDialog type="acao" workspaceId="workspace-a" onClose={vi.fn()} onCreated={vi.fn()} />
+    );
+    await screen.findByRole('option', { name: 'Recuperar a nascente' });
+    fireEvent.change(screen.getByLabelText('Missão'), { target: { value: '20' } });
+    await pickPerson();
+    fireEvent.change(screen.getByLabelText('Ação realizada'), { target: { value: 'Limpar margem' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Criar ação' }));
+    await waitFor(() => expect(captureDomainMutation).toHaveBeenCalledOnce());
+
+    view.rerender(
+      <RelationalEntityDialog type="acao" workspaceId="workspace-b" onClose={vi.fn()} onCreated={vi.fn()} />
+    );
+    resolveCapture({ clientMutationId: 'old-action', status: 'QUEUED' });
+
+    await waitFor(() => expect(screen.queryByText('Salvo neste aparelho')).not.toBeInTheDocument());
+    expect(screen.getByRole('dialog', { name: 'Nova ação' })).toBeInTheDocument();
   });
 });

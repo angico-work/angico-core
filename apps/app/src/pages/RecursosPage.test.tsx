@@ -3,14 +3,15 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { MemoryRouter, Outlet, Route, Routes } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import RecursosPage from './RecursosPage';
+import { captureDomainMutation } from '../lib/offlineSync';
 import {
-  createRecurso, createRecursoUso, listAcoes, listRecursos, listRecursoUsos
+  listAcoes, listRecursos, listRecursoUsos
 } from '../lib/api';
 import type { Acao, Recurso, RecursoUso } from '../types';
 
+vi.mock('../lib/offlineSync', () => ({ captureDomainMutation: vi.fn() }));
+
 vi.mock('../lib/api', () => ({
-  createRecurso: vi.fn(),
-  createRecursoUso: vi.fn(),
   listAcoes: vi.fn(),
   listRecursos: vi.fn(),
   listRecursoUsos: vi.fn()
@@ -61,8 +62,12 @@ describe('RecursosPage', () => {
     vi.mocked(listAcoes).mockResolvedValue([action]);
     vi.mocked(listRecursos).mockResolvedValue([resource]);
     vi.mocked(listRecursoUsos).mockResolvedValue([usage]);
-    vi.mocked(createRecurso).mockResolvedValue(resource);
-    vi.mocked(createRecursoUso).mockResolvedValue(usage);
+    vi.mocked(captureDomainMutation).mockResolvedValue({
+      clientMutationId: 'resource-1', status: 'SYNCED', remote: {
+        operation: 'RECURSO_CREATE', workspaceId: 'workspace-a',
+        clientMutationId: 'resource-1', resourceId: '5'
+      }
+    });
   });
 
   afterEach(() => {
@@ -81,26 +86,40 @@ describe('RecursosPage', () => {
     fireEvent.change(screen.getByLabelText('Quantidade'), { target: { value: '2' } });
     fireEvent.click(screen.getByRole('button', { name: 'Salvar uso' }));
 
-    await waitFor(() => expect(createRecursoUso).toHaveBeenCalledWith(5, expect.objectContaining({
-      workspaceId: 'workspace-a', acaoId: 4, quantidade: 2, unidade: 'unidade'
-    })));
+    await waitFor(() => expect(captureDomainMutation).toHaveBeenCalledWith(
+      'RECURSO_USO_CREATE',
+      {
+        recursoId: 5,
+        payload: expect.objectContaining({
+          workspaceId: 'workspace-a', acaoId: 4, quantidade: 2, unidade: 'unidade'
+        })
+      }
+    ));
+    expect(await screen.findByRole('status')).toHaveTextContent('Sincronização concluída');
   });
 
   it('creates a resource with a human category and no actor field', async () => {
+    vi.mocked(captureDomainMutation).mockResolvedValue({
+      clientMutationId: 'resource-local-1', status: 'QUEUED'
+    });
     renderPage();
     fireEvent.click(await screen.findByRole('button', { name: 'Novo recurso' }));
     fireEvent.change(screen.getByLabelText('Nome do recurso'), { target: { value: 'Enxada' } });
     fireEvent.change(screen.getByLabelText('Unidade'), { target: { value: 'unidade' } });
     fireEvent.click(screen.getByRole('button', { name: 'Salvar recurso' }));
 
-    await waitFor(() => expect(createRecurso).toHaveBeenCalledWith({
-      workspaceId: 'workspace-a',
-      nome: 'Enxada',
-      categoria: 'MATERIAL',
-      unidade: 'unidade',
-      descricao: undefined
-    }));
-    expect(vi.mocked(createRecurso).mock.calls[0][0]).not.toHaveProperty('actorId');
+    await waitFor(() => expect(captureDomainMutation).toHaveBeenCalledWith(
+      'RECURSO_CREATE',
+      {
+        workspaceId: 'workspace-a',
+        nome: 'Enxada',
+        categoria: 'MATERIAL',
+        unidade: 'unidade',
+        descricao: undefined
+      }
+    ));
+    expect(await screen.findByRole('status')).toHaveTextContent('Salvo neste aparelho');
+    expect(vi.mocked(captureDomainMutation).mock.calls[0][1]).not.toHaveProperty('actorId');
   });
 
   it('closes a resource modal when the active workspace changes', async () => {

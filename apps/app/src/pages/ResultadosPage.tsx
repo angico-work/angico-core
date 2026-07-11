@@ -3,19 +3,21 @@ import { useOutletContext, useSearchParams } from 'react-router-dom';
 import type { AppContext } from '../components/AppShell';
 import ModalDialog from '../components/ModalDialog';
 import { EmptyState, ErrorState, LoadingState } from '../components/PageFeedback';
-import { createResultado, listAcoes, listResultados } from '../lib/api';
+import { listAcoes, listResultados } from '../lib/api';
+import { captureDomainMutation, type CaptureDomainMutationResult } from '../lib/offlineSync';
+import { mutationNotice } from '../lib/mutationFeedback';
 import type { Acao, Resultado } from '../types';
 
 function formatDate(value: string): string {
   return new Date(value).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
 }
 
-function ResultDialog({ workspaceId, actions, requestedActionId, onClose, onCreated }: {
+function ResultDialog({ workspaceId, actions, requestedActionId, onClose, onSubmitted }: {
   workspaceId: string;
   actions: Acao[];
   requestedActionId: string | null;
   onClose: () => void;
-  onCreated: (result: Resultado) => void;
+  onSubmitted: (result: CaptureDomainMutationResult) => void;
 }) {
   const requested = Number(requestedActionId);
   const [actionId, setActionId] = useState(requestedActionId !== null
@@ -36,7 +38,7 @@ function ResultDialog({ workspaceId, actions, requestedActionId, onClose, onCrea
     setSubmitting(true);
     setError(null);
     try {
-      onCreated(await createResultado({
+      onSubmitted(await captureDomainMutation('RESULTADO_CREATE', {
         workspaceId,
         acaoId: actionId,
         titulo: title.trim(),
@@ -92,7 +94,9 @@ export default function ResultadosPage() {
   const [actions, setActions] = useState<Acao[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const request = useRef(0);
+  const activeWorkspace = useRef(workspaceId);
 
   const refresh = useCallback(async () => {
     const current = ++request.current;
@@ -112,21 +116,37 @@ export default function ResultadosPage() {
   }, [workspaceId]);
 
   useEffect(() => { void refresh(); }, [refresh]);
+  useEffect(() => {
+    activeWorkspace.current = workspaceId;
+    setNotice(null);
+  }, [workspaceId]);
 
   const actionNames = useMemo(() => new Map(actions.map((action) => [action.id, action.titulo])), [actions]);
   const creating = searchParams.get('create') === '1';
   const closeDialog = () => setSearchParams({}, { replace: true });
+  const openDialog = () => {
+    setNotice(null);
+    setSearchParams({ create: '1' });
+  };
+  const submitted = (submittedWorkspace: string, result: CaptureDomainMutationResult) => {
+    if (activeWorkspace.current !== submittedWorkspace) return;
+    closeDialog();
+    setNotice(mutationNotice(result.status));
+    if (result.status === 'SYNCED') void refresh();
+  };
 
   return (
     <div className="page operational-page">
       <header className="page-head">
         <div><span className="overline">Mudanças alcançadas</span><h1>Resultados</h1><p>Registre mudanças observadas e mantenha cada uma ligada à ação que a produziu.</p></div>
-        <button className="primary-button" type="button" onClick={() => setSearchParams({ create: '1' })}>Novo resultado</button>
+        <button className="primary-button" type="button" onClick={openDialog}>Novo resultado</button>
       </header>
+
+      {notice && <div className="inline-status" role="status">{notice}</div>}
 
       {loading && <LoadingState label="Carregando resultados…" />}
       {error && <ErrorState message={error} onRetry={() => void refresh()} />}
-      {!loading && !error && results.length === 0 && <EmptyState title="Nenhum resultado registrado" message="Registre a primeira mudança observada a partir de uma ação real." action={<button className="secondary-button" type="button" onClick={() => setSearchParams({ create: '1' })}>Novo resultado</button>} />}
+      {!loading && !error && results.length === 0 && <EmptyState title="Nenhum resultado registrado" message="Registre a primeira mudança observada a partir de uma ação real." action={<button className="secondary-button" type="button" onClick={openDialog}>Novo resultado</button>} />}
       {!loading && !error && results.length > 0 && (
         <section className="record-sheet" aria-label="Resultados registrados">
           <header className="record-sheet-head"><span>{results.length} {results.length === 1 ? 'resultado' : 'resultados'}</span><span>Registros disponíveis</span></header>
@@ -148,7 +168,7 @@ export default function ResultadosPage() {
           actions={actions}
           requestedActionId={searchParams.get('acaoId')}
           onClose={closeDialog}
-          onCreated={(result) => { setResults((current) => [result, ...current]); closeDialog(); }}
+          onSubmitted={(result) => submitted(workspaceId, result)}
         />
       )}
     </div>

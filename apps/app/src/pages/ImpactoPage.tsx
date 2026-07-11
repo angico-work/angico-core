@@ -4,8 +4,10 @@ import type { AppContext } from '../components/AppShell';
 import ModalDialog from '../components/ModalDialog';
 import { EmptyState, ErrorState, LoadingState } from '../components/PageFeedback';
 import {
-  createIndicador, createMedicao, listIndicadores, listMedicoes, listResultados, listTerritorios
+  listIndicadores, listMedicoes, listResultados, listTerritorios
 } from '../lib/api';
+import { captureDomainMutation, type CaptureDomainMutationResult } from '../lib/offlineSync';
+import { mutationNotice } from '../lib/mutationFeedback';
 import type { Indicador, Medicao, Resultado, Territorio } from '../types';
 
 type ImpactTab = 'indicadores' | 'medicoes';
@@ -14,13 +16,13 @@ function formatDate(value: string): string {
   return new Date(value).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
 }
 
-function IndicatorDialog({ workspaceId, territories, results, requestedResultId, onClose, onCreated }: {
+function IndicatorDialog({ workspaceId, territories, results, requestedResultId, onClose, onSubmitted }: {
   workspaceId: string;
   territories: Territorio[];
   results: Resultado[];
   requestedResultId: string | null;
   onClose: () => void;
-  onCreated: (indicator: Indicador) => void;
+  onSubmitted: (result: CaptureDomainMutationResult) => void;
 }) {
   const requested = Number(requestedResultId);
   const [territoryId, setTerritoryId] = useState(territories[0]?.id ?? 0);
@@ -40,7 +42,7 @@ function IndicatorDialog({ workspaceId, territories, results, requestedResultId,
     setSubmitting(true);
     setError(null);
     try {
-      onCreated(await createIndicador({
+      onSubmitted(await captureDomainMutation('INDICADOR_CREATE', {
         workspaceId,
         territorioId: territoryId,
         resultadoId: resultId || undefined,
@@ -98,12 +100,12 @@ function IndicatorDialog({ workspaceId, territories, results, requestedResultId,
   );
 }
 
-function MeasurementDialog({ workspaceId, indicators, requestedIndicatorId, onClose, onCreated }: {
+function MeasurementDialog({ workspaceId, indicators, requestedIndicatorId, onClose, onSubmitted }: {
   workspaceId: string;
   indicators: Indicador[];
   requestedIndicatorId: string | null;
   onClose: () => void;
-  onCreated: (measurement: Medicao) => void;
+  onSubmitted: (result: CaptureDomainMutationResult) => void;
 }) {
   const requested = Number(requestedIndicatorId);
   const initial = requestedIndicatorId !== null
@@ -132,7 +134,7 @@ function MeasurementDialog({ workspaceId, indicators, requestedIndicatorId, onCl
     setSubmitting(true);
     setError(null);
     try {
-      onCreated(await createMedicao({
+      onSubmitted(await captureDomainMutation('MEDICAO_CREATE', {
         workspaceId,
         indicadorId: indicatorId,
         valor: numericValue,
@@ -185,7 +187,9 @@ export default function ImpactoPage() {
   const [results, setResults] = useState<Resultado[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const request = useRef(0);
+  const activeWorkspace = useRef(workspaceId);
 
   const refresh = useCallback(async () => {
     const current = ++request.current;
@@ -210,14 +214,30 @@ export default function ImpactoPage() {
   }, [workspaceId]);
 
   useEffect(() => { void refresh(); }, [refresh]);
+  useEffect(() => {
+    activeWorkspace.current = workspaceId;
+    setNotice(null);
+  }, [workspaceId]);
 
   const territoryNames = useMemo(() => new Map(territories.map((territory) => [territory.id, territory.nome])), [territories]);
   const indicatorNames = useMemo(() => new Map(indicators.map((indicator) => [indicator.id, indicator.nome])), [indicators]);
   const creation = searchParams.get('create');
   const closeDialog = () => setSearchParams({}, { replace: true });
   const openCreation = (kind: 'indicador' | 'medicao') => {
+    setNotice(null);
     setTab(kind === 'indicador' ? 'indicadores' : 'medicoes');
     setSearchParams({ create: kind });
+  };
+  const submitted = (
+    submittedWorkspace: string,
+    kind: ImpactTab,
+    result: CaptureDomainMutationResult
+  ) => {
+    if (activeWorkspace.current !== submittedWorkspace) return;
+    setTab(kind);
+    closeDialog();
+    setNotice(mutationNotice(result.status));
+    if (result.status === 'SYNCED') void refresh();
   };
   const visibleCount = tab === 'indicadores' ? indicators.length : measurements.length;
   const panelId = tab === 'indicadores' ? 'impact-indicators-panel' : 'impact-measurements-panel';
@@ -238,6 +258,8 @@ export default function ImpactoPage() {
         <div><span className="overline">Acompanhamento do impacto</span><h1>Indicadores e medições</h1><p>Defina sinais do território e registre cada valor observado sem estimativas da interface.</p></div>
         <div className="page-actions"><button className="secondary-button" type="button" onClick={() => openCreation('medicao')}>Nova medição</button><button className="primary-button" type="button" onClick={() => openCreation('indicador')}>Novo indicador</button></div>
       </header>
+
+      {notice && <div className="inline-status" role="status">{notice}</div>}
 
       <div className="record-tabs" role="tablist" aria-label="Leitura de impacto">
         <button id="impact-indicators-tab" type="button" role="tab" aria-selected={tab === 'indicadores'} aria-controls="impact-indicators-panel" tabIndex={tab === 'indicadores' ? 0 : -1} onKeyDown={(event) => moveTab('indicadores', event)} onClick={() => setTab('indicadores')}>Indicadores</button>
@@ -266,8 +288,8 @@ export default function ImpactoPage() {
         ))}</div></section>
       )}
 
-      {creation === 'indicador' && !loading && !error && <IndicatorDialog workspaceId={workspaceId} territories={territories} results={results} requestedResultId={searchParams.get('resultadoId')} onClose={closeDialog} onCreated={(indicator) => { setIndicators((current) => [indicator, ...current]); setTab('indicadores'); closeDialog(); }} />}
-      {creation === 'medicao' && !loading && !error && <MeasurementDialog workspaceId={workspaceId} indicators={indicators} requestedIndicatorId={searchParams.get('indicadorId')} onClose={closeDialog} onCreated={(measurement) => { setMeasurements((current) => [measurement, ...current]); setTab('medicoes'); closeDialog(); }} />}
+      {creation === 'indicador' && !loading && !error && <IndicatorDialog workspaceId={workspaceId} territories={territories} results={results} requestedResultId={searchParams.get('resultadoId')} onClose={closeDialog} onSubmitted={(result) => submitted(workspaceId, 'indicadores', result)} />}
+      {creation === 'medicao' && !loading && !error && <MeasurementDialog workspaceId={workspaceId} indicators={indicators} requestedIndicatorId={searchParams.get('indicadorId')} onClose={closeDialog} onSubmitted={(result) => submitted(workspaceId, 'medicoes', result)} />}
     </div>
   );
 }

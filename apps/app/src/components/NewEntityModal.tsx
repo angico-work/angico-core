@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
-import { createEntity, createProblema, getSession, listEntities, listTerritorios, reverseGeocode, resolveCoords } from '../lib/api';
-import { captureObservation, type CaptureResult } from '../lib/offlineSync';
-import type { GeoResult, ObservacaoInput, ProblemaInput, Territorio } from '../types';
+import { getSession, listEntities, listTerritorios, reverseGeocode, resolveCoords } from '../lib/api';
+import { captureDomainMutation, captureObservation, type CaptureResult } from '../lib/offlineSync';
+import { mutationFeedback } from '../lib/mutationFeedback';
+import type { GeoResult, ObservacaoInput, PotencialidadeInput, ProblemaInput, Territorio } from '../types';
 import AddressField from './AddressField';
 import MapView from './MapView';
 import ModalDialog from './ModalDialog';
@@ -23,7 +24,6 @@ const STEPS = ['Registrar', 'Ancorar', 'Comprovar e salvar'];
 interface TypeMeta {
   label: string;
   title: string;
-  endpoint: string;
   categories: string[];
   levelField?: 'urgencia' | 'severidade';
   levelLabel?: string;
@@ -33,7 +33,6 @@ const TYPES: Record<EntityType, TypeMeta> = {
   observacao: {
     label: 'Observação',
     title: 'Nova observação',
-    endpoint: '/api/observacoes',
     categories: AMBIENTAIS,
     levelField: 'urgencia',
     levelLabel: 'Urgência'
@@ -41,7 +40,6 @@ const TYPES: Record<EntityType, TypeMeta> = {
   problema: {
     label: 'Problema',
     title: 'Novo problema',
-    endpoint: '/api/problemas',
     categories: AMBIENTAIS,
     levelField: 'severidade',
     levelLabel: 'Severidade'
@@ -49,7 +47,6 @@ const TYPES: Record<EntityType, TypeMeta> = {
   potencialidade: {
     label: 'Potencialidade',
     title: 'Nova potencialidade',
-    endpoint: '/api/potencialidades',
     categories: POTENCIAIS
   }
 };
@@ -139,6 +136,7 @@ export default function NewEntityModal({
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<SuccessState | null>(null);
   const geocodeRequest = useRef(0);
+  const activeWorkspace = useRef(workspaceId);
   const resolvedAddress = useRef<string | null>(null);
   const meta = TYPES[type];
   const requiresTerritory = type === 'observacao' || type === 'problema';
@@ -149,11 +147,14 @@ export default function NewEntityModal({
 
   useEffect(() => {
     let active = true;
+    activeWorkspace.current = workspaceId;
     setTerritories([]);
     setObservations([]);
     setTerritorioId('');
     setOrigemObservacaoId('');
     setRelationsError(null);
+    setSuccess(null);
+    setSubmitting(false);
     if (!requiresTerritory) {
       setRelationsLoading(false);
       return () => { active = false; };
@@ -228,6 +229,7 @@ export default function NewEntityModal({
     if (step !== 3) return;
     setSubmitting(true);
     setError(null);
+    const submittedWorkspace = workspaceId;
     const body: Record<string, unknown> = {
       workspaceId,
       territorioId: requiresTerritory ? territorioId : undefined,
@@ -251,24 +253,24 @@ export default function NewEntityModal({
     try {
       if (type === 'observacao') {
         const result = await captureObservation(body as unknown as ObservacaoInput);
+        if (activeWorkspace.current !== submittedWorkspace) return;
         setSuccess(captureMessage(result));
       } else if (type === 'problema') {
-        await createProblema(body as unknown as ProblemaInput);
-        setSuccess({
-          title: 'Problema registrado',
-          description: 'O problema foi confirmado pelo servidor com seus vínculos territoriais.',
-          tone: 'ok'
-        });
+        const result = await captureDomainMutation('PROBLEMA_CREATE', body as unknown as ProblemaInput);
+        if (activeWorkspace.current !== submittedWorkspace) return;
+        setSuccess(mutationFeedback(result.status));
       } else {
-        await createEntity(meta.endpoint, body);
-        setSuccess({
-          title: `${meta.label} registrada`,
-          description: 'O registro foi confirmado pelo servidor e entrou na memória do território.',
-          tone: 'ok'
-        });
+        const result = await captureDomainMutation(
+          'POTENCIALIDADE_CREATE',
+          body as unknown as PotencialidadeInput
+        );
+        if (activeWorkspace.current !== submittedWorkspace) return;
+        setSuccess(mutationFeedback(result.status));
       }
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Não foi possível salvar o registro.');
+      if (activeWorkspace.current === submittedWorkspace) {
+        setError(caught instanceof Error ? caught.message : 'Não foi possível salvar o registro.');
+      }
     } finally {
       setSubmitting(false);
     }

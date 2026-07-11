@@ -1,5 +1,7 @@
-import { useEffect, useMemo, useState, type FormEvent } from 'react';
-import { createAcao, createMissao, listMissoes, listProblemas, listTerritorios } from '../lib/api';
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
+import { listMissoes, listProblemas, listTerritorios } from '../lib/api';
+import { captureDomainMutation } from '../lib/offlineSync';
+import { mutationFeedback, type MutationFeedback } from '../lib/mutationFeedback';
 import type { MissaoRegistro, PessoaHit, Problema, Territorio } from '../types';
 import AngicoIdField from './AngicoIdField';
 import ModalDialog from './ModalDialog';
@@ -53,9 +55,12 @@ export default function RelationalEntityDialog({
   const [optionsError, setOptionsError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<MutationFeedback | null>(null);
+  const activeWorkspace = useRef(workspaceId);
 
   useEffect(() => {
     let active = true;
+    activeWorkspace.current = workspaceId;
     setTerritories([]);
     setProblems([]);
     setMissions([]);
@@ -64,6 +69,8 @@ export default function RelationalEntityDialog({
     setMissaoId('');
     setResponsible(null);
     setResponsibleQuery('');
+    setSuccess(null);
+    setSubmitting(false);
     setLoadingOptions(true);
     setOptionsError(null);
     const request = type === 'missao'
@@ -134,9 +141,10 @@ export default function RelationalEntityDialog({
       return;
     }
     setSubmitting(true);
+    const submittedWorkspace = workspaceId;
     try {
       if (type === 'missao') {
-        await createMissao({
+        const result = await captureDomainMutation('MISSAO_CREATE', {
           workspaceId,
           territorioId,
           problemaId,
@@ -144,20 +152,44 @@ export default function RelationalEntityDialog({
           titulo: title.trim(),
           descricao: description.trim() || undefined
         });
+        if (activeWorkspace.current !== submittedWorkspace) return;
+        setSuccess(mutationFeedback(result.status));
       } else {
-        await createAcao({
+        const result = await captureDomainMutation('ACAO_CREATE', {
           workspaceId,
           missaoId,
           responsavelId: String(responsible.id),
           titulo: title.trim(),
           descricao: description.trim() || undefined
         });
+        if (activeWorkspace.current !== submittedWorkspace) return;
+        setSuccess(mutationFeedback(result.status));
       }
-      onCreated();
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Não foi possível salvar o registro.');
+      if (activeWorkspace.current === submittedWorkspace) {
+        setError(caught instanceof Error ? caught.message : 'Não foi possível salvar o registro.');
+      }
+    } finally {
       setSubmitting(false);
     }
+  }
+
+  if (success) {
+    return (
+      <ModalDialog
+        titleId="relational-result-title"
+        descriptionId="relational-result-description"
+        className="capture-dialog capture-result"
+        onClose={onCreated}
+      >
+        <div className={`capture-result-mark ${success.tone}`} aria-hidden="true">✓</div>
+        <div role="status">
+          <h2 id="relational-result-title">{success.title}</h2>
+          <p id="relational-result-description">{success.description}</p>
+        </div>
+        <button type="button" className="primary-button" onClick={onCreated}>Concluir</button>
+      </ModalDialog>
+    );
   }
 
   return (
