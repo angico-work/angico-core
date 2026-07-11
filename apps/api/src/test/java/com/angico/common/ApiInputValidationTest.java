@@ -281,6 +281,10 @@ class ApiInputValidationTest {
                         .param("latitude", "0")
                         .param("longitude", "181"))
                 .andExpect(status().isBadRequest());
+        mvc.perform(multipart("/api/mensagens/conversas/1/mensagens")
+                        .param("corpo", "Registro")
+                        .param("occurredAt", "2100-01-01T00:00:00Z"))
+                .andExpect(status().isBadRequest());
 
         verifyNoInteractions(mensagemService);
     }
