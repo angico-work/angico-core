@@ -175,8 +175,6 @@ public class NominatimGeocodingProvider implements GeocodingProvider {
         String neighborhood = firstText(properties, "district", "locality", "name");
         String state = text(properties.path("state"));
         String country = text(properties.path("country"));
-        // Stream.of tolerates null elements (List.of would throw NPE); a
-        // municipality result, for instance, has no "city" property.
         String displayName = Stream.of(
                         text(properties.path("name")),
                         neighborhood,
