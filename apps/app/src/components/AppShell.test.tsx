@@ -159,6 +159,21 @@ describe('AppShell local partition', () => {
     expect(screen.getByText('Conteúdo')).toBeInTheDocument();
   });
 
+  it('clears the owner partition only after the logout request settles', async () => {
+    let resolveLogout!: () => void;
+    vi.mocked(logout).mockReturnValue(new Promise<void>((resolve) => { resolveLogout = resolve; }));
+    renderShell();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Sair agora' }));
+
+    await waitFor(() => expect(logout).toHaveBeenCalledOnce());
+    expect(clearOfflineOwner).not.toHaveBeenCalled();
+    resolveLogout();
+    await waitFor(() => expect(clearOfflineOwner).toHaveBeenCalledWith(
+      'ana.sp', { discardPending: false }
+    ));
+  });
+
   it('expires offline access on its timer without clearing pending local data', async () => {
     vi.useFakeTimers();
     vi.setSystemTime('2026-07-10T12:00:00Z');

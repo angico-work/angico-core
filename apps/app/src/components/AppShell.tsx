@@ -171,6 +171,7 @@ export default function AppShell() {
 
   async function handleLogout() {
     const ownerId = activeIdentity.ownerId;
+    let discardPending = false;
     if (ownerId) {
       const offline = await getOfflineOwnerState(ownerId);
       if (offline.unsynced > 0) {
@@ -180,13 +181,17 @@ export default function AppShell() {
         );
         if (!confirmed) return;
       }
-      await clearOfflineOwner(ownerId, { discardPending: offline.unsynced > 0 });
-      clearOfflineReadSourcesForOwner(ownerId);
+      discardPending = offline.unsynced > 0;
     }
-    await logout();
+    const request = logout();
     setSession(null);
     setAuthStatus('anonymous');
     navigate('/login', { replace: true });
+    await request;
+    if (ownerId) {
+      await clearOfflineOwner(ownerId, { discardPending });
+      clearOfflineReadSourcesForOwner(ownerId);
+    }
   }
 
   function switchWorkspace(slug: string) {

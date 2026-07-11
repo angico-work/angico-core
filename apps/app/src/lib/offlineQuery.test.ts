@@ -1,6 +1,6 @@
 import 'fake-indexeddb/auto';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { ApiHttpError, ApiNetworkError } from './api';
+import { ApiHttpError, ApiNetworkError, logout } from './api';
 import { loadSnapshot, resetOfflineDatabase, saveSnapshot } from './offlineStore';
 import { loadConfirmedOrSnapshot } from './offlineQuery';
 import { getOfflineReadSources, resetOfflineReadSources } from './offlineReadState';
@@ -129,6 +129,26 @@ describe('confirmed response snapshots', () => {
     await expect(pending).rejects.toThrow('sessão ativa mudou');
     expect(await loadSnapshot({ ...identity, ownerId: 'ana.sp' })).toBeUndefined();
     expect(await loadSnapshot({ ...identity, ownerId: 'bia.sp' })).toBeUndefined();
+  });
+
+  it('does not persist an in-flight response after logout begins', async () => {
+    let resolveRemote!: (value: unknown) => void;
+    let resolveLogout!: (value: Response) => void;
+    const remote = new Promise<unknown>((resolve) => { resolveRemote = resolve; });
+    const logoutResponse = new Promise<Response>((resolve) => { resolveLogout = resolve; });
+    vi.stubGlobal('fetch', vi.fn().mockReturnValue(logoutResponse));
+    const pendingRead = loadConfirmedOrSnapshot(identity, () => remote, isList);
+    const readResult = pendingRead.catch((error) => error);
+
+    const pendingLogout = logout();
+    resolveRemote([{ id: 15 }]);
+    resolveLogout({ ok: true, status: 204 } as Response);
+
+    await pendingLogout;
+    await expect(readResult).resolves.toEqual(expect.objectContaining({
+      message: expect.stringContaining('sessão ativa mudou')
+    }));
+    expect(await loadSnapshot({ ...identity, ownerId: 'ana.sp' })).toBeUndefined();
   });
 
   it('keeps the newest confirmed response when requests finish out of order', async () => {
