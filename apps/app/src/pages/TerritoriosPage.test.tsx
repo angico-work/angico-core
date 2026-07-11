@@ -34,7 +34,7 @@ function page(workspaceId = 'workspace-a') {
   return (
     <MemoryRouter initialEntries={['/territorios']}>
       <Routes>
-        <Route element={<Outlet context={{ workspaceId, workspaceRole: 'OWNER', canWrite: true, canManage: true }} />}>
+        <Route element={<Outlet context={{ workspaceId, workspaceRole: 'OWNER', canWrite: true }} />}>
           <Route path="/territorios" element={<TerritoriosPage />} />
         </Route>
       </Routes>

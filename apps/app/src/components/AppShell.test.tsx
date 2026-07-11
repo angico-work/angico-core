@@ -48,12 +48,14 @@ const { otherSession, session, stopSyncEngine } = vi.hoisted(() => ({
 }));
 
 vi.mock('./Sidebar', () => ({
-  default: ({ onLogout, onEditProfile, open }: {
+  default: ({ onLogout, onEditProfile, open, userRole }: {
     onLogout: () => void;
     onEditProfile: () => void;
     open: boolean;
+    userRole: string;
   }) => (
     <aside id="app-sidebar" data-open={open}>
+      <span>{userRole}</span>
       <button type="button" onClick={onEditProfile}>Editar perfil</button>
       <button type="button" onClick={onLogout}>Sair agora</button>
     </aside>
@@ -204,6 +206,9 @@ describe('AppShell local partition', () => {
     const expiresAt = Date.now() + 1_000;
     vi.mocked(offlineSessionExpiresAt).mockReturnValue(expiresAt);
     vi.mocked(hasFreshOfflineSession).mockImplementation(() => Date.now() < expiresAt);
+    vi.mocked(listWorkspaces).mockResolvedValue([
+      { slug: 'territorio-a', nome: 'Território A', role: 'OWNER' }
+    ]);
     recordOfflineReadSource({
       ownerId: 'ana.sp', workspaceId: 'territorio-a', resource: 'dashboard', contractVersion: 1
     }, '2026-07-10T12:00:00Z');
@@ -282,6 +287,7 @@ describe('AppShell local partition', () => {
     renderShell();
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Espaços indisponíveis');
+    expect(screen.getByText('Acesso pendente')).toBeInTheDocument();
   });
 
   it('uses the first authorized workspace when the persisted selection is unavailable', async () => {
@@ -306,6 +312,18 @@ describe('AppShell local partition', () => {
     renderShell();
 
     expect(await screen.findByRole('status')).toHaveTextContent('modo de leitura');
+    expect(startSyncEngine).not.toHaveBeenCalled();
+  });
+
+  it('starts background synchronization only for writable workspaces', async () => {
+    vi.mocked(listWorkspaces).mockResolvedValue([
+      { slug: 'territorio-a', nome: 'Território A', role: 'OWNER' },
+      { slug: 'territorio-b', nome: 'Território B', role: 'VIEWER' }
+    ]);
+
+    renderShell();
+
+    await waitFor(() => expect(startSyncEngine).toHaveBeenCalledWith('ana.sp', ['territorio-a']));
   });
 
   it('does not open profile editing with provisional session data', async () => {

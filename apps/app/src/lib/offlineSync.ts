@@ -602,13 +602,16 @@ export async function getSyncState(ownerId: string, workspaceId?: string): Promi
   }, { pending: 0, syncing: 0, conflicts: 0, blocked: 0, actionRequired: 0 });
 }
 
-export function startSyncEngine(expectedOwnerId: string): () => void {
+export function startSyncEngine(expectedOwnerId: string, writableWorkspaceIds: readonly string[]): () => void {
+  const workspaces = [...new Set(writableWorkspaceIds.map((workspaceId) => workspaceId.trim()).filter(Boolean))];
   const synchronize = () => {
     if (sessionOwnerId() === expectedOwnerId
       && navigator.onLine
       && isAuthenticated()
       && hasFreshOfflineSession()) {
-      void syncPendingOperations({ ownerId: expectedOwnerId });
+      workspaces.forEach((workspaceId) => {
+        void syncPendingOperations({ ownerId: expectedOwnerId, workspaceId });
+      });
     }
   };
   window.addEventListener('online', synchronize);

@@ -30,7 +30,7 @@ describe('RelatoriosPage', () => {
     render(
       <MemoryRouter initialEntries={['/relatorios']}>
         <Routes>
-          <Route element={<Outlet context={{ workspaceId: 'workspace-a', workspaceRole: 'OWNER', canWrite: true, canManage: true }} />}>
+          <Route element={<Outlet context={{ workspaceId: 'workspace-a', workspaceRole: 'OWNER', canWrite: true }} />}>
             <Route path="/relatorios" element={<RelatoriosPage />} />
           </Route>
         </Routes>
@@ -48,7 +48,7 @@ describe('RelatoriosPage', () => {
     vi.mocked(loadDashboard).mockImplementation((workspaceId) => workspaceId === 'workspace-a' ? first : second);
 
     function Page({ workspaceId }: { workspaceId: string }) {
-      return <MemoryRouter><Routes><Route element={<Outlet context={{ workspaceId, workspaceRole: 'OWNER', canWrite: true, canManage: true }} />}><Route index element={<RelatoriosPage />} /></Route></Routes></MemoryRouter>;
+      return <MemoryRouter><Routes><Route element={<Outlet context={{ workspaceId, workspaceRole: 'OWNER', canWrite: true }} />}><Route index element={<RelatoriosPage />} /></Route></Routes></MemoryRouter>;
     }
 
     const view = render(<Page workspaceId="workspace-a" />);

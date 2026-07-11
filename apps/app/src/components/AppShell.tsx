@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Navigate, Outlet, useNavigate } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import Topbar from './Topbar';
@@ -18,7 +18,6 @@ export interface AppContext {
   workspaceId: string;
   workspaceRole: Workspace['role'] | null;
   canWrite: boolean;
-  canManage: boolean;
 }
 
 function workspaceLabel(workspaceId: string): string {
@@ -57,6 +56,10 @@ export default function AppShell() {
     isAuthenticated() || hasFreshOfflineSession() ? 'checking' : 'anonymous'
   );
   const [activeSlug, setActiveSlug] = useState(session?.workspaceId ?? '');
+  const writableWorkspaceIds = useMemo(
+    () => workspaces.filter((workspace) => workspace.role !== 'VIEWER').map((workspace) => workspace.slug),
+    [workspaces]
+  );
 
   useEffect(() => {
     let active = true;
@@ -97,9 +100,9 @@ export default function AppShell() {
   }, [activeIdentity.session, activeOwnerId, activePessoaId]);
 
   useEffect(() => {
-    if (authStatus !== 'authenticated' || !activeOwnerId) return;
-    return startSyncEngine(activeOwnerId);
-  }, [activeOwnerId, authStatus]);
+    if (authStatus !== 'authenticated' || !activeOwnerId || writableWorkspaceIds.length === 0) return;
+    return startSyncEngine(activeOwnerId, writableWorkspaceIds);
+  }, [activeOwnerId, authStatus, writableWorkspaceIds]);
 
   useEffect(() => {
     if (!sidebarOpen) return;
@@ -280,8 +283,7 @@ export default function AppShell() {
   const activeWorkspace = workspaces.find((w) => w.slug === activeSlug);
   const activeRole = activeWorkspace?.role ?? null;
   const canWrite = activeRole !== null && activeRole !== 'VIEWER';
-  const canManage = activeRole === 'OWNER' || activeRole === 'ADMIN';
-  const context: AppContext = { workspaceId: activeSlug, workspaceRole: activeRole, canWrite, canManage };
+  const context: AppContext = { workspaceId: activeSlug, workspaceRole: activeRole, canWrite };
   const activeName = activeWorkspace?.nome ?? workspaceLabel(activeSlug);
 
   const effectiveProfile: PessoaHit | null = profile ?? (session ? {
@@ -304,7 +306,7 @@ export default function AppShell() {
         onCreateWorkspace={handleCreateWorkspace}
         onDeleteWorkspace={handleDeleteWorkspace}
         userName={effectiveProfile?.nome ?? session?.nome ?? 'Visitante'}
-        userRole={activeRole ?? 'VIEWER'}
+        userRole={activeRole ?? 'Acesso pendente'}
         userFoto={effectiveProfile?.foto ?? null}
         open={sidebarOpen}
         onNavigate={() => setSidebarOpen(false)}

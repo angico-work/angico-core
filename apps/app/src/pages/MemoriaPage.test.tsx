@@ -11,7 +11,7 @@ function page(workspaceId: string) {
   return (
     <MemoryRouter initialEntries={['/memoria']}>
       <Routes>
-        <Route element={<Outlet context={{ workspaceId, workspaceRole: 'OWNER', canWrite: true, canManage: true }} />}>
+        <Route element={<Outlet context={{ workspaceId, workspaceRole: 'OWNER', canWrite: true }} />}>
           <Route path="/memoria" element={<MemoriaPage />} />
         </Route>
       </Routes>

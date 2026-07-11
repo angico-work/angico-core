@@ -792,7 +792,7 @@ describe('offline synchronization', () => {
     vi.stubGlobal('fetch', fetchMock);
     vi.useFakeTimers();
 
-    const stop = startSyncEngine('ana.sp');
+    const stop = startSyncEngine('ana.sp', ['territorio-a']);
     try {
       window.dispatchEvent(new Event('online'));
       await vi.advanceTimersByTimeAsync(30_000);
@@ -816,7 +816,7 @@ describe('offline synchronization', () => {
     Object.defineProperty(navigator, 'onLine', { configurable: true, value: true });
     vi.useFakeTimers();
 
-    const stop = startSyncEngine('ana.sp');
+    const stop = startSyncEngine('ana.sp', ['territorio-a']);
     try {
       window.dispatchEvent(new Event('online'));
       await vi.advanceTimersByTimeAsync(30_000);
@@ -847,7 +847,7 @@ describe('offline synchronization', () => {
     const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);
 
-    const stop = startSyncEngine('ana.sp');
+    const stop = startSyncEngine('ana.sp', ['territorio-a']);
     try {
       await new Promise((resolve) => window.setTimeout(resolve, 25));
     } finally {
@@ -856,6 +856,31 @@ describe('offline synchronization', () => {
 
     expect(fetchMock).not.toHaveBeenCalled();
     expect(await getLocalObservation('bia.sp', 'territorio-a', queued.clientMutationId))
+      .toMatchObject({ syncStatus: 'QUEUED' });
+  });
+
+  it('syncs only workspaces whose current role allows writing', async () => {
+    const writable = await enqueueObservation(observation, 'ana.sp');
+    const readonly = await enqueueObservation({ ...observation, workspaceId: 'territorio-b' }, 'ana.sp');
+    const fetchMock = vi.fn().mockResolvedValue(response(201, {
+      ...writable,
+      id: 81,
+      status: 'ABERTA',
+      createdAt: new Date().toISOString()
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+    Object.defineProperty(navigator, 'onLine', { configurable: true, value: true });
+
+    const stop = startSyncEngine('ana.sp', ['territorio-a']);
+    try {
+      await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledOnce());
+    } finally {
+      stop();
+    }
+
+    expect(await getLocalObservation('ana.sp', 'territorio-a', writable.clientMutationId))
+      .toMatchObject({ syncStatus: 'SYNCED' });
+    expect(await getLocalObservation('ana.sp', 'territorio-b', readonly.clientMutationId))
       .toMatchObject({ syncStatus: 'QUEUED' });
   });
 
