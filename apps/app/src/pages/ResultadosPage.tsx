@@ -132,7 +132,7 @@ export default function ResultadosPage() {
           <header className="record-sheet-head"><span>{results.length} {results.length === 1 ? 'resultado' : 'resultados'}</span><span>Registros disponíveis</span></header>
           <div className="record-list">
             {results.map((result) => (
-              <article className="record-row operational-row" key={result.id} style={{ '--record-accent': '#37785B' } as React.CSSProperties}>
+              <article className="record-row operational-row" key={result.id} style={{ '--record-accent': '#34ABA6' } as React.CSSProperties}>
                 <span className="record-mark" aria-hidden="true" />
                 <div className="record-main"><h2>{result.titulo}</h2><p>{result.descricao || 'Sem descrição adicional.'}</p><div className="record-meta"><span>Ação · {actionNames.get(result.acaoId) ?? 'Ação não disponível'}</span><span>Ocorrido em {formatDate(result.occurredAt)}</span></div></div>
                 <div className="record-provenance"><strong>{result.status}</strong><time dateTime={result.createdAt}>Registrado em {formatDate(result.createdAt)}</time></div>

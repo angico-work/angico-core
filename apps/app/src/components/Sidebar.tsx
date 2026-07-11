@@ -8,34 +8,34 @@ const NAV_GROUPS = [
   {
     label: 'Caderno',
     items: [
-      { to: '/app', label: 'Visão geral', icon: 'leaf', end: true },
-      { to: '/app/observacoes', label: 'Observações', icon: 'observation' },
-      { to: '/app/territorios', label: 'Territórios', icon: 'map' },
-      { to: '/app/mapa', label: 'Mapa do território', icon: 'map' }
+      { to: '/app', label: 'Visão geral', end: true },
+      { to: '/app/observacoes', label: 'Observações' },
+      { to: '/app/territorios', label: 'Territórios' },
+      { to: '/app/mapa', label: 'Mapa do território' }
     ]
   },
   {
     label: 'Mobilização',
     items: [
-      { to: '/app/problemas', label: 'Problemas', icon: 'warning' },
-      { to: '/app/potencialidades', label: 'Potencialidades', icon: 'sprout' },
-      { to: '/app/missoes', label: 'Missões', icon: 'mission' },
-      { to: '/app/acoes', label: 'Ações', icon: 'action' },
-      { to: '/app/resultados', label: 'Resultados', icon: 'check' },
-      { to: '/app/evidencias', label: 'Evidências', icon: 'report' },
-      { to: '/app/recursos', label: 'Recursos', icon: 'sprout' }
+      { to: '/app/problemas', label: 'Problemas' },
+      { to: '/app/potencialidades', label: 'Potencialidades' },
+      { to: '/app/missoes', label: 'Missões' },
+      { to: '/app/acoes', label: 'Ações' },
+      { to: '/app/resultados', label: 'Resultados' },
+      { to: '/app/evidencias', label: 'Evidências' },
+      { to: '/app/recursos', label: 'Recursos' }
     ]
   },
   {
     label: 'Rede e memória',
     items: [
-      { to: '/app/pessoas', label: 'Pessoas e grupos', icon: 'people' },
-      { to: '/app/organizacoes', label: 'Organizações', icon: 'people' },
-      { to: '/app/mensagens', label: 'Conversas', icon: 'message' },
-      { to: '/app/indicadores', label: 'Indicadores', icon: 'indicator' },
-      { to: '/app/memoria', label: 'Memória', icon: 'memory' },
-      { to: '/app/rastro', label: 'Rastro', icon: 'memory' },
-      { to: '/app/relatorios', label: 'Síntese', icon: 'report' }
+      { to: '/app/pessoas', label: 'Pessoas e grupos' },
+      { to: '/app/organizacoes', label: 'Organizações' },
+      { to: '/app/mensagens', label: 'Conversas' },
+      { to: '/app/indicadores', label: 'Indicadores' },
+      { to: '/app/memoria', label: 'Memória' },
+      { to: '/app/rastro', label: 'Rastro' },
+      { to: '/app/relatorios', label: 'Síntese' }
     ]
   }
 ] as const;
@@ -92,7 +92,7 @@ export default function Sidebar(props: Props) {
                 onClick={props.onNavigate}
                 className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}
               >
-                <span className="nav-icon">{icon(item.icon)}</span><span>{item.label}</span>
+                <span>{item.label}</span>
               </NavLink>
             ))}
           </section>

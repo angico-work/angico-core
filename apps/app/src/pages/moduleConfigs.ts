@@ -32,7 +32,7 @@ export const MODULE_CONFIGS: Record<string, ModuleConfig> = {
     key: 'observacoes', title: 'Observações', singular: 'Observação', newLabel: 'Registrar observação',
     subtitle: 'Relatos de campo que iniciam a memória do território.',
     emptyTitle: 'Nenhuma observação registrada', emptyMessage: 'Registre o que aconteceu, mesmo sem conexão.',
-    path: '/api/observacoes', accent: '#0E7C86', fields: [],
+    path: '/api/observacoes', accent: '#34ABA6', fields: [],
     primary: (item) => value(item, 'titulo'), badge: (item) => value(item, 'urgencia') || value(item, 'status') || undefined,
     meta: (item) => [value(item, 'categoria'), value(item, 'localizacao')].filter(Boolean)
   },
@@ -40,7 +40,7 @@ export const MODULE_CONFIGS: Record<string, ModuleConfig> = {
     key: 'problemas', title: 'Problemas', singular: 'Problema', newLabel: 'Registrar problema',
     subtitle: 'Situações reconhecidas que exigem resposta organizada.',
     emptyTitle: 'Nenhum problema reconhecido', emptyMessage: 'Valide uma situação observada antes de mobilizar uma resposta.',
-    path: '/api/problemas', accent: '#C65D36',
+    path: '/api/problemas', accent: '#004B6C',
     fields: [
       { name: 'categoria', label: 'Categoria', type: 'select', options: CATEGORIES, required: true },
       { name: 'titulo', label: 'Situação reconhecida', type: 'text', required: true },
@@ -55,7 +55,7 @@ export const MODULE_CONFIGS: Record<string, ModuleConfig> = {
     key: 'potencialidades', title: 'Potencialidades', singular: 'Potencialidade', newLabel: 'Registrar potencialidade',
     subtitle: 'Recursos, saberes e capacidades que o território já possui.',
     emptyTitle: 'Nenhuma potencialidade registrada', emptyMessage: 'Reconheça um recurso ou saber que pode fortalecer novas ações.',
-    path: '/api/potencialidades', accent: '#35A86B',
+    path: '/api/potencialidades', accent: '#003952',
     fields: [
       { name: 'categoria', label: 'Categoria', type: 'select', options: ['Agricultura Urbana', 'Educação Ambiental', 'Cultura e Arte', 'Saberes Tradicionais', 'Reciclagem e Compostagem', 'Saúde Comunitária', 'Coletivos e Associações', 'Espaços Públicos', 'Outros'], required: true },
       { name: 'titulo', label: 'Potencialidade', type: 'text', required: true },
@@ -69,7 +69,7 @@ export const MODULE_CONFIGS: Record<string, ModuleConfig> = {
     key: 'missoes', title: 'Missões', singular: 'Missão', newLabel: 'Criar missão',
     subtitle: 'Compromissos coletivos que organizam uma resposta no tempo.',
     emptyTitle: 'Nenhuma missão em curso', emptyMessage: 'Crie uma missão quando houver um problema e uma resposta possível.',
-    path: '/api/missoes', accent: '#063F4D',
+    path: '/api/missoes', accent: '#004B6C',
     fields: [],
     primary: (item) => value(item, 'titulo'), badge: (item) => value(item, 'status') || undefined,
     meta: (item) => [`Progresso ${value(item, 'progresso') || '0'}%`, value(item, 'descricao')].filter(Boolean)
@@ -78,7 +78,7 @@ export const MODULE_CONFIGS: Record<string, ModuleConfig> = {
     key: 'acoes', title: 'Ações', singular: 'Ação', newLabel: 'Registrar ação',
     subtitle: 'Trabalho realizado por pessoas, organizações e comunidades.',
     emptyTitle: 'Nenhuma ação registrada', emptyMessage: 'Registre uma ação executada para preservar autoria e continuidade.',
-    path: '/api/acoes', accent: '#35A86B',
+    path: '/api/acoes', accent: '#34ABA6',
     fields: [],
     primary: (item) => value(item, 'titulo'), badge: (item) => value(item, 'status') || undefined,
     meta: (item) => [value(item, 'descricao')].filter(Boolean)
@@ -87,7 +87,7 @@ export const MODULE_CONFIGS: Record<string, ModuleConfig> = {
     key: 'pessoas', title: 'Pessoas e grupos', singular: 'Participante', newLabel: 'Adicionar participante',
     subtitle: 'Quem torna o trabalho possível e forma a trajetória coletiva.',
     emptyTitle: 'Nenhuma participação registrada', emptyMessage: 'Adicione uma pessoa pelo nome ou identidade Angico.',
-    path: '/api/pessoas', accent: '#0E7C86',
+    path: '/api/pessoas', accent: '#34ABA6',
     fields: [
       { name: 'angicoId', label: 'Identidade Angico', type: 'angico-search', placeholder: 'Buscar por nome ou @identidade' },
       { name: 'nome', label: 'Nome', type: 'text', required: true },

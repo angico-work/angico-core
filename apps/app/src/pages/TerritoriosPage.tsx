@@ -236,7 +236,7 @@ export default function TerritoriosPage() {
           <header className="record-sheet-head"><span>{territories.length} {territories.length === 1 ? 'território' : 'territórios'}</span><span>Por nome</span></header>
           <div className="record-list">
             {territories.map((territory) => (
-              <article className="record-row territory-row" key={territory.id} style={{ '--record-accent': '#0E7C86' } as React.CSSProperties}>
+              <article className="record-row territory-row" key={territory.id} style={{ '--record-accent': '#34ABA6' } as React.CSSProperties}>
                 <span className="record-mark" aria-hidden="true" />
                 <div className="record-main">
                   <h2>{territory.nome}</h2>

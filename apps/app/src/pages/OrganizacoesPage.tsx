@@ -248,7 +248,7 @@ function ParticipationDialog({ workspaceId, organization, people, onClose }: {
           <header className="record-sheet-head"><span>{activeParticipations.length} {activeParticipations.length === 1 ? 'participação' : 'participações'}</span><span>Ativas</span></header>
           <div className="record-list">
             {activeParticipations.map((participation) => (
-              <article className="record-row operational-row" key={participation.id} style={{ '--record-accent': '#37785B' } as React.CSSProperties}>
+              <article className="record-row operational-row" key={participation.id} style={{ '--record-accent': '#34ABA6' } as React.CSSProperties}>
                 <span className="record-mark" aria-hidden="true" />
                 <div className="record-main">
                   <h3>{personNames.get(participation.pessoaId) ?? 'Pessoa não disponível'}</h3>
@@ -358,7 +358,7 @@ export default function OrganizacoesPage() {
               const relation = MISSION_RELATIONS.find((entry) => entry.value === organization.missionRelation)?.label;
               const mission = organization.missaoId == null ? null : missionNames.get(organization.missaoId);
               return (
-                <article className="record-row operational-row" key={organization.id} style={{ '--record-accent': '#0E7C86' } as React.CSSProperties}>
+                <article className="record-row operational-row" key={organization.id} style={{ '--record-accent': '#004B6C' } as React.CSSProperties}>
                   <span className="record-mark" aria-hidden="true" />
                   <div className="record-main">
                     <h2>{organization.nome}</h2>

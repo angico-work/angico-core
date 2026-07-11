@@ -14,9 +14,9 @@
     "test": "vitest"
   },
   "dependencies": {
-    "@fontsource/outfit": "^5.2.8",
-    "@fontsource/source-sans-3": "^5.2.9",
-    "@fontsource/spline-sans-mono": "^5.2.8",
+    "@fontsource/bricolage-grotesque": "5.2.10",
+    "@fontsource/dm-sans": "5.2.8",
+    "@fontsource/space-mono": "5.2.9",
     "idb": "^8.0.3",
     "leaflet": "^1.9.4",
     "react": "19.2.7",

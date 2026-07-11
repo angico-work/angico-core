@@ -9,9 +9,9 @@ import { loadMapPoints, resolveCoords } from '../lib/api';
 import type { GeoResult, MapPoint } from '../types';
 
 const TYPES: Array<{ key: MapPoint['type']; label: string; color: string }> = [
-  { key: 'observacao', label: 'Observações', color: '#0E7C86' },
-  { key: 'problema', label: 'Problemas', color: '#C65D36' },
-  { key: 'potencialidade', label: 'Potencialidades', color: '#35A86B' }
+  { key: 'observacao', label: 'Observações', color: '#34ABA6' },
+  { key: 'problema', label: 'Problemas', color: '#004B6C' },
+  { key: 'potencialidade', label: 'Potencialidades', color: '#003952' }
 ];
 
 export default function MapPage() {

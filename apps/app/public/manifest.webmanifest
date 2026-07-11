@@ -9,8 +9,8 @@
   "orientation": "portrait-primary",
   "lang": "pt-BR",
   "dir": "ltr",
-  "background_color": "#F3F5EF",
-  "theme_color": "#063F4D",
+  "background_color": "#F5F2EC",
+  "theme_color": "#004B6C",
   "categories": ["productivity", "utilities", "education"],
   "icons": [
     { "src": "/angico-icone.png", "sizes": "1563x1563", "type": "image/png", "purpose": "any" },

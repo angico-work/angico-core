@@ -6,16 +6,16 @@ import { loadMemoria } from '../lib/api';
 import type { MemoriaEvent } from '../types';
 
 const ENTITY_META: Record<string, { label: string; color: string }> = {
-  OBSERVACAO: { label: 'Observação', color: '#0E7C86' },
-  POTENCIALIDADE: { label: 'Potencialidade', color: '#35A86B' },
-  PROBLEMA: { label: 'Problema', color: '#C65D36' },
-  MISSAO: { label: 'Missão', color: '#063F4D' },
-  ACAO: { label: 'Ação', color: '#35A86B' },
-  EVIDENCIA: { label: 'Evidência', color: '#786E5D' },
-  RESULTADO: { label: 'Resultado', color: '#0E7C86' },
-  INDICADOR: { label: 'Indicador', color: '#1D292C' },
-  PESSOA: { label: 'Pessoa', color: '#0E7C86' },
-  ORGANIZACAO: { label: 'Organização', color: '#063F4D' }
+  OBSERVACAO: { label: 'Observação', color: '#34ABA6' },
+  POTENCIALIDADE: { label: 'Potencialidade', color: '#34ABA6' },
+  PROBLEMA: { label: 'Problema', color: '#004B6C' },
+  MISSAO: { label: 'Missão', color: '#004B6C' },
+  ACAO: { label: 'Ação', color: '#34ABA6' },
+  EVIDENCIA: { label: 'Evidência', color: '#003952' },
+  RESULTADO: { label: 'Resultado', color: '#34ABA6' },
+  INDICADOR: { label: 'Indicador', color: '#3C4F54' },
+  PESSOA: { label: 'Pessoa', color: '#34ABA6' },
+  ORGANIZACAO: { label: 'Organização', color: '#004B6C' }
 };
 
 function eventLabel(value: string): string {
@@ -70,7 +70,7 @@ export default function MemoriaPage() {
         <nav className="memory-filters" aria-label="Filtrar memória por tipo">
           <button type="button" className={filter === 'TODOS' ? 'active' : ''} onClick={() => setFilter('TODOS')}>Tudo <span>{events.length}</span></button>
           {types.map((type) => {
-            const meta = ENTITY_META[type] ?? { label: type, color: '#786E5D' };
+            const meta = ENTITY_META[type] ?? { label: type, color: '#3C4F54' };
             return <button type="button" key={type} className={filter === type ? 'active' : ''} onClick={() => setFilter(type)}><i style={{ background: meta.color }} />{meta.label}<span>{events.filter((event) => event.entityType.toUpperCase() === type).length}</span></button>;
           })}
         </nav>
@@ -84,7 +84,7 @@ export default function MemoriaPage() {
           <ol className="memory-timeline">
             {visible.map((event, index) => {
               const type = event.entityType.toUpperCase();
-              const meta = ENTITY_META[type] ?? { label: event.entityType, color: '#786E5D' };
+              const meta = ENTITY_META[type] ?? { label: event.entityType, color: '#3C4F54' };
               const sequence = event.commitSequence ?? event.sequence;
               return (
                 <li key={String(sequence ?? `${event.eventType}-${index}`)} style={{ '--event-color': meta.color } as React.CSSProperties}>

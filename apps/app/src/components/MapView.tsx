@@ -2,15 +2,16 @@ import { useEffect } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, useMapEvents, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
+import '../styles/map.css';
 import type { MapPoint } from '../types';
 
 const TILE_URL = import.meta.env.VITE_MAP_TILE_URL ?? 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
 
 const TYPE_COLOR: Record<string, string> = {
-  observacao: '#0E7C86',
-  problema: '#C65D36',
-  potencialidade: '#35A86B',
-  mission: '#063F4D'
+  observacao: '#34ABA6',
+  problema: '#004B6C',
+  potencialidade: '#003952',
+  mission: '#004B6C'
 };
 
 const TYPE_LABEL: Record<string, string> = {
@@ -55,7 +56,6 @@ function Recenter({ center, zoom }: { center: [number, number]; zoom: number }) 
 
 function FitBounds({ points }: { points: MapPoint[] }) {
   const map = useMap();
-  const key = points.map((p) => `${p.latitude},${p.longitude}`).join('|');
   useEffect(() => {
     if (points.length === 0) return;
     if (points.length === 1) {
@@ -64,8 +64,7 @@ function FitBounds({ points }: { points: MapPoint[] }) {
       const bounds = L.latLngBounds(points.map((p) => [p.latitude, p.longitude] as [number, number]));
       map.fitBounds(bounds, { padding: [48, 48], maxZoom: 16 });
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [key, map]);
+  }, [points, map]);
   return null;
 }
 
@@ -98,7 +97,7 @@ export default function MapView({
   fitToPoints
 }: Props) {
   return (
-      <MapContainer center={center} zoom={zoom} scrollWheelZoom style={{ height, width: '100%' }}>
+    <MapContainer center={center} zoom={zoom} scrollWheelZoom style={{ height, width: '100%' }}>
       <TileLayer
         attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
         url={TILE_URL}
@@ -110,13 +109,13 @@ export default function MapView({
         <Marker
           key={`${p.type}-${p.id}`}
           position={[p.latitude, p.longitude]}
-          icon={markerIcon(TYPE_COLOR[p.type] ?? '#6b7280')}
+          icon={markerIcon(TYPE_COLOR[p.type] ?? '#3C4F54')}
           eventHandlers={onPointClick ? { click: () => onPointClick(p) } : undefined}
         >
           <Popup>
             <strong>{p.titulo}</strong>
             <br />
-            <span style={{ color: TYPE_COLOR[p.type] }}>{TYPE_LABEL[p.type] ?? p.type}</span> · {p.categoria}
+            <span>{TYPE_LABEL[p.type] ?? p.type}</span> · {p.categoria}
             <br />
             <small>Status: {p.status}</small>
           </Popup>
