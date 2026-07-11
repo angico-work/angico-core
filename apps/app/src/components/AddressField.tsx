@@ -104,6 +104,7 @@ export default function AddressField({ value, onChange, onSelect, placeholder, i
         type="text"
         value={value}
         autoFocus={autoFocus}
+        data-autofocus={autoFocus || undefined}
         autoComplete="off"
         placeholder={placeholder}
         onChange={(e) => onChange(e.target.value)}

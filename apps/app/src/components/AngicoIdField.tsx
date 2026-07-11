@@ -107,6 +107,7 @@ export default function AngicoIdField({ workspaceId, value, onChange, onPick, id
         id={inputId}
         type="text"
         autoFocus={autoFocus}
+        data-autofocus={autoFocus || undefined}
         value={value}
         autoComplete="off"
         placeholder={placeholder}

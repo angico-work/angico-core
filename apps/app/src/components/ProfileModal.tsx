@@ -1,6 +1,7 @@
-import { useState, type ChangeEvent, type FormEvent } from 'react';
+import { useRef, useState, type ChangeEvent, type FormEvent } from 'react';
 import { updateProfile } from '../lib/api';
 import type { PessoaHit } from '../types';
+import ModalDialog from './ModalDialog';
 
 async function fileToDataUrl(file: File, max = 256): Promise<string> {
   const bitmap = await createImageBitmap(file);
@@ -30,6 +31,7 @@ export default function ProfileModal({ profile, onClose, onSaved }: {
   const [foto, setFoto] = useState<string | null>(profile.foto);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const photoInput = useRef<HTMLInputElement>(null);
 
   async function onPickPhoto(e: ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -55,25 +57,27 @@ export default function ProfileModal({ profile, onClose, onSaved }: {
   }
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-card" onClick={(e) => e.stopPropagation()}>
-        <h2 style={{ marginTop: 0 }}>Editar perfil</h2>
+    <ModalDialog titleId="profile-dialog-title" busy={saving} onClose={onClose}>
+        <header className="dialog-head">
+          <h2 id="profile-dialog-title">Editar perfil</h2>
+          <button type="button" className="icon-button" aria-label="Fechar" onClick={onClose} disabled={saving}>×</button>
+        </header>
         <form onSubmit={submit}>
           <div className="profile-photo-row">
             <div className="profile-avatar">
               {foto ? <img src={foto} alt="" /> : initials(nome)}
             </div>
             <div className="profile-photo-actions">
-              <label className="ghost-button">
+              <button type="button" className="ghost-button" onClick={() => photoInput.current?.click()}>
                 {foto ? 'Trocar foto' : 'Adicionar foto'}
-                <input type="file" accept="image/*" hidden onChange={onPickPhoto} />
-              </label>
+              </button>
+              <input ref={photoInput} type="file" accept="image/*" hidden onChange={onPickPhoto} />
               {foto && <button type="button" className="button small" onClick={() => setFoto(null)}>Remover</button>}
             </div>
           </div>
           <div className="field">
             <label htmlFor="prof-nome">Nome *</label>
-            <input id="prof-nome" required value={nome} onChange={(e) => setNome(e.target.value)} />
+            <input id="prof-nome" data-autofocus required value={nome} onChange={(e) => setNome(e.target.value)} />
           </div>
           <div className="field">
             <label htmlFor="prof-tel">Telefone</label>
@@ -86,12 +90,11 @@ export default function ProfileModal({ profile, onClose, onSaved }: {
             </div>
           )}
           {error && <div className="form-error" role="alert">{error}</div>}
-          <div style={{ display: 'flex', gap: 12, marginTop: 8 }}>
+          <footer className="dialog-actions">
             <button type="button" className="ghost-button" onClick={onClose} disabled={saving}>Cancelar</button>
             <button type="submit" className="primary-button" disabled={saving}>{saving ? 'Salvando…' : 'Salvar perfil'}</button>
-          </div>
+          </footer>
         </form>
-      </div>
-    </div>
+    </ModalDialog>
   );
 }

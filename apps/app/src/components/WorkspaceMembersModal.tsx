@@ -4,6 +4,7 @@ import AngicoIdField from './AngicoIdField';
 import { icon } from '../lib/icons';
 import { addMember, listMembers, removeMember } from '../lib/api';
 import type { WorkspaceMember } from '../types';
+import ModalDialog from './ModalDialog';
 
 const ROLES = ['ADMIN', 'COORDINATOR', 'MAPPER', 'MEMBER', 'VIEWER'];
 const ROLE_LABELS: Record<string, string> = {
@@ -70,10 +71,19 @@ export default function WorkspaceMembersModal({ slug, workspaceName, onClose }: 
   }
 
   return createPortal(
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-card" onClick={(e) => e.stopPropagation()}>
-        <h2 style={{ marginTop: 0 }}>Membros · {workspaceName}</h2>
-        <p className="muted" style={{ marginTop: -6 }}>Quem participa deste espaço de trabalho e seu papel.</p>
+    <ModalDialog
+      titleId="workspace-members-title"
+      descriptionId="workspace-members-description"
+      busy={busy}
+      onClose={onClose}
+    >
+        <header className="dialog-head">
+          <div>
+            <h2 id="workspace-members-title">Membros · {workspaceName}</h2>
+            <p id="workspace-members-description" className="muted">Quem participa deste espaço de trabalho e seu papel.</p>
+          </div>
+          <button type="button" className="icon-button" aria-label="Fechar" onClick={onClose} disabled={busy}>×</button>
+        </header>
 
         <div className="member-list">
           {loading ? (
@@ -101,6 +111,7 @@ export default function WorkspaceMembersModal({ slug, workspaceName, onClose }: 
             <label htmlFor="member-angico">Adicionar por Angico ID</label>
             <AngicoIdField
               id="member-angico"
+              autoFocus
               workspaceId={slug}
               value={actorId}
               placeholder="@angicoid ou nome"
@@ -116,14 +127,13 @@ export default function WorkspaceMembersModal({ slug, workspaceName, onClose }: 
               {busy ? 'Adicionando…' : 'Adicionar'}
             </button>
           </div>
-          {error && <div className="member-error">{error}</div>}
+          {error && <div className="member-error" role="alert">{error}</div>}
         </form>
 
         <div className="member-actions">
           <button type="button" className="ghost-button" onClick={onClose}>Fechar</button>
         </div>
-      </div>
-    </div>,
+    </ModalDialog>,
     document.body
   );
 }

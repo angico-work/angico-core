@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { createConversa } from '../../lib/api';
 import type { Conversa } from '../../types';
+import ModalDialog from '../../components/ModalDialog';
 import type { ConversationContext } from './messageView';
 
 interface NewConversationDialogProps {
@@ -48,18 +49,24 @@ export function NewConversationDialog({
   }
 
   return (
-    <div className="modal-overlay" role="presentation" onMouseDown={(event) => {
-      if (event.target === event.currentTarget) onClose();
-    }}>
-      <section className="modal-card" role="dialog" aria-modal="true" aria-labelledby="conversation-title">
+    <ModalDialog
+      titleId="conversation-title"
+      descriptionId="conversation-description"
+      busy={submitting}
+      onClose={onClose}
+    >
         <header className="dialog-head">
-          <div><span className="overline">Coordenação no território</span><h2 id="conversation-title">Nova conversa</h2></div>
-          <button type="button" className="icon-button" aria-label="Fechar" onClick={onClose}>×</button>
+          <div>
+            <span className="overline">Coordenação no território</span>
+            <h2 id="conversation-title">Nova conversa</h2>
+            <p id="conversation-description">Defina um contexto confirmado para preservar a conversa no Rastro.</p>
+          </div>
+          <button type="button" className="icon-button" aria-label="Fechar" onClick={onClose} disabled={submitting}>×</button>
         </header>
         <form onSubmit={submit}>
           <div className="field">
             <label htmlFor="conversation-name">Assunto</label>
-            <input id="conversation-name" required value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Ex.: Organização do mutirão" />
+            <input id="conversation-name" data-autofocus required value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Ex.: Organização do mutirão" />
           </div>
           <div className="field">
             <label htmlFor="conversation-context">Contexto da conversa</label>
@@ -76,11 +83,10 @@ export function NewConversationDialog({
           </div>
           {error && <div className="form-error" role="alert">{error}</div>}
           <footer className="dialog-actions">
-            <button type="button" className="ghost-button" onClick={onClose}>Cancelar</button>
+            <button type="button" className="ghost-button" onClick={onClose} disabled={submitting}>Cancelar</button>
             <button type="submit" className="primary-button" disabled={submitting || !contextKey}>{submitting ? 'Criando…' : 'Criar conversa'}</button>
           </footer>
         </form>
-      </section>
-    </div>
+    </ModalDialog>
   );
 }

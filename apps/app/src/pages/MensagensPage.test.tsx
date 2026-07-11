@@ -407,6 +407,20 @@ describe('MensagensPage', () => {
     expect(screen.queryByLabelText(/identificador/i)).not.toBeInTheDocument();
   });
 
+  it('closes the new conversation dialog on Escape and restores focus', async () => {
+    renderPage();
+    const opener = await screen.findByRole('button', { name: 'Nova conversa' });
+    opener.focus();
+    fireEvent.click(opener);
+
+    const dialog = screen.getByRole('dialog', { name: 'Nova conversa' });
+    expect(screen.getByLabelText('Assunto')).toHaveFocus();
+    fireEvent.keyDown(dialog, { key: 'Escape' });
+
+    expect(screen.queryByRole('dialog', { name: 'Nova conversa' })).not.toBeInTheDocument();
+    expect(opener).toHaveFocus();
+  });
+
   it('does not render a late conversation response from the previous workspace', async () => {
     const firstWorkspace = deferred<typeof conversation[]>();
     const secondWorkspace = deferred<typeof conversation[]>();
