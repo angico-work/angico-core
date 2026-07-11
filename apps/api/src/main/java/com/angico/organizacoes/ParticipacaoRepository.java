@@ -12,4 +12,7 @@ public interface ParticipacaoRepository extends JpaRepository<Participacao, Long
 
     Optional<Participacao> findByWorkspaceIdAndOrganizationIdAndPessoaIdAndStatus(
             String workspaceId, Long organizationId, Long pessoaId, String status);
+
+    Optional<Participacao> findByIdAndWorkspaceIdAndOrganizationId(
+            Long id, String workspaceId, Long organizationId);
 }

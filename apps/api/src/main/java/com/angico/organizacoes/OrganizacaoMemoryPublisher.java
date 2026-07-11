@@ -101,6 +101,39 @@ public class OrganizacaoMemoryPublisher {
         ));
     }
 
+    public void publishParticipationEnded(Participacao participation, String actorId) {
+        String participationId = String.valueOf(participation.getId());
+        memory.registrarObjeto(
+                participation.getWorkspaceId(), OntologyService.PARTICIPACAO, participationId,
+                null, "Participação " + participation.getPapel(), participation.getStatus(), SOURCE);
+        memory.encerrarRelacaoAtiva(
+                participation.getWorkspaceId(),
+                OntologyService.PESSOA,
+                String.valueOf(participation.getPessoaId()),
+                OntologyService.ORGANIZACAO,
+                String.valueOf(participation.getOrganizationId()),
+                "PARTICIPA_DE"
+        );
+        memory.registrarEvento(new MemoryEvent(
+                participation.getWorkspaceId(),
+                OntologyService.PARTICIPACAO,
+                participationId,
+                "participacao.encerrada",
+                SOURCE,
+                actorId,
+                null,
+                null,
+                null,
+                1,
+                participation.getEndedAt(),
+                Map.of(
+                        "organizationId", participation.getOrganizationId(),
+                        "pessoaId", participation.getPessoaId(),
+                        "endedAt", participation.getEndedAt().toString()
+                )
+        ));
+    }
+
     private MemoryRelationMetadata metadata(String actorId, String context) {
         return new MemoryRelationMetadata(SOURCE, context, actorId, null);
     }

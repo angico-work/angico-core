@@ -6,6 +6,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -48,5 +49,14 @@ public class OrganizacaoController {
             @RequestParam(required = false) String workspaceId
     ) {
         return service.listParticipations(id, workspaceId);
+    }
+
+    @PutMapping("/{id}/participacoes/{participationId}/encerramento")
+    public ParticipacaoResponse endParticipation(
+            @PathVariable Long id,
+            @PathVariable Long participationId,
+            @Valid @RequestBody ParticipacaoEndRequest request
+    ) {
+        return service.endParticipation(id, participationId, request);
     }
 }

@@ -28,7 +28,7 @@ public class OrganizacaoService {
     private static final Set<String> MISSION_RELATIONS = Set.of("CONDUZ", "MOBILIZA");
     private static final Set<String> PARTICIPATION_ROLES = Set.of(
             "MEMBRO", "COORDENACAO", "VOLUNTARIADO", "REPRESENTACAO", "PARCEIRO");
-    private static final Set<String> PARTICIPATION_STATUSES = Set.of("ATIVA", "ENCERRADA");
+    private static final Set<String> PARTICIPATION_STATUSES = Set.of("ATIVA");
 
     private final OrganizacaoRepository organizationRepository;
     private final ParticipacaoRepository participationRepository;
@@ -89,9 +89,9 @@ public class OrganizacaoService {
         String role = enumValue(request.papel(), PARTICIPATION_ROLES, "papel");
         String status = enumValue(request.status(), PARTICIPATION_STATUSES, "status");
         Instant now = clock.now();
-        validateParticipationPeriod(request.startedAt(), request.endedAt(), status, now);
+        validateActiveParticipationPeriod(request.startedAt(), request.endedAt(), now);
 
-        if ("ATIVA".equals(status) && participationRepository
+        if (participationRepository
                 .findByWorkspaceIdAndOrganizationIdAndPessoaIdAndStatus(
                         workspaceId, organization.getId(), person.getId(), "ATIVA")
                 .isPresent()) {
@@ -108,7 +108,7 @@ public class OrganizacaoService {
                 request.endedAt(),
                 now,
                 authorization.currentActorId(),
-                "ATIVA".equals(status) ? activeIdentity(workspaceId, organization.getId(), person.getId()) : null
+                activeIdentity(workspaceId, organization.getId(), person.getId())
         );
         try {
             participation = participationRepository.saveAndFlush(participation);
@@ -116,6 +116,31 @@ public class OrganizacaoService {
             throw new ConflictException("A pessoa já possui participação ativa nesta organização.");
         }
         publisher.publishParticipation(participation);
+        return ParticipacaoResponse.from(participation);
+    }
+
+    @Transactional
+    public ParticipacaoResponse endParticipation(
+            Long organizationId,
+            Long participationId,
+            ParticipacaoEndRequest request
+    ) {
+        String workspaceId = authorization.requireAuthorizedWorkspace(request.workspaceId());
+        requireOrganization(organizationId, workspaceId);
+        Participacao participation = participationRepository
+                .findByIdAndWorkspaceIdAndOrganizationId(participationId, workspaceId, organizationId)
+                .orElseThrow(() -> new IllegalArgumentException("Participação não encontrada."));
+        if (!"ATIVA".equals(participation.getStatus())) {
+            throw new ConflictException("A participação já está encerrada.");
+        }
+        Instant now = clock.now();
+        Instant endedAt = request.endedAt();
+        if (endedAt.isBefore(participation.getStartedAt()) || endedAt.isAfter(now.plus(5, ChronoUnit.MINUTES))) {
+            throw new IllegalArgumentException("endedAt é inválido para esta participação.");
+        }
+        participation.end(endedAt);
+        participation = participationRepository.save(participation);
+        publisher.publishParticipationEnded(participation, authorization.currentActorId());
         return ParticipacaoResponse.from(participation);
     }
 
@@ -152,23 +177,17 @@ public class OrganizacaoService {
         return new MissionLink(missionId, enumValue(rawRelation, MISSION_RELATIONS, "missionRelation"));
     }
 
-    private void validateParticipationPeriod(
+    private void validateActiveParticipationPeriod(
             Instant startedAt,
             Instant endedAt,
-            String status,
             Instant now
     ) {
         if (startedAt.isBefore(Instant.parse("2000-01-01T00:00:00Z"))
                 || startedAt.isAfter(now.plus(5, ChronoUnit.MINUTES))) {
             throw new IllegalArgumentException("startedAt está fora do intervalo permitido.");
         }
-        if ("ATIVA".equals(status) && endedAt != null) {
+        if (endedAt != null) {
             throw new IllegalArgumentException("Participação ativa não pode ter endedAt.");
-        }
-        if ("ENCERRADA".equals(status)
-                && (endedAt == null || endedAt.isBefore(startedAt)
-                || endedAt.isAfter(now.plus(5, ChronoUnit.MINUTES)))) {
-            throw new IllegalArgumentException("endedAt é inválido para uma participação encerrada.");
         }
     }
 

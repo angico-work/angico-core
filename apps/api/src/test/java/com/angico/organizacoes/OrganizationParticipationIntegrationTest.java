@@ -3,6 +3,7 @@ package com.angico.organizacoes;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -158,6 +159,57 @@ class OrganizationParticipationIntegrationTest {
                                 {"workspaceId":"%s","pessoaId":%d,"papel":"MEMBRO",
                                  "status":"ENCERRADA","startedAt":"2026-07-09T12:00:00Z",
                                  "endedAt":"2026-07-08T12:00:00Z"}
+                                """.formatted(workspaceA, participant.getId())))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void closesAnActiveParticipationAndItsMemoryRelation() throws Exception {
+        long organizationId = createOrganization();
+        MvcResult created = mvc.perform(post("/api/organizacoes/{id}/participacoes", organizationId)
+                        .cookie(session.cookie())
+                        .header("X-CSRF-Token", session.csrfToken())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"workspaceId":"%s","pessoaId":%d,"papel":"MEMBRO",
+                                 "status":"ATIVA","startedAt":"2026-07-01T12:00:00Z"}
+                                """.formatted(workspaceA, participant.getId())))
+                .andExpect(status().isCreated())
+                .andReturn();
+        long participationId = responseId(created);
+
+        mvc.perform(put("/api/organizacoes/{id}/participacoes/{participationId}/encerramento",
+                        organizationId, participationId)
+                        .cookie(session.cookie())
+                        .header("X-CSRF-Token", session.csrfToken())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"workspaceId":"%s","endedAt":"2026-07-10T12:00:00Z"}
+                                """.formatted(workspaceA)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("ENCERRADA"))
+                .andExpect(jsonPath("$.endedAt").value("2026-07-10T12:00:00Z"));
+
+        assertTrue(!relationRepository.existsByWorkspaceIdAndOriginTypeAndOriginIdAndDestinationTypeAndDestinationIdAndRelationTypeAndActiveTrue(
+                workspaceA, "PESSOA", String.valueOf(participant.getId()), "ORGANIZACAO",
+                String.valueOf(organizationId), "PARTICIPA_DE"));
+        assertTrue(eventRepository.findByWorkspaceIdOrderBySequenceAsc(workspaceA).stream()
+                .anyMatch(event -> "participacao.encerrada".equals(event.getEventType())
+                        && actor.getAngicoId().equals(event.getActorId())));
+    }
+
+    @Test
+    void doesNotCreateAClosedParticipationWithoutAnActiveOrigin() throws Exception {
+        long organizationId = createOrganization();
+
+        mvc.perform(post("/api/organizacoes/{id}/participacoes", organizationId)
+                        .cookie(session.cookie())
+                        .header("X-CSRF-Token", session.csrfToken())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"workspaceId":"%s","pessoaId":%d,"papel":"MEMBRO",
+                                 "status":"ENCERRADA","startedAt":"2026-07-01T12:00:00Z",
+                                 "endedAt":"2026-07-10T12:00:00Z"}
                                 """.formatted(workspaceA, participant.getId())))
                 .andExpect(status().isBadRequest());
     }

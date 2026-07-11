@@ -115,4 +115,10 @@ public class Participacao {
     public String getActorId() {
         return actorId;
     }
+
+    public void end(Instant endedAt) {
+        this.status = "ENCERRADA";
+        this.endedAt = endedAt;
+        this.activeIdentity = null;
+    }
 }
