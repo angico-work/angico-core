@@ -137,19 +137,19 @@ public class GlimpseService {
         List<MapPoint> points = new ArrayList<>();
         for (ObservacaoTerritorial o : observacoes.findByWorkspaceIdOrderByCreatedAtDesc(workspaceId)) {
             if (o.getLatitude() != null && o.getLongitude() != null) {
-                points.add(new MapPoint("observacao", o.getId(), o.getTitulo(), o.getCategoria(),
+                points.add(new MapPoint(workspaceId, "observacao", o.getId(), o.getTitulo(), o.getCategoria(),
                         o.getUrgencia(), o.getLatitude(), o.getLongitude()));
             }
         }
         for (ProblemaSocioambiental p : problemas.findByWorkspaceIdOrderByCreatedAtDesc(workspaceId)) {
             if (p.getLatitude() != null && p.getLongitude() != null) {
-                points.add(new MapPoint("problema", p.getId(), p.getTitulo(), p.getCategoria(),
+                points.add(new MapPoint(workspaceId, "problema", p.getId(), p.getTitulo(), p.getCategoria(),
                         p.getStatus(), p.getLatitude(), p.getLongitude()));
             }
         }
         for (PotencialidadeTerritorial pot : potencialidades.findByWorkspaceIdOrderByCreatedAtDesc(workspaceId)) {
             if (pot.getLatitude() != null && pot.getLongitude() != null) {
-                points.add(new MapPoint("potencialidade", pot.getId(), pot.getTitulo(), pot.getCategoria(),
+                points.add(new MapPoint(workspaceId, "potencialidade", pot.getId(), pot.getTitulo(), pot.getCategoria(),
                         pot.getStatus(), pot.getLatitude(), pot.getLongitude()));
             }
         }
@@ -169,7 +169,7 @@ public class GlimpseService {
     }
 
     private MemoriaEvent toMemoriaEvent(StoredMemoryEvent e) {
-        return new MemoriaEvent(e.getSequence(), e.getEntityType(), e.getEntityId(),
+        return new MemoriaEvent(e.getWorkspaceId(), e.getSequence(), e.getEntityType(), e.getEntityId(),
                 e.getEventType(), e.getActorId(), e.getOccurredAt());
     }
 

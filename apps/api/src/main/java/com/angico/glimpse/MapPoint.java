@@ -1,6 +1,7 @@
 package com.angico.glimpse;
 
 public record MapPoint(
+        String workspaceId,
         String type,
         Long id,
         String titulo,

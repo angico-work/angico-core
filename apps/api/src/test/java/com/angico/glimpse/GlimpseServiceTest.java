@@ -4,12 +4,14 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.mockito.Mockito.when;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.mock;
 import static org.mockito.ArgumentMatchers.any;
 
 import com.angico.acoes.AcaoRepository;
 import com.angico.common.ClockProvider;
 import com.angico.core.memory.MemoryEventRepository;
 import com.angico.core.memory.MemoryObjectRepository;
+import com.angico.core.memory.StoredMemoryEvent;
 import com.angico.impacto.Indicador;
 import com.angico.impacto.IndicadorRepository;
 import com.angico.impacto.Medicao;
@@ -18,6 +20,7 @@ import com.angico.impacto.ResultadoRepository;
 import com.angico.missoes.MissaoRepository;
 import com.angico.missoes.Missao;
 import com.angico.mensagens.ConversationAccessPolicy;
+import com.angico.observacoes.ObservacaoTerritorial;
 import com.angico.observacoes.ObservacaoRepository;
 import com.angico.potencialidades.PotencialidadeRepository;
 import com.angico.problemas.ProblemaRepository;
@@ -147,5 +150,54 @@ class GlimpseServiceTest {
         DashboardResponse response = service.dashboard(workspaceId);
 
         assertEquals("Em andamento", response.missions().getFirst().status());
+    }
+
+    @Test
+    void mapPointsCarryTheAuthorizedWorkspace() {
+        String workspaceId = "coletivo-rio";
+        ObservacaoTerritorial observation = new ObservacaoTerritorial(
+                workspaceId,
+                "1",
+                "AGUA",
+                "Nascente observada",
+                null,
+                null,
+                -23.5,
+                -46.6,
+                "MEDIA",
+                "REGISTRADA",
+                "ana.sp",
+                Instant.parse("2026-07-10T12:00:00Z")
+        );
+        when(authorization.requireAuthorizedWorkspace(workspaceId)).thenReturn(workspaceId);
+        when(observacoes.findByWorkspaceIdOrderByCreatedAtDesc(workspaceId))
+                .thenReturn(List.of(observation));
+        when(problemas.findByWorkspaceIdOrderByCreatedAtDesc(workspaceId)).thenReturn(List.of());
+        when(potencialidades.findByWorkspaceIdOrderByCreatedAtDesc(workspaceId)).thenReturn(List.of());
+
+        MapPoint point = service.mapPoints(workspaceId).getFirst();
+
+        assertEquals(workspaceId, point.workspaceId());
+    }
+
+    @Test
+    void memoryEventsCarryTheAuthorizedWorkspace() {
+        String workspaceId = "coletivo-rio";
+        StoredMemoryEvent stored = mock(StoredMemoryEvent.class);
+        when(stored.getSequence()).thenReturn(4L);
+        when(stored.getWorkspaceId()).thenReturn(workspaceId);
+        when(stored.getEntityType()).thenReturn("OBSERVACAO");
+        when(stored.getEntityId()).thenReturn("8");
+        when(stored.getEventType()).thenReturn("observacao.registrada");
+        when(stored.getActorId()).thenReturn("ana.sp");
+        when(stored.getOccurredAt()).thenReturn(Instant.parse("2026-07-10T12:00:00Z"));
+        when(authorization.requireAuthorizedWorkspace(workspaceId)).thenReturn(workspaceId);
+        when(events.findByWorkspaceIdOrderBySequenceAsc(workspaceId)).thenReturn(List.of(stored));
+        when(conversationAccess.canAccessMemoryNode(workspaceId, "OBSERVACAO", "8"))
+                .thenReturn(true);
+
+        MemoriaEvent event = service.memoria(workspaceId).getFirst();
+
+        assertEquals(workspaceId, event.workspaceId());
     }
 }
