@@ -1,17 +1,27 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test } from '@playwright/test';
 
+type Rectangle = { top: number; right: number; bottom: number; left: number };
+
+const rectanglesIntersect = (first: Rectangle, second: Rectangle) =>
+  first.left < second.right &&
+  first.right > second.left &&
+  first.top < second.bottom &&
+  first.bottom > second.top;
+
 test('keeps the public journey responsive, keyboard-accessible and quiet', async ({ page }) => {
   const errors: string[] = [];
-  const externalMapRequests: string[] = [];
+  const unexpectedRequestUrls: string[] = [];
+  const allowedRequestOrigins = new Set(['http://127.0.0.1:4175']);
 
   page.on('console', (message) => {
     if (message.type() === 'error') errors.push(message.text());
   });
   page.on('pageerror', (error) => errors.push(error.message));
   page.on('request', (request) => {
-    if (/openstreetmap|mapbox|tile\.|\/tiles\//i.test(request.url())) {
-      externalMapRequests.push(request.url());
+    const requestUrl = new URL(request.url());
+    if (['http:', 'https:'].includes(requestUrl.protocol) && !allowedRequestOrigins.has(requestUrl.origin)) {
+      unexpectedRequestUrls.push(request.url());
     }
   });
   await page.route('**/api/contact', async (route) => {
@@ -53,23 +63,43 @@ test('keeps the public journey responsive, keyboard-accessible and quiet', async
   await page.keyboard.press('Enter');
   await expect(page).toHaveURL(/#conteudo$/);
 
-  await page.getByRole('link', { name: 'Por que é único' }).click();
-  await expect(page).toHaveURL(/#unico$/);
+  await page.goto('/');
+  const keyboardOrder = [
+    page.getByRole('link', { name: 'Ir para o conteúdo' }),
+    page.getByRole('link', { name: 'Angico, início' }),
+    page.getByRole('link', { name: 'Por que é único' }),
+    page.getByRole('link', { name: 'Como funciona' }),
+    page.getByRole('link', { name: 'Já sou membro' }),
+    page.getByRole('link', { name: 'Quero levar o Angico ao meu território' }),
+    page.getByLabel('Nome')
+  ];
+  for (const target of keyboardOrder) {
+    await page.keyboard.press('Tab');
+    await expect(target).toBeFocused();
+  }
 
-  await page.getByLabel('Nome').fill('Ana Ribeiro');
-  await page.getByLabel('E-mail').fill('ana@example.org');
-  await page.getByLabel('Mensagem').fill('Quero organizar a memória do território.');
-  await page.getByLabel('Mensagem').press('Tab');
+  await page.keyboard.type('Ana Ribeiro');
+  await page.keyboard.press('Tab');
+  await expect(page.getByLabel('E-mail')).toBeFocused();
+  await page.keyboard.type('ana@example.org');
+  await page.keyboard.press('Tab');
+  await expect(page.getByLabel('Mensagem')).toBeFocused();
+  await page.keyboard.type('Quero organizar a memória do território.');
+  await page.keyboard.press('Tab');
   await expect(page.getByRole('button', { name: 'Enviar mensagem' })).toBeFocused();
   await page.keyboard.press('Enter');
   await expect(page.getByRole('status')).toHaveText('Mensagem enviada.');
+  await page.keyboard.press('Tab');
+  await expect(page.getByRole('link', { name: 'Angico, voltar ao início' })).toBeFocused();
+  await page.keyboard.press('Tab');
+  await expect(page.getByRole('link', { name: 'Voltar ao início', exact: true })).toBeFocused();
 
   const accessibility = await new AxeBuilder({ page })
     .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
     .analyze();
   expect(accessibility.violations.filter(({ impact }) => impact === 'serious' || impact === 'critical'))
     .toEqual([]);
-  expect(externalMapRequests).toEqual([]);
+  expect(unexpectedRequestUrls).toEqual([]);
   expect(errors).toEqual([]);
 });
 
@@ -112,4 +142,64 @@ test('plays the map once and loops only the leaf when motion is allowed', async 
   await expect(page.locator('.footer-leaf')).toHaveCSS('animation-name', 'leaf-fall');
   await expect(page.locator('.footer-leaf')).toHaveCSS('animation-duration', '9s');
   await expect(page.locator('.footer-leaf')).toHaveCSS('animation-iteration-count', 'infinite');
+});
+
+test('keeps the animated leaf below the footer before restarting', async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+  await page.goto('/');
+
+  const geometry = await page.locator('.footer-leaf').evaluate(async (leaf) => {
+    const animation = leaf.getAnimations()[0];
+    if (!animation) throw new Error('Expected the footer leaf animation to exist.');
+    animation.pause();
+    animation.currentTime = 8_990;
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+
+    const leafRect = leaf.getBoundingClientRect();
+    const footerRect = leaf.closest('footer')?.getBoundingClientRect();
+    if (!footerRect) throw new Error('Expected the footer leaf to be inside a footer.');
+    return { leafTop: leafRect.top, footerBottom: footerRect.bottom };
+  });
+
+  expect(geometry.leafTop).toBeGreaterThanOrEqual(geometry.footerBottom);
+});
+
+test('keeps all four desktop map markers outside the hero copy', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'desktop');
+  await page.goto('/');
+
+  const heroCopy = await page.locator('.territory-hero__copy').evaluate((copy) => {
+    const { top, right, bottom, left } = copy.getBoundingClientRect();
+    return { top, right, bottom, left };
+  });
+  const markerRects = await page.locator('.territory-map__marker').evaluateAll((markers) =>
+    markers.map((marker) => {
+      const { top, right, bottom, left, width, height } = marker.getBoundingClientRect();
+      return { top, right, bottom, left, width, height };
+    })
+  );
+
+  expect(markerRects).toHaveLength(4);
+  for (const markerRect of markerRects) {
+    expect(markerRect.width).toBeGreaterThan(0);
+    expect(markerRect.height).toBeGreaterThan(0);
+    expect(rectanglesIntersect(markerRect, heroCopy)).toBe(false);
+    expect(markerRect.left).toBeGreaterThanOrEqual(heroCopy.right);
+  }
+});
+
+test('keeps tablet hero copy and trace in separate regions', async ({ page }, testInfo) => {
+  test.skip(!['tablet-768', 'tablet-834'].includes(testInfo.project.name));
+  await page.goto('/');
+
+  const heroCopy = await page.locator('.territory-hero__copy').evaluate((copy) => {
+    const { top, right, bottom, left } = copy.getBoundingClientRect();
+    return { top, right, bottom, left };
+  });
+  const trace = await page.locator('.territory-trace').evaluate((element) => {
+    const { top, right, bottom, left } = element.getBoundingClientRect();
+    return { top, right, bottom, left };
+  });
+  expect(rectanglesIntersect(heroCopy, trace)).toBe(false);
+  expect(heroCopy.right).toBeLessThanOrEqual(trace.left);
 });

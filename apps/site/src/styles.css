@@ -53,7 +53,6 @@ h3 { font-size: clamp(1.2rem, 2vw, 1.55rem); line-height: 1.15; letter-spacing: 
 
 .primary-action, form button { min-height: 50px; padding-inline: 22px; border: 1px solid var(--mata); display: inline-flex; align-items: center; justify-content: center; color: var(--fibra); background: var(--mata); cursor: pointer; font-family: var(--font-display); font-weight: 700; text-decoration: none; transition: background-color 160ms ease, border-color 160ms ease; }
 .primary-action:hover, form button:hover { border-color: var(--agua); background: var(--brand-deep); }
-.text-action { min-height: 44px; display: inline-flex; align-items: center; color: var(--mata); font-weight: 600; text-decoration-color: var(--agua); text-decoration-thickness: 2px; text-underline-offset: 6px; }
 
 .territory-hero { min-height: calc(100svh - 82px); position: relative; display: grid; overflow: clip; isolation: isolate; color: #fff; background: var(--brand-deep); }
 .territory-hero::after { position: absolute; z-index: 1; inset: 0; background: linear-gradient(90deg, rgba(0,57,82,.96) 0%, rgba(0,57,82,.78) 42%, rgba(0,57,82,.16) 72%, rgba(0,57,82,.38) 100%); content: ""; pointer-events: none; }
@@ -160,7 +159,7 @@ form button:disabled { border-color: color-mix(in srgb, var(--mata) 68%, var(--f
   12% { opacity: .78; }
   48% { transform: translate3d(28px,-150px,0) rotate(116deg); }
   88% { opacity: .72; }
-  100% { opacity: 0; transform: translate3d(-8px,90px,0) rotate(248deg); }
+  100% { opacity: 0; transform: translate3d(-8px,420px,0) rotate(248deg); }
 }
 
 @media (prefers-reduced-motion: no-preference) {
@@ -180,7 +179,7 @@ form button:disabled { border-color: color-mix(in srgb, var(--mata) 68%, var(--f
 
 @media (max-width: 960px) {
   .territory-hero::after { background: linear-gradient(90deg, rgba(0,57,82,.94) 0%, rgba(0,57,82,.72) 58%, rgba(0,57,82,.25) 100%); }
-  .territory-hero__copy { max-width: 540px; }
+  .territory-hero__copy { max-width: calc(100% - 320px); }
   .territory-trace { width: 290px; }
   .why-angico__list { grid-template-columns: 1fr; }
   .why-angico__list li + li { padding-left: 0; border-left: 0; border-top: 1px solid color-mix(in srgb, var(--mata) 28%, transparent); }

@@ -84,35 +84,35 @@ export default function TerritoryStoryMap() {
             <path
               className="territory-map__route territory-map__route--one"
               pathLength="1"
-              d="M206 576C342 483 433 422 558 372"
+              d="M700 520C742 474 781 432 820 390"
             />
             <path
               className="territory-map__route territory-map__route--two"
               pathLength="1"
-              d="M558 372C679 321 758 260 865 186"
+              d="M820 390C866 371 913 354 960 340"
             />
             <path
               className="territory-map__route territory-map__route--three"
               pathLength="1"
-              d="M865 186C954 151 1026 139 1100 118"
+              d="M960 340C1007 322 1054 303 1100 285"
             />
 
             <g className="territory-map__marker territory-map__marker--observation">
-              <circle cx="206" cy="576" r="25" />
-              <text x="206" y="582">1</text>
+              <circle cx="700" cy="520" r="25" />
+              <text x="700" y="526">1</text>
             </g>
             <g className="territory-map__marker territory-map__marker--action">
-              <rect x="536" y="350" width="44" height="44" transform="rotate(45 558 372)" />
-              <text x="558" y="378">2</text>
+              <rect x="798" y="368" width="44" height="44" transform="rotate(45 820 390)" />
+              <text x="820" y="396">2</text>
             </g>
             <g className="territory-map__marker territory-map__marker--evidence">
-              <circle cx="865" cy="186" r="25" />
-              <circle cx="865" cy="186" r="10" className="territory-map__marker-core" />
-              <text x="865" y="192">3</text>
+              <circle cx="960" cy="340" r="25" />
+              <circle cx="960" cy="340" r="10" className="territory-map__marker-core" />
+              <text x="960" y="346">3</text>
             </g>
             <g className="territory-map__marker territory-map__marker--result">
-              <path d="m1100 88 30 30-30 30-30-30Z" />
-              <text x="1100" y="124">4</text>
+              <path d="m1100 255 30 30-30 30-30-30Z" />
+              <text x="1100" y="291">4</text>
             </g>
           </g>
         </svg>
