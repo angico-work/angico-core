@@ -212,7 +212,7 @@ export async function loadMapPoints(workspaceId: string): Promise<MapPoint[]> {
 
 export async function listWorkspaces(): Promise<Workspace[]> {
   const result = await loadConfirmedOrSnapshot(
-    { workspaceId: ACCOUNT_SNAPSHOT_WORKSPACE, resource: 'workspaces', contractVersion: 2 },
+    { workspaceId: ACCOUNT_SNAPSHOT_WORKSPACE, resource: 'workspaces', contractVersion: 3 },
     () => requestJson(
       apiUrl('/api/workspaces'),
       { headers: requestHeaders() },
@@ -522,6 +522,23 @@ export function createParticipacao(
     `/api/organizacoes/${organizacaoId}/participacoes`, input,
     'Não foi possível registrar a participação.'
   );
+}
+
+export async function endParticipacao(
+  organizacaoId: number,
+  participacaoId: number,
+  workspaceId: string,
+  endedAt: string
+): Promise<Participacao> {
+  const response = await apiFetch(apiUrl(
+    `/api/organizacoes/${organizacaoId}/participacoes/${participacaoId}/encerramento`
+  ), {
+    method: 'PUT',
+    headers: requestHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ workspaceId, endedAt })
+  });
+  if (!response.ok) throw new Error(await readError(response, 'Não foi possível encerrar a participação.'));
+  return (await response.json()) as Participacao;
 }
 
 export function listRecursos(workspaceId: string): Promise<Recurso[]> {

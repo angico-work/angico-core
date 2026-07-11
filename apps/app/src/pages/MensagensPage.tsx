@@ -47,7 +47,7 @@ import {
 } from './messages/messageView';
 
 export default function MensagensPage() {
-  const { workspaceId } = useOutletContext<AppContext>();
+  const { workspaceId, canWrite } = useOutletContext<AppContext>();
   const ownerId = sessionOwnerId();
   const meId = getSession()?.pessoaId ?? null;
   const online = useOnlineStatus();
@@ -224,6 +224,10 @@ export default function MensagensPage() {
   }, [workspaceId]);
 
   useEffect(() => {
+    if (!canWrite) setShowNew(false);
+  }, [canWrite]);
+
+  useEffect(() => {
     void refreshConversations();
   }, [refreshConversations]);
 
@@ -292,6 +296,7 @@ export default function MensagensPage() {
   useEffect(() => {
     if (activeId == null
       || !ownerId
+      || !canWrite
       || sending
       || draftKey !== activeDraftKey) return;
     const generation = ++draftSaveGeneration.current;
@@ -340,7 +345,7 @@ export default function MensagensPage() {
       if (draftSaveGeneration.current === generation) draftSaveGeneration.current += 1;
       if (draftSaveTimer.current === timer) draftSaveTimer.current = undefined;
     };
-  }, [activeDraftKey, activeId, draft, draftKey, files, messageLink, ownerId, sending, workspaceId]);
+  }, [activeDraftKey, activeId, canWrite, draft, draftKey, files, messageLink, ownerId, sending, workspaceId]);
 
   useEffect(() => {
     const stream = streamRef.current;
@@ -351,7 +356,7 @@ export default function MensagensPage() {
 
   async function handleSend(event: FormEvent) {
     event.preventDefault();
-    if (activeId == null || !ownerId || (!draft.trim() && files.length === 0)) return;
+    if (!canWrite || activeId == null || !ownerId || (!draft.trim() && files.length === 0)) return;
     if (messageLink && !selectedContext) {
       setMessageError('O vínculo selecionado não está mais disponível neste território.');
       return;
@@ -397,7 +402,7 @@ export default function MensagensPage() {
   }
 
   async function retryMessages() {
-    if (!ownerId) return;
+    if (!ownerId || !canWrite) return;
     const requestedWorkspace = workspaceId;
     setSending(true);
     setMessageError(null);
@@ -460,7 +465,7 @@ export default function MensagensPage() {
           <h1>Conversas</h1>
           <p>Trocas ligadas ao trabalho real. O que for enviado entra na memória operacional.</p>
         </div>
-        <button className="primary-button" disabled={!online || contexts.length === 0} onClick={() => setShowNew(true)}>Nova conversa</button>
+        {canWrite && <button className="primary-button" disabled={!online || contexts.length === 0} onClick={() => setShowNew(true)}>Nova conversa</button>}
       </header>
 
       {contextError && <div className="form-error" role="alert">{contextError}</div>}
@@ -496,7 +501,7 @@ export default function MensagensPage() {
         <EmptyState
           title={contexts.length === 0 ? 'Nenhuma conversa disponível' : 'Nenhuma conversa iniciada'}
           message={online ? 'Crie uma conversa ligada a um território, missão ou ação existente.' : 'Conecte este aparelho uma vez para guardar as conversas autorizadas.'}
-          action={contexts.length > 0 ? <button className="secondary-button" disabled={!online} onClick={() => setShowNew(true)}>Nova conversa</button> : undefined}
+          action={canWrite && contexts.length > 0 ? <button className="secondary-button" disabled={!online} onClick={() => setShowNew(true)}>Nova conversa</button> : undefined}
         />
       ) : (
         <div className="message-layout">
@@ -576,14 +581,14 @@ export default function MensagensPage() {
                     }}>Tentar carregar rascunho</button>
                   )}
                   <label htmlFor="message-draft">Mensagem</label>
-                  <textarea id="message-draft" rows={3} value={draft} disabled={!draftReady || sending} onChange={(event) => setDraft(event.target.value)} placeholder="Escreva apenas o que precisa ficar registrado…" />
+                  <textarea id="message-draft" rows={3} value={draft} disabled={!canWrite || !draftReady || sending} onChange={(event) => setDraft(event.target.value)} placeholder={canWrite ? 'Escreva apenas o que precisa ficar registrado…' : 'Conversa disponível somente para leitura.'} />
                   <div className="field message-link-field">
                     <label htmlFor="message-link">Vincular mensagem a <span>(opcional)</span></label>
                     <select
                       id="message-link"
                       aria-label="Vincular mensagem a"
                       value={linkedContextKey}
-                      disabled={!draftReady || sending}
+                      disabled={!canWrite || !draftReady || sending}
                       onChange={(event) => {
                         const context = contexts.find((candidate) => candidate.key === event.target.value);
                         setMessageLink(context ? {
@@ -598,15 +603,15 @@ export default function MensagensPage() {
                     {messageLink && !selectedContext && (
                       <div className="message-link-unavailable">
                         <small>O vínculo salvo não está disponível. Selecione outro ou remova o vínculo para enviar.</small>
-                        <button type="button" disabled={!draftReady || sending} onClick={() => setMessageLink(null)}>Remover vínculo salvo</button>
+                        <button type="button" disabled={!canWrite || !draftReady || sending} onClick={() => setMessageLink(null)}>Remover vínculo salvo</button>
                       </div>
                     )}
                   </div>
                   <footer>
-                    <label className="ghost-button" aria-disabled={!draftReady || sending}>Anexar evidência<input type="file" accept="image/jpeg,image/png,image/webp,application/pdf,text/plain" multiple hidden disabled={!draftReady || sending} onChange={(event) => selectFiles(Array.from(event.target.files ?? []))} /></label>
-                    <button type="submit" className="primary-button" disabled={!draftReady || sending || (!draft.trim() && files.length === 0)}>{sending ? 'Guardando…' : online ? 'Enviar mensagem' : 'Guardar na fila'}</button>
+                    {canWrite && <label className="ghost-button" aria-disabled={!draftReady || sending}>Anexar evidência<input type="file" accept="image/jpeg,image/png,image/webp,application/pdf,text/plain" multiple hidden disabled={!draftReady || sending} onChange={(event) => selectFiles(Array.from(event.target.files ?? []))} /></label>}
+                    {canWrite && <button type="submit" className="primary-button" disabled={!draftReady || sending || (!draft.trim() && files.length === 0)}>{sending ? 'Guardando…' : online ? 'Enviar mensagem' : 'Guardar na fila'}</button>}
                   </footer>
-                  {hasRetryable && online && <button type="button" className="message-retry" disabled={sending} onClick={() => void retryMessages()}>Tentar reenviar mensagens pendentes</button>}
+                  {canWrite && hasRetryable && online && <button type="button" className="message-retry" disabled={sending} onClick={() => void retryMessages()}>Tentar reenviar mensagens pendentes</button>}
                 </form>
               </>
             )}
@@ -614,7 +619,7 @@ export default function MensagensPage() {
         </div>
       )}
 
-      {showNew && <NewConversationDialog
+      {canWrite && showNew && <NewConversationDialog
         workspaceId={workspaceId}
         contexts={contexts}
         onClose={() => setShowNew(false)}

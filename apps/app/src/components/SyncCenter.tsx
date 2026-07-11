@@ -19,6 +19,7 @@ interface Props {
   ownerId?: string;
   workspaceId: string;
   online: boolean;
+  canWrite: boolean;
   onClose: () => void;
 }
 
@@ -112,7 +113,7 @@ interface RevisionDraft {
   localizacao: string;
 }
 
-export default function SyncCenter({ ownerId, workspaceId, online, onClose }: Props) {
+export default function SyncCenter({ ownerId, workspaceId, online, canWrite, onClose }: Props) {
   const [entries, setEntries] = useState<OutboxEntry[]>([]);
   const [metadata, setMetadata] = useState<SyncMetadata>();
   const [loading, setLoading] = useState(true);
@@ -171,7 +172,7 @@ export default function SyncCenter({ ownerId, workspaceId, online, onClose }: Pr
   }, [refresh]);
 
   async function synchronize() {
-    if (!ownerId || !online) return;
+    if (!ownerId || !online || !canWrite) return;
     setSyncing(true);
     setError(null);
     try {
@@ -185,6 +186,7 @@ export default function SyncCenter({ ownerId, workspaceId, online, onClose }: Pr
   }
 
   function openReview(entry: ObservationOutboxEntry) {
+    if (!canWrite) return;
     setReviewingId(entry.id);
     setRevision({
       titulo: entry.body.titulo,
@@ -197,7 +199,7 @@ export default function SyncCenter({ ownerId, workspaceId, online, onClose }: Pr
 
   async function saveRevision(event: FormEvent) {
     event.preventDefault();
-    if (!ownerId || !reviewingId || !revision) return;
+    if (!ownerId || !reviewingId || !revision || !canWrite) return;
     setWorkingId(reviewingId);
     setError(null);
     try {
@@ -299,6 +301,7 @@ export default function SyncCenter({ ownerId, workspaceId, online, onClose }: Pr
         {loadError && <div className="form-error" role="alert">{loadError}</div>}
         {error && <div className="form-error" role="alert">{error}</div>}
         {notice && <div className="sync-notice" role="status">{notice}</div>}
+        {!canWrite && <div className="sync-notice" role="status">Envios e revisões ficam bloqueados enquanto este espaço estiver em modo de leitura.</div>}
         <div className="sync-list" aria-busy={loading}>
           {!loading && entries.length === 0 && (
             <div className="empty-state compact">
@@ -330,7 +333,7 @@ export default function SyncCenter({ ownerId, workspaceId, online, onClose }: Pr
                     <strong className={status.tone}>{status.label}</strong>
                     <span>{status.detail}</span>
                     <time dateTime={entry.updatedAt}>{when(entry.updatedAt)}</time>
-                    {isObservationEntry(entry) && REVIEWABLE.includes(entry.status) && !isReviewing && (
+                    {canWrite && isObservationEntry(entry) && REVIEWABLE.includes(entry.status) && !isReviewing && (
                       <button
                         type="button"
                         className="secondary-button compact-button"
@@ -389,7 +392,7 @@ export default function SyncCenter({ ownerId, workspaceId, online, onClose }: Pr
                     )}
                   </div>
                 </div>
-                {isObservationEntry(entry) && isReviewing && (
+                {canWrite && isObservationEntry(entry) && isReviewing && (
                   <form className="sync-review-form" onSubmit={saveRevision}>
                     <p>Uma nova versão será criada. O conteúdo original continuará no histórico local.</p>
                     <div className="field-row">
@@ -452,7 +455,7 @@ export default function SyncCenter({ ownerId, workspaceId, online, onClose }: Pr
           <button
             type="button"
             className="primary-button"
-            disabled={!ownerId || !online || syncing || sendable === 0}
+            disabled={!ownerId || !online || !canWrite || syncing || sendable === 0}
             onClick={synchronize}
           >
             {syncing ? 'Sincronizando…' : 'Sincronizar agora'}

@@ -25,7 +25,7 @@ function deferred<T>() {
 }
 
 function Page({ workspaceId }: { workspaceId: string }) {
-  return <MemoryRouter><Routes><Route element={<Outlet context={{ workspaceId }} />}><Route index element={<DashboardPage />} /></Route></Routes></MemoryRouter>;
+  return <MemoryRouter><Routes><Route element={<Outlet context={{ workspaceId, workspaceRole: 'OWNER', canWrite: true, canManage: true }} />}><Route index element={<DashboardPage />} /></Route></Routes></MemoryRouter>;
 }
 
 describe('DashboardPage', () => {

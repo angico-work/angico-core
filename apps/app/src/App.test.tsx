@@ -42,7 +42,7 @@ describe('app entry', () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
       if (url === '/api/auth/me') return response(200, session);
-      if (url === '/api/workspaces') return response(200, [{ slug: 'workspace-a', nome: 'Espaço A' }]);
+      if (url === '/api/workspaces') return response(200, [{ slug: 'workspace-a', nome: 'Espaço A', role: 'OWNER' }]);
       if (url.startsWith('/api/pessoas?')) return response(200, []);
       if (url.startsWith('/api/missoes?')) return response(200, [{ id: 20, titulo: 'Missão de teste' }]);
       if (url.startsWith('/api/rastro/MISSAO/20?')) return response(200, {

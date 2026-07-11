@@ -100,13 +100,30 @@ describe('SyncCenter', () => {
   });
 
   it('separates review states from sendable work and identifies the local partition', async () => {
-    render(<SyncCenter ownerId="ana.sp" workspaceId="territorio-a" online onClose={vi.fn()} />);
+    render(<SyncCenter canWrite ownerId="ana.sp" workspaceId="territorio-a" online onClose={vi.fn()} />);
 
     expect(await screen.findByText('Nascente sem proteção')).toBeInTheDocument();
     expect(screen.getByText(/Dados locais de @ana.sp/)).toBeInTheDocument();
     expect(screen.getByText(/Último envio concluído/)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Sincronizar agora' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Revisar Nascente sem proteção' })).toBeInTheDocument();
+  });
+
+  it('keeps inspection and discard available without allowing a viewer to resend or revise', async () => {
+    render(
+      <SyncCenter
+        ownerId="ana.sp"
+        workspaceId="territorio-a"
+        online
+        canWrite={false}
+        onClose={vi.fn()}
+      />
+    );
+
+    expect(await screen.findByText('Nascente sem proteção')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Revisar Nascente sem proteção' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Sincronizar agora' })).toBeDisabled();
+    expect(screen.getByText(/Envios e revisões ficam bloqueados/)).toBeInTheDocument();
   });
 
   it('moves focus into the dialog, closes with Escape and restores the trigger', async () => {
@@ -116,7 +133,7 @@ describe('SyncCenter', () => {
     trigger.focus();
     const onClose = vi.fn();
     const view = render(
-      <SyncCenter ownerId="ana.sp" workspaceId="territorio-a" online onClose={onClose} />
+      <SyncCenter canWrite ownerId="ana.sp" workspaceId="territorio-a" online onClose={onClose} />
     );
 
     const close = await screen.findByRole('button', { name: 'Fechar sincronização' });
@@ -132,7 +149,7 @@ describe('SyncCenter', () => {
   it('shows a recoverable error when local synchronization data cannot be read', async () => {
     vi.mocked(listOutbox).mockRejectedValue(new Error('armazenamento local indisponível'));
 
-    render(<SyncCenter ownerId="ana.sp" workspaceId="territorio-a" online onClose={vi.fn()} />);
+    render(<SyncCenter canWrite ownerId="ana.sp" workspaceId="territorio-a" online onClose={vi.fn()} />);
 
     expect(await screen.findByRole('alert')).toHaveTextContent('armazenamento local indisponível');
   });
@@ -161,12 +178,12 @@ describe('SyncCenter', () => {
       }
     };
     const view = render(
-      <SyncCenter ownerId="ana.sp" workspaceId="territorio-a" online onClose={vi.fn()} />
+      <SyncCenter canWrite ownerId="ana.sp" workspaceId="territorio-a" online onClose={vi.fn()} />
     );
     await waitFor(() => expect(listOutbox).toHaveBeenCalledWith('ana.sp', 'territorio-a'));
 
     view.rerender(
-      <SyncCenter ownerId="ana.sp" workspaceId="territorio-b" online onClose={vi.fn()} />
+      <SyncCenter canWrite ownerId="ana.sp" workspaceId="territorio-b" online onClose={vi.fn()} />
     );
     expect(screen.queryByText('Nascente sem proteção')).not.toBeInTheDocument();
     await waitFor(() => expect(listOutbox).toHaveBeenCalledWith('ana.sp', 'territorio-b'));
@@ -209,19 +226,19 @@ describe('SyncCenter', () => {
         : nextMetadata.promise
     ));
     const view = render(
-      <SyncCenter ownerId="ana.sp" workspaceId="territorio-a" online onClose={vi.fn()} />
+      <SyncCenter canWrite ownerId="ana.sp" workspaceId="territorio-a" online onClose={vi.fn()} />
     );
     expect(await screen.findByText('Nascente sem proteção')).toBeInTheDocument();
 
     view.rerender(
-      <SyncCenter ownerId="ana.sp" workspaceId="territorio-b" online onClose={vi.fn()} />
+      <SyncCenter canWrite ownerId="ana.sp" workspaceId="territorio-b" online onClose={vi.fn()} />
     );
 
     expect(screen.queryByText('Nascente sem proteção')).not.toBeInTheDocument();
   });
 
   it('saves a corrected copy with a new operation before explicitly resending it', async () => {
-    render(<SyncCenter ownerId="ana.sp" workspaceId="territorio-a" online onClose={vi.fn()} />);
+    render(<SyncCenter canWrite ownerId="ana.sp" workspaceId="territorio-a" online onClose={vi.fn()} />);
     fireEvent.click(await screen.findByRole('button', { name: 'Revisar Nascente sem proteção' }));
     fireEvent.change(screen.getByLabelText('Título revisado'), { target: { value: 'Nascente revisada' } });
     fireEvent.click(screen.getByRole('button', { name: 'Salvar correção e reenviar' }));
@@ -241,7 +258,7 @@ describe('SyncCenter', () => {
 
   it('requires confirmation before marking a rejected record as discarded', async () => {
     const confirm = vi.spyOn(window, 'confirm').mockReturnValueOnce(false).mockReturnValueOnce(true);
-    render(<SyncCenter ownerId="ana.sp" workspaceId="territorio-a" online onClose={vi.fn()} />);
+    render(<SyncCenter canWrite ownerId="ana.sp" workspaceId="territorio-a" online onClose={vi.fn()} />);
     fireEvent.click(await screen.findByRole('button', { name: 'Revisar Nascente sem proteção' }));
 
     fireEvent.click(screen.getByRole('button', { name: 'Descartar registro' }));
@@ -272,7 +289,7 @@ describe('SyncCenter', () => {
     vi.mocked(listOutbox).mockResolvedValue([rejectedMessage]);
     vi.mocked(recoverMessageAsDraft).mockResolvedValue(12);
     vi.spyOn(window, 'confirm').mockReturnValue(true);
-    render(<SyncCenter ownerId="ana.sp" workspaceId="territorio-a" online onClose={vi.fn()} />);
+    render(<SyncCenter canWrite ownerId="ana.sp" workspaceId="territorio-a" online onClose={vi.fn()} />);
 
     fireEvent.click(await screen.findByRole('button', { name: 'Retomar como rascunho: Confirmar a próxima visita.' }));
     await waitFor(() => expect(recoverMessageAsDraft).toHaveBeenCalledWith(
@@ -288,7 +305,7 @@ describe('SyncCenter', () => {
   it('identifies queued evidence and its protected local file without offering message recovery', async () => {
     vi.mocked(listOutbox).mockResolvedValue([evidenceEntry]);
 
-    render(<SyncCenter ownerId="ana.sp" workspaceId="territorio-a" online onClose={vi.fn()} />);
+    render(<SyncCenter canWrite ownerId="ana.sp" workspaceId="territorio-a" online onClose={vi.fn()} />);
 
     expect(await screen.findByText('Foto da nascente')).toBeInTheDocument();
     expect(screen.getByText('Evidência · Observação')).toBeInTheDocument();
@@ -312,7 +329,7 @@ describe('SyncCenter', () => {
       status: 'QUEUED' as const
     }]);
 
-    render(<SyncCenter ownerId="ana.sp" workspaceId="territorio-a" online onClose={vi.fn()} />);
+    render(<SyncCenter canWrite ownerId="ana.sp" workspaceId="territorio-a" online onClose={vi.fn()} />);
 
     expect(await screen.findByText('Recuperar a nascente')).toBeInTheDocument();
     expect(screen.getByText('Registro de domínio · Missão')).toBeInTheDocument();
@@ -332,7 +349,7 @@ describe('SyncCenter', () => {
     }]);
     vi.spyOn(window, 'confirm').mockReturnValue(true);
 
-    render(<SyncCenter ownerId="ana.sp" workspaceId="territorio-a" online onClose={vi.fn()} />);
+    render(<SyncCenter canWrite ownerId="ana.sp" workspaceId="territorio-a" online onClose={vi.fn()} />);
     fireEvent.click(await screen.findByRole('button', { name: 'Descartar registro: Luvas' }));
 
     await waitFor(() => expect(discardOutboxEntry).toHaveBeenCalledWith(
@@ -343,7 +360,7 @@ describe('SyncCenter', () => {
   it('retries a retryable evidence through the explicit synchronization action', async () => {
     vi.mocked(listOutbox).mockResolvedValue([{ ...evidenceEntry, status: 'RETRYABLE_ERROR' }]);
 
-    render(<SyncCenter ownerId="ana.sp" workspaceId="territorio-a" online onClose={vi.fn()} />);
+    render(<SyncCenter canWrite ownerId="ana.sp" workspaceId="territorio-a" online onClose={vi.fn()} />);
     fireEvent.click(await screen.findByRole('button', { name: 'Sincronizar agora' }));
 
     await waitFor(() => expect(retryPendingOperations).toHaveBeenCalledWith('ana.sp', 'territorio-a'));
@@ -353,7 +370,7 @@ describe('SyncCenter', () => {
     vi.mocked(listOutbox).mockResolvedValue([{ ...evidenceEntry, status: 'ACTION_REQUIRED' }]);
     const confirm = vi.spyOn(window, 'confirm').mockReturnValueOnce(false).mockReturnValueOnce(true);
 
-    render(<SyncCenter ownerId="ana.sp" workspaceId="territorio-a" online onClose={vi.fn()} />);
+    render(<SyncCenter canWrite ownerId="ana.sp" workspaceId="territorio-a" online onClose={vi.fn()} />);
     const discard = await screen.findByRole('button', { name: 'Descartar evidência: Foto da nascente' });
     fireEvent.click(discard);
     expect(discardOutboxEntry).not.toHaveBeenCalled();

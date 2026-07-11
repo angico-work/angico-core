@@ -7,6 +7,7 @@ import { EmptyState, ErrorState, LoadingState } from '../components/PageFeedback
 import {
   createOrganizacao,
   createParticipacao,
+  endParticipacao,
   listMissoes,
   listOrganizacoes,
   listParticipacoes,
@@ -151,10 +152,11 @@ function OrganizationDialog({ workspaceId, missions, onClose, onCreated }: {
   );
 }
 
-function ParticipationDialog({ workspaceId, organization, people, onClose }: {
+function ParticipationDialog({ workspaceId, organization, people, canWrite, onClose }: {
   workspaceId: string;
   organization: Organizacao;
   people: PessoaHit[];
+  canWrite: boolean;
   onClose: () => void;
 }) {
   const [participations, setParticipations] = useState<Participacao[]>([]);
@@ -165,6 +167,7 @@ function ParticipationDialog({ workspaceId, organization, people, onClose }: {
   const [role, setRole] = useState<ParticipacaoPapel>('MEMBRO');
   const [startedAt, setStartedAt] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [endingId, setEndingId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const activeParticipations = useMemo(
     () => participations.filter((participation) => participation.status === 'ATIVA' && participation.endedAt == null),
@@ -227,21 +230,40 @@ function ParticipationDialog({ workspaceId, organization, people, onClose }: {
     }
   }
 
+  async function end(participation: Participacao) {
+    if (!canWrite || !window.confirm('Encerrar esta participação agora?')) return;
+    setEndingId(participation.id);
+    setError(null);
+    try {
+      const ended = await endParticipacao(
+        organization.id,
+        participation.id,
+        workspaceId,
+        new Date().toISOString()
+      );
+      setParticipations((current) => current.map((entry) => entry.id === ended.id ? ended : entry));
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Não foi possível encerrar a participação.');
+    } finally {
+      setEndingId(null);
+    }
+  }
+
   return (
-    <ModalDialog titleId="new-participation-title" descriptionId="new-participation-description" busy={submitting} onClose={onClose}>
+    <ModalDialog titleId="new-participation-title" descriptionId="new-participation-description" busy={submitting || endingId !== null} onClose={onClose}>
       <header className="dialog-head">
         <div>
           <span className="overline">{organization.nome}</span>
-          <h2 id="new-participation-title">Nova participação</h2>
-          <p id="new-participation-description">Escolha a pessoa pelo nome e registre uma participação ativa.</p>
+          <h2 id="new-participation-title">{canWrite ? 'Nova participação' : 'Participações'}</h2>
+          <p id="new-participation-description">Consulte quem participa deste grupo{canWrite ? ' ou registre uma nova participação.' : '.'}</p>
         </div>
-        <button className="icon-button" type="button" aria-label="Fechar" onClick={onClose} disabled={submitting}>×</button>
+        <button className="icon-button" type="button" aria-label="Fechar" onClick={onClose} disabled={submitting || endingId !== null}>×</button>
       </header>
 
       {loading && <LoadingState label="Carregando participações…" />}
       {loadError && <ErrorState message={loadError} />}
       {!loading && !loadError && activeParticipations.length === 0 && (
-        <EmptyState title="Nenhuma participação ativa" message="Use o formulário abaixo para registrar a primeira pessoa deste grupo." />
+        <EmptyState title="Nenhuma participação ativa" message={canWrite ? 'Use o formulário abaixo para registrar a primeira pessoa deste grupo.' : 'Este grupo não possui participações ativas para consulta.'} />
       )}
       {!loading && !loadError && activeParticipations.length > 0 && (
         <section className="record-sheet" aria-label="Participações registradas">
@@ -254,14 +276,24 @@ function ParticipationDialog({ workspaceId, organization, people, onClose }: {
                   <h3>{personNames.get(participation.pessoaId) ?? 'Pessoa não disponível'}</h3>
                   <div className="record-meta"><span>{PARTICIPATION_ROLES.find((entry) => entry.value === participation.papel)?.label ?? participation.papel}</span><span>Ativa desde {formatDate(participation.startedAt)}</span></div>
                 </div>
-                <div className="record-provenance"><strong>Ativa</strong></div>
+                <div className="record-provenance">
+                  <strong>Ativa</strong>
+                  {canWrite && (
+                    <button
+                      type="button"
+                      className="danger-text-button"
+                      disabled={endingId !== null}
+                      onClick={() => void end(participation)}
+                    >{endingId === participation.id ? 'Encerrando…' : 'Encerrar participação'}</button>
+                  )}
+                </div>
               </article>
             ))}
           </div>
         </section>
       )}
 
-      <form onSubmit={submit}>
+      {canWrite && <form onSubmit={submit}>
         <div className="field">
           <label htmlFor="participation-person">Pessoa</label>
           <AngicoIdField
@@ -288,16 +320,16 @@ function ParticipationDialog({ workspaceId, organization, people, onClose }: {
         </div>
         {error && <div className="form-error" role="alert">{error}</div>}
         <footer className="dialog-actions">
-          <button className="ghost-button" type="button" onClick={onClose} disabled={submitting}>Cancelar</button>
-          <button className="primary-button" type="submit" disabled={submitting}>{submitting ? 'Registrando…' : 'Registrar participação'}</button>
+          <button className="ghost-button" type="button" onClick={onClose} disabled={submitting || endingId !== null}>Cancelar</button>
+          <button className="primary-button" type="submit" disabled={submitting || endingId !== null}>{submitting ? 'Registrando…' : 'Registrar participação'}</button>
         </footer>
-      </form>
+      </form>}
     </ModalDialog>
   );
 }
 
 export default function OrganizacoesPage() {
-  const { workspaceId } = useOutletContext<AppContext>();
+  const { workspaceId, canWrite } = useOutletContext<AppContext>();
   const [organizations, setOrganizations] = useState<Organizacao[]>([]);
   const [missions, setMissions] = useState<MissaoRegistro[]>([]);
   const [people, setPeople] = useState<PessoaHit[]>([]);
@@ -309,7 +341,7 @@ export default function OrganizacoesPage() {
   useEffect(() => {
     setCreating(false);
     setParticipationTarget(null);
-  }, [workspaceId]);
+  }, [workspaceId, canWrite]);
 
   useEffect(() => {
     let active = true;
@@ -341,13 +373,13 @@ export default function OrganizacoesPage() {
           <h1>Organizações</h1>
           <p>Registre coletivos e instituições que sustentam o trabalho deste espaço.</p>
         </div>
-        <button className="primary-button" type="button" onClick={() => setCreating(true)}>Nova organização</button>
+        {canWrite && <button className="primary-button" type="button" onClick={() => setCreating(true)}>Nova organização</button>}
       </header>
       {organizations.length === 0 ? (
         <EmptyState
           title="Nenhuma organização cadastrada"
           message="Cadastre o primeiro coletivo ou instituição deste espaço de trabalho."
-          action={<button className="secondary-button" type="button" onClick={() => setCreating(true)}>Cadastrar primeira organização</button>}
+          action={canWrite ? <button className="secondary-button" type="button" onClick={() => setCreating(true)}>Cadastrar primeira organização</button> : undefined}
         />
       ) : (
         <section className="record-sheet" aria-label="Organizações cadastradas">
@@ -372,9 +404,9 @@ export default function OrganizacoesPage() {
                     <button
                       className="secondary-button"
                       type="button"
-                      aria-label={`Registrar participação em ${organization.nome}`}
+                      aria-label={`${canWrite ? 'Registrar' : 'Ver'} participação em ${organization.nome}`}
                       onClick={() => setParticipationTarget(organization)}
-                    >Registrar participação</button>
+                    >{canWrite ? 'Registrar participação' : 'Ver participações'}</button>
                   </div>
                 </article>
               );
@@ -382,7 +414,7 @@ export default function OrganizacoesPage() {
           </div>
         </section>
       )}
-      {creating && (
+      {canWrite && creating && (
         <OrganizationDialog
           workspaceId={workspaceId}
           missions={missions}
@@ -398,6 +430,7 @@ export default function OrganizacoesPage() {
           workspaceId={workspaceId}
           organization={participationTarget}
           people={people}
+          canWrite={canWrite}
           onClose={() => setParticipationTarget(null)}
         />
       )}

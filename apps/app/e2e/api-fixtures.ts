@@ -18,6 +18,7 @@ const responses = {
   workspaces: [{
     slug: WORKSPACE_ID,
     nome: 'Território de verificação',
+    role: 'OWNER',
     descricao: null,
     cidade: 'Recife',
     estado: 'PE',

@@ -16,6 +16,9 @@ import type { PessoaHit, Workspace } from '../types';
 
 export interface AppContext {
   workspaceId: string;
+  workspaceRole: Workspace['role'] | null;
+  canWrite: boolean;
+  canManage: boolean;
 }
 
 function workspaceLabel(workspaceId: string): string {
@@ -274,8 +277,12 @@ export default function AppShell() {
     }
   }
 
-  const context: AppContext = { workspaceId: activeSlug };
-  const activeName = workspaces.find((w) => w.slug === activeSlug)?.nome ?? workspaceLabel(activeSlug);
+  const activeWorkspace = workspaces.find((w) => w.slug === activeSlug);
+  const activeRole = activeWorkspace?.role ?? null;
+  const canWrite = activeRole !== null && activeRole !== 'VIEWER';
+  const canManage = activeRole === 'OWNER' || activeRole === 'ADMIN';
+  const context: AppContext = { workspaceId: activeSlug, workspaceRole: activeRole, canWrite, canManage };
+  const activeName = activeWorkspace?.nome ?? workspaceLabel(activeSlug);
 
   const effectiveProfile: PessoaHit | null = profile ?? (session ? {
     id: session.pessoaId,
@@ -297,7 +304,7 @@ export default function AppShell() {
         onCreateWorkspace={handleCreateWorkspace}
         onDeleteWorkspace={handleDeleteWorkspace}
         userName={effectiveProfile?.nome ?? session?.nome ?? 'Visitante'}
-        userRole={session?.papel ?? 'Membro do espaço de trabalho'}
+        userRole={activeRole ?? 'VIEWER'}
         userFoto={effectiveProfile?.foto ?? null}
         open={sidebarOpen}
         onNavigate={() => setSidebarOpen(false)}
@@ -309,11 +316,15 @@ export default function AppShell() {
         workspaceLabel={activeName}
         workspaceId={activeSlug}
         ownerId={activeIdentity.ownerId}
+        canWrite={canWrite}
         sidebarOpen={sidebarOpen}
         onToggleSidebar={() => setSidebarOpen((v) => !v)}
         onWorkspaceClick={openProfile}
       />
       <main className="app-main">
+        {activeRole === 'VIEWER' && (
+          <div className="readonly-notice" role="status">Este espaço está em modo de leitura.</div>
+        )}
         {(accountError || profileError) && (
           <div className="form-error" role="alert">{accountError || profileError}</div>
         )}

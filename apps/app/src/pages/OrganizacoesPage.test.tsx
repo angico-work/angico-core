@@ -6,6 +6,7 @@ import OrganizacoesPage from './OrganizacoesPage';
 import {
   createOrganizacao,
   createParticipacao,
+  endParticipacao,
   listMissoes,
   listOrganizacoes,
   listParticipacoes,
@@ -17,6 +18,7 @@ import type { MissaoRegistro, Organizacao, Participacao, PessoaHit } from '../ty
 vi.mock('../lib/api', () => ({
   createOrganizacao: vi.fn(),
   createParticipacao: vi.fn(),
+  endParticipacao: vi.fn(),
   listMissoes: vi.fn(),
   listOrganizacoes: vi.fn(),
   listParticipacoes: vi.fn(),
@@ -73,11 +75,11 @@ const person = {
   createdAt: '2026-07-10T10:00:00Z'
 } satisfies PessoaHit;
 
-function Page({ workspaceId }: { workspaceId: string }) {
+function Page({ workspaceId, canWrite = true }: { workspaceId: string; canWrite?: boolean }) {
   return (
     <MemoryRouter>
       <Routes>
-        <Route element={<Outlet context={{ workspaceId }} />}>
+        <Route element={<Outlet context={{ workspaceId, workspaceRole: canWrite ? 'OWNER' : 'VIEWER', canWrite, canManage: canWrite }} />}>
           <Route index element={<OrganizacoesPage />} />
         </Route>
       </Routes>
@@ -85,8 +87,8 @@ function Page({ workspaceId }: { workspaceId: string }) {
   );
 }
 
-function renderPage(workspaceId = 'workspace-a') {
-  return render(<Page workspaceId={workspaceId} />);
+function renderPage(workspaceId = 'workspace-a', canWrite = true) {
+  return render(<Page workspaceId={workspaceId} canWrite={canWrite} />);
 }
 
 describe('OrganizacoesPage', () => {
@@ -98,6 +100,11 @@ describe('OrganizacoesPage', () => {
     vi.mocked(searchPessoas).mockResolvedValue([person]);
     vi.mocked(createOrganizacao).mockResolvedValue(organization);
     vi.mocked(createParticipacao).mockResolvedValue(participation);
+    vi.mocked(endParticipacao).mockResolvedValue({
+      ...participation,
+      status: 'ENCERRADA',
+      endedAt: '2026-07-10T16:00:00Z'
+    });
   });
 
   afterEach(() => {
@@ -198,6 +205,30 @@ describe('OrganizacoesPage', () => {
     expect(within(records).getByRole('heading', { name: 'Mara Lima' })).toBeInTheDocument();
     expect(within(records).getByText(/Representação/)).toBeInTheDocument();
     expect(within(records).queryByText(/Parceiro/)).not.toBeInTheDocument();
+  });
+
+  it('ends an active participation through the typed endpoint', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Registrar participação em Rede da Nascente' }));
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Encerrar participação' }));
+
+    await waitFor(() => expect(endParticipacao).toHaveBeenCalledWith(
+      7, 13, 'workspace-a', expect.any(String)
+    ));
+    await waitFor(() => expect(screen.queryByRole('heading', { name: 'Mara Lima' })).not.toBeInTheDocument());
+  });
+
+  it('keeps organizations and participations inspectable without viewer write controls', async () => {
+    renderPage('workspace-a', false);
+
+    expect(await screen.findByRole('heading', { name: 'Rede da Nascente' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Nova organização' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Ver participação em Rede da Nascente' }));
+    expect(await screen.findByRole('dialog', { name: 'Participações' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Encerrar participação' })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Pessoa')).not.toBeInTheDocument();
   });
 
   it('closes an organization modal when the active workspace changes', async () => {

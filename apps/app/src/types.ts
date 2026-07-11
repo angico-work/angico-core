@@ -557,9 +557,12 @@ export interface RastroResponse {
   asOf: string;
 }
 
+export type WorkspaceRole = 'OWNER' | 'ADMIN' | 'COORDINATOR' | 'MAPPER' | 'MEMBER' | 'VIEWER';
+
 export interface Workspace {
   slug: string;
   nome: string;
+  role: WorkspaceRole;
   descricao?: string | null;
   cidade?: string | null;
   estado?: string | null;

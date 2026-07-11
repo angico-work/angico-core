@@ -47,7 +47,7 @@ function renderPage(entry = '/indicadores') {
   return render(
     <MemoryRouter initialEntries={[entry]}>
       <Routes>
-        <Route element={<Outlet context={{ workspaceId: 'workspace-a' }} />}>
+        <Route element={<Outlet context={{ workspaceId: 'workspace-a', workspaceRole: 'OWNER', canWrite: true, canManage: true }} />}>
           <Route path="/indicadores" element={<ImpactoPage />} />
         </Route>
       </Routes>

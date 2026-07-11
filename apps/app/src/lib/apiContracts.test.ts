@@ -76,8 +76,9 @@ describe('API snapshot contracts', () => {
   });
 
   it('validates workspace and Rastro items beyond their outer container', () => {
-    expect(isWorkspaceList([{ slug: 'territorio-a', nome: 'Território A' }])).toBe(true);
-    expect(isWorkspaceList([{ slug: '', nome: 'Território A' }])).toBe(false);
+    expect(isWorkspaceList([{ slug: 'territorio-a', nome: 'Território A', role: 'OWNER' }])).toBe(true);
+    expect(isWorkspaceList([{ slug: 'territorio-a', nome: 'Território A' }])).toBe(false);
+    expect(isWorkspaceList([{ slug: '', nome: 'Território A', role: 'OWNER' }])).toBe(false);
 
     const trace = {
       workspaceId: 'territorio-a',
@@ -143,6 +144,7 @@ describe('API snapshot contracts', () => {
     const workspace = {
       slug: 'territorio-a',
       nome: 'Território A',
+      role: 'OWNER',
       createdAt: 'ontem'
     };
     const memory = {
@@ -247,10 +249,10 @@ describe('API snapshot contracts', () => {
     expect(isTerritorioList([{ ...territory, boundingBox: [-23, -24, -47, -46] }], 'territorio-a')).toBe(false);
     expect(isTerritorioList([{ ...territory, boundingBox: [-24, -23, -181, -46] }], 'territorio-a')).toBe(false);
     expect(isWorkspaceList([{
-      slug: 'territorio-a', nome: 'Território A', centerLatitude: 91, centerLongitude: 0
+      slug: 'territorio-a', nome: 'Território A', role: 'OWNER', centerLatitude: 91, centerLongitude: 0
     }])).toBe(false);
     expect(isWorkspaceList([{
-      slug: 'territorio-a', nome: 'Território A', centerLatitude: -23.5
+      slug: 'territorio-a', nome: 'Território A', role: 'OWNER', centerLatitude: -23.5
     }])).toBe(false);
     expect(isMensagemList([message], 'territorio-a', 12)).toBe(true);
     expect(isMensagemList([{

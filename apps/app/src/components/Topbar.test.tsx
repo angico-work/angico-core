@@ -12,6 +12,7 @@ describe('Topbar synchronization access', () => {
       <Topbar
         workspaceLabel="Território do Sol"
         workspaceId="territorio-sol"
+        canWrite
         sidebarOpen={false}
         onToggleSidebar={() => undefined}
         onWorkspaceClick={() => undefined}

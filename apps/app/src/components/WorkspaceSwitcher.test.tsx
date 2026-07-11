@@ -16,7 +16,7 @@ describe('WorkspaceSwitcher accessibility', () => {
   it('restores focus to the stable trigger after closing the members dialog', async () => {
     render(
       <WorkspaceSwitcher
-        workspaces={[{ slug: 'workspace-a', nome: 'Território A' }]}
+        workspaces={[{ slug: 'workspace-a', nome: 'Território A', role: 'OWNER' }]}
         activeSlug="workspace-a"
         onSwitch={() => undefined}
         onCreate={async () => undefined}
@@ -41,8 +41,8 @@ describe('WorkspaceSwitcher accessibility', () => {
     render(
       <WorkspaceSwitcher
         workspaces={[
-          { slug: 'workspace-a', nome: 'Território A' },
-          { slug: 'coletivo-jardim-novo', nome: 'Dados de demonstração' }
+          { slug: 'workspace-a', nome: 'Território A', role: 'OWNER' },
+          { slug: 'coletivo-jardim-novo', nome: 'Dados de demonstração', role: 'OWNER' }
         ]}
         activeSlug="workspace-a"
         onSwitch={() => undefined}
@@ -59,8 +59,8 @@ describe('WorkspaceSwitcher accessibility', () => {
     render(
       <WorkspaceSwitcher
         workspaces={[
-          { slug: 'workspace-a', nome: 'Território A' },
-          { slug: 'workspace-b', nome: 'Território B' }
+          { slug: 'workspace-a', nome: 'Território A', role: 'OWNER' },
+          { slug: 'workspace-b', nome: 'Território B', role: 'OWNER' }
         ]}
         activeSlug="workspace-a"
         onSwitch={() => undefined}
@@ -78,5 +78,23 @@ describe('WorkspaceSwitcher accessibility', () => {
 
     expect(screen.queryByRole('button', { name: 'Território B' })).not.toBeInTheDocument();
     expect(trigger).toHaveFocus();
+  });
+
+  it('keeps membership inspection read-only for a viewer', async () => {
+    render(
+      <WorkspaceSwitcher
+        workspaces={[{ slug: 'workspace-a', nome: 'Território A', role: 'VIEWER' }]}
+        activeSlug="workspace-a"
+        onSwitch={() => undefined}
+        onCreate={async () => undefined}
+        onDelete={async () => undefined}
+      />
+    );
+    fireEvent.click(screen.getByRole('button', { name: /Espaço de trabalho/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Membros' }));
+
+    expect(await screen.findByRole('dialog', { name: 'Membros · Território A' })).toBeInTheDocument();
+    expect(screen.getByText(/consultar os membros/)).toBeInTheDocument();
+    expect(screen.queryByLabelText('Adicionar por Angico ID')).not.toBeInTheDocument();
   });
 });

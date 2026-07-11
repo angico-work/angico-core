@@ -74,7 +74,7 @@ function moduleView(workspaceId: string) {
   return (
     <MemoryRouter initialEntries={['/problemas']}>
       <Routes>
-        <Route element={<Outlet context={{ workspaceId }} />}>
+        <Route element={<Outlet context={{ workspaceId, workspaceRole: 'OWNER', canWrite: true, canManage: true }} />}>
           <Route path="/problemas" element={<ModulePage configKey="problemas" />} />
         </Route>
       </Routes>
@@ -132,7 +132,7 @@ describe('ModulePage offline observations', () => {
     render(
       <MemoryRouter initialEntries={['/observacoes']}>
         <Routes>
-          <Route element={<Outlet context={{ workspaceId: 'territorio-a' }} />}>
+          <Route element={<Outlet context={{ workspaceId: 'territorio-a', workspaceRole: 'OWNER', canWrite: true, canManage: true }} />}>
             <Route path="/observacoes" element={<ModulePage configKey="observacoes" />} />
           </Route>
         </Routes>
@@ -150,7 +150,7 @@ describe('ModulePage offline observations', () => {
     render(
       <MemoryRouter initialEntries={['/observacoes']}>
         <Routes>
-          <Route element={<Outlet context={{ workspaceId: 'territorio-a' }} />}>
+          <Route element={<Outlet context={{ workspaceId: 'territorio-a', workspaceRole: 'OWNER', canWrite: true, canManage: true }} />}>
             <Route path="/observacoes" element={<ModulePage configKey="observacoes" />} />
           </Route>
         </Routes>
@@ -165,7 +165,7 @@ describe('ModulePage offline observations', () => {
     render(
       <MemoryRouter initialEntries={['/acoes?create=1&missaoId=20']}>
         <Routes>
-          <Route element={<Outlet context={{ workspaceId: 'territorio-a' }} />}>
+          <Route element={<Outlet context={{ workspaceId: 'territorio-a', workspaceRole: 'OWNER', canWrite: true, canManage: true }} />}>
             <Route path="/acoes" element={<ModulePage configKey="acoes" />} />
           </Route>
         </Routes>
@@ -181,7 +181,7 @@ describe('ModulePage offline observations', () => {
     render(
       <MemoryRouter initialEntries={['/observacoes?create=1&territorioId=4']}>
         <Routes>
-          <Route element={<Outlet context={{ workspaceId: 'territorio-a' }} />}>
+          <Route element={<Outlet context={{ workspaceId: 'territorio-a', workspaceRole: 'OWNER', canWrite: true, canManage: true }} />}>
             <Route path="/observacoes" element={<ModulePage configKey="observacoes" />} />
           </Route>
         </Routes>
@@ -209,7 +209,7 @@ describe('ModulePage offline observations', () => {
     render(
       <MemoryRouter initialEntries={['/problemas', '/problemas?create=1']} initialIndex={1}>
         <Routes>
-          <Route element={<Outlet context={{ workspaceId: 'territorio-a' }} />}>
+          <Route element={<Outlet context={{ workspaceId: 'territorio-a', workspaceRole: 'OWNER', canWrite: true, canManage: true }} />}>
             <Route path="/problemas" element={<><BackButton /><ModulePage configKey="problemas" /></>} />
           </Route>
         </Routes>
@@ -220,5 +220,50 @@ describe('ModulePage offline observations', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Voltar' }));
 
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+  });
+
+  it('does not open or advertise field creation for a viewer deep link', async () => {
+    vi.mocked(listEntities).mockResolvedValue([]);
+    render(
+      <MemoryRouter initialEntries={['/problemas?create=1&territorioId=4']}>
+        <Routes>
+          <Route element={<Outlet context={{ workspaceId: 'territorio-a', workspaceRole: 'VIEWER', canWrite: false, canManage: false }} />}>
+            <Route path="/problemas" element={<ModulePage configKey="problemas" />} />
+          </Route>
+        </Routes>
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText('Nenhum problema reconhecido')).toBeInTheDocument();
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Registrar problema' })).not.toBeInTheDocument();
+  });
+
+  it('preserves a create deep link while the workspace role is loading', async () => {
+    vi.mocked(listEntities).mockResolvedValue([]);
+    const view = render(
+      <MemoryRouter initialEntries={['/problemas?create=1&territorioId=4']}>
+        <Routes>
+          <Route element={<Outlet context={{ workspaceId: 'territorio-a', workspaceRole: null, canWrite: false, canManage: false }} />}>
+            <Route path="/problemas" element={<ModulePage configKey="problemas" />} />
+          </Route>
+        </Routes>
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText('Nenhum problema reconhecido')).toBeInTheDocument();
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+
+    view.rerender(
+      <MemoryRouter initialEntries={['/problemas?create=1&territorioId=4']}>
+        <Routes>
+          <Route element={<Outlet context={{ workspaceId: 'territorio-a', workspaceRole: 'OWNER', canWrite: true, canManage: true }} />}>
+            <Route path="/problemas" element={<ModulePage configKey="problemas" />} />
+          </Route>
+        </Routes>
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByRole('dialog', { name: 'Novo problema' })).toBeInTheDocument();
   });
 });

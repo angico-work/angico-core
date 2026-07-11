@@ -93,7 +93,7 @@ function ResultDialog({ workspaceId, actions, requestedActionId, onClose, onSubm
 }
 
 export default function ResultadosPage() {
-  const { workspaceId } = useOutletContext<AppContext>();
+  const { workspaceId, workspaceRole, canWrite } = useOutletContext<AppContext>();
   const [searchParams, setSearchParams] = useSearchParams();
   const [results, setResults] = useState<Resultado[]>([]);
   const [actions, setActions] = useState<Acao[]>([]);
@@ -141,18 +141,22 @@ export default function ResultadosPage() {
     return true;
   };
 
+  useEffect(() => {
+    if (workspaceRole === 'VIEWER' && creating) setSearchParams({}, { replace: true });
+  }, [creating, setSearchParams, workspaceRole]);
+
   return (
     <div className="page operational-page">
       <header className="page-head">
         <div><span className="overline">Mudanças alcançadas</span><h1>Resultados</h1><p>Registre mudanças observadas e mantenha cada uma ligada à ação que a produziu.</p></div>
-        <button className="primary-button" type="button" onClick={openDialog}>Novo resultado</button>
+        {canWrite && <button className="primary-button" type="button" onClick={openDialog}>Novo resultado</button>}
       </header>
 
       {notice && <div className="inline-status" role="status">{notice}</div>}
 
       {loading && <LoadingState label="Carregando resultados…" />}
       {error && <ErrorState message={error} onRetry={() => void refresh()} />}
-      {!loading && !error && results.length === 0 && <EmptyState title="Nenhum resultado registrado" message="Registre a primeira mudança observada a partir de uma ação real." action={<button className="secondary-button" type="button" onClick={openDialog}>Novo resultado</button>} />}
+      {!loading && !error && results.length === 0 && <EmptyState title="Nenhum resultado registrado" message="Registre a primeira mudança observada a partir de uma ação real." action={canWrite ? <button className="secondary-button" type="button" onClick={openDialog}>Novo resultado</button> : undefined} />}
       {!loading && !error && results.length > 0 && (
         <section className="record-sheet" aria-label="Resultados registrados">
           <header className="record-sheet-head"><span>{results.length} {results.length === 1 ? 'resultado' : 'resultados'}</span><span>Registros disponíveis</span></header>
@@ -168,7 +172,7 @@ export default function ResultadosPage() {
         </section>
       )}
 
-      {creating && !loading && !error && (
+      {canWrite && creating && !loading && !error && (
         <ResultDialog
           workspaceId={workspaceId}
           actions={actions}

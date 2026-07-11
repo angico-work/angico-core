@@ -342,6 +342,7 @@ export function isWorkspaceList(value: unknown): value is Workspace[] {
     object(entry)
     && presentText(entry.slug)
     && presentText(entry.nome)
+    && allowed(entry.role, WORKSPACE_ROLES)
     && (entry.descricao === undefined || nullableText(entry.descricao))
     && (entry.cidade === undefined || nullableText(entry.cidade))
     && (entry.estado === undefined || nullableText(entry.estado))

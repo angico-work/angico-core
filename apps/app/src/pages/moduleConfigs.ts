@@ -1,7 +1,7 @@
 export interface FieldDef {
   name: string;
   label: string;
-  type: 'text' | 'textarea' | 'select' | 'angico-search';
+  type: 'text' | 'textarea' | 'select';
   options?: string[];
   required?: boolean;
   placeholder?: string;
@@ -86,10 +86,9 @@ export const MODULE_CONFIGS: Record<string, ModuleConfig> = {
   pessoas: {
     key: 'pessoas', title: 'Pessoas e grupos', singular: 'Participante', newLabel: 'Adicionar participante',
     subtitle: 'Quem torna o trabalho possível e forma a trajetória coletiva.',
-    emptyTitle: 'Nenhuma participação registrada', emptyMessage: 'Adicione uma pessoa pelo nome ou identidade Angico.',
+    emptyTitle: 'Nenhuma participação registrada', emptyMessage: 'Adicione uma pessoa pelo nome. Contas com acesso são geridas em Membros.',
     path: '/api/pessoas', accent: '#34ABA6',
     fields: [
-      { name: 'angicoId', label: 'Identidade Angico', type: 'angico-search', placeholder: 'Buscar por nome ou @identidade' },
       { name: 'nome', label: 'Nome', type: 'text', required: true },
       { name: 'papel', label: 'Papel no território', type: 'text', placeholder: 'Ex.: mobilizadora, educador, cooperativa' }
     ],

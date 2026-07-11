@@ -8,6 +8,7 @@ interface Props {
   workspaceLabel: string;
   workspaceId: string;
   ownerId?: string;
+  canWrite: boolean;
   sidebarOpen: boolean;
   onToggleSidebar: () => void;
   onWorkspaceClick: () => void;
@@ -35,7 +36,7 @@ function syncLabel(online: boolean, state: SyncState): string {
   return online ? 'Em dia' : 'Offline';
 }
 
-export default function Topbar({ workspaceLabel, workspaceId, ownerId, sidebarOpen, onToggleSidebar, onWorkspaceClick }: Props) {
+export default function Topbar({ workspaceLabel, workspaceId, ownerId, canWrite, sidebarOpen, onToggleSidebar, onWorkspaceClick }: Props) {
   const online = useOnlineStatus();
   const [syncState, setSyncState] = useState<SyncState>(EMPTY_SYNC_STATE);
   const [showSync, setShowSync] = useState(false);
@@ -97,6 +98,7 @@ export default function Topbar({ workspaceLabel, workspaceId, ownerId, sidebarOp
           ownerId={ownerId}
           workspaceId={workspaceId}
           online={online}
+          canWrite={canWrite}
           onClose={() => setShowSync(false)}
         />
       )}

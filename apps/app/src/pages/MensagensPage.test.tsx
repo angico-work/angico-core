@@ -110,11 +110,15 @@ function deferred<T>() {
   return { promise, resolve };
 }
 
-function PageUnderTest({ workspaceId = 'territorio-a' }: { workspaceId?: string }) {
+function PageUnderTest({ workspaceId = 'territorio-a', canWrite = true, workspaceRole = canWrite ? 'OWNER' : 'VIEWER' }: {
+  workspaceId?: string;
+  canWrite?: boolean;
+  workspaceRole?: 'OWNER' | 'VIEWER' | null;
+}) {
   return (
     <MemoryRouter initialEntries={['/']}>
       <Routes>
-        <Route element={<Outlet context={{ workspaceId }} />}>
+        <Route element={<Outlet context={{ workspaceId, workspaceRole, canWrite, canManage: canWrite }} />}>
           <Route index element={<MensagensPage />} />
         </Route>
       </Routes>
@@ -184,6 +188,26 @@ describe('MensagensPage', () => {
 
     expect(await screen.findByText('Trabalho offline')).toBeInTheDocument();
     expect(create).toBeDisabled();
+  });
+
+  it('keeps conversations readable without viewer send controls', async () => {
+    render(<PageUnderTest canWrite={false} />);
+
+    expect(await screen.findByText('A nascente precisa de proteção.')).toBeInTheDocument();
+    expect(screen.getByLabelText('Mensagem')).toBeDisabled();
+    expect(screen.queryByRole('button', { name: 'Nova conversa' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Enviar mensagem' })).not.toBeInTheDocument();
+    expect(captureMessage).not.toHaveBeenCalled();
+  });
+
+  it('keeps loaded conversations when a pending role resolves', async () => {
+    const view = render(<PageUnderTest workspaceRole={null} canWrite={false} />);
+    expect(await screen.findByText('A nascente precisa de proteção.')).toBeInTheDocument();
+
+    view.rerender(<PageUnderTest workspaceRole="OWNER" canWrite />);
+
+    expect(screen.getByText('A nascente precisa de proteção.')).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'Nova conversa' })).toBeInTheDocument();
   });
 
   it('keeps every new-conversation action disabled offline in the empty state', async () => {

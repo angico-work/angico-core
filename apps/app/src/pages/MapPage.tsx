@@ -15,7 +15,7 @@ const TYPES: Array<{ key: MapPoint['type']; label: string; color: string }> = [
 ];
 
 export default function MapPage() {
-  const { workspaceId } = useOutletContext<AppContext>();
+  const { workspaceId, canWrite } = useOutletContext<AppContext>();
   const [points, setPoints] = useState<MapPoint[]>([]);
   const [active, setActive] = useState<Set<string>>(new Set(TYPES.map((type) => type.key)));
   const [pending, setPending] = useState<{ lat: number; lng: number } | null>(null);
@@ -52,7 +52,7 @@ export default function MapPage() {
     setQuery('');
     setFlyTo(null);
     return () => { geocodeRequest.current += 1; };
-  }, [workspaceId]);
+  }, [workspaceId, canWrite]);
   const visible = useMemo(() => points.filter((point) => active.has(point.type)), [points, active]);
   const center = flyTo ?? (points[0] ? [points[0].latitude, points[0].longitude] as [number, number] : null);
 
@@ -90,18 +90,18 @@ export default function MapPage() {
 
       {loading ? <LoadingState label="Carregando pontos do território…" /> : error ? <ErrorState message={error} onRetry={() => void refresh()} /> : center ? (
         <section className="map-canvas">
-          <MapView points={visible} center={center} zoom={flyTo ? 14 : points.length ? 15 : 4} height="min(72vh, 720px)" recenter={Boolean(flyTo)} fitToPoints={!flyTo} onMapClick={(lat, lng) => setPending({ lat, lng })} />
-          <div className="map-instruction">Toque no mapa para registrar neste local</div>
+          <MapView points={visible} center={center} zoom={flyTo ? 14 : points.length ? 15 : 4} height="min(72vh, 720px)" recenter={Boolean(flyTo)} fitToPoints={!flyTo} onMapClick={canWrite ? (lat, lng) => setPending({ lat, lng }) : undefined} />
+          {canWrite && <div className="map-instruction">Toque no mapa para registrar neste local</div>}
         </section>
       ) : (
         <EmptyState
           title="Nenhuma localização real disponível"
           message="Busque um endereço acima ou registre uma observação com localização confirmada."
-          action={<Link className="secondary-button" to="/app/observacoes?create=1">Registrar observação</Link>}
+          action={canWrite ? <Link className="secondary-button" to="/app/observacoes?create=1">Registrar observação</Link> : undefined}
         />
       )}
 
-      {pending && <NewEntityModal workspaceId={workspaceId} initialLat={pending.lat} initialLng={pending.lng} onClose={() => setPending(null)} onCreated={() => { setPending(null); setFlyTo(null); setQuery(''); void refresh(); }} />}
+      {canWrite && pending && <NewEntityModal workspaceId={workspaceId} initialLat={pending.lat} initialLng={pending.lng} onClose={() => setPending(null)} onCreated={() => { setPending(null); setFlyTo(null); setQuery(''); void refresh(); }} />}
     </div>
   );
 }

@@ -22,6 +22,7 @@ import {
   apiUrl,
   createOrganizacao,
   createParticipacao,
+  endParticipacao,
   createTerritorio,
   createWorkspace,
   listEvidencias,
@@ -431,6 +432,24 @@ describe('cookie session API', () => {
       status: 'ATIVA',
       pessoaId: 7
     }));
+  });
+
+  it('ends a participation with explicit workspace context', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(response(200, { id: 12, status: 'ENCERRADA' }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await endParticipacao(11, 12, 'workspace-a', '2026-07-10T16:00:00Z');
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/organizacoes/11/participacoes/12/encerramento',
+      expect.objectContaining({
+        method: 'PUT',
+        body: JSON.stringify({
+          workspaceId: 'workspace-a',
+          endedAt: '2026-07-10T16:00:00Z'
+        })
+      })
+    );
   });
 
   it('keeps workspace filters encoded on the new operational reads', async () => {

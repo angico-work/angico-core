@@ -210,7 +210,7 @@ function EvidenceDialog({ workspaceId, records, requestedType, requestedId, onCl
 }
 
 export default function EvidenciasPage() {
-  const { workspaceId } = useOutletContext<AppContext>();
+  const { workspaceId, workspaceRole, canWrite } = useOutletContext<AppContext>();
   const [searchParams, setSearchParams] = useSearchParams();
   const [evidences, setEvidences] = useState<Evidencia[]>([]);
   const [localEvidences, setLocalEvidences] = useState<LocalEvidence[]>([]);
@@ -273,17 +273,21 @@ export default function EvidenciasPage() {
   const creating = searchParams.get('create') === '1';
   const closeDialog = () => setSearchParams({}, { replace: true });
 
+  useEffect(() => {
+    if (workspaceRole === 'VIEWER' && creating) setSearchParams({}, { replace: true });
+  }, [creating, setSearchParams, workspaceRole]);
+
   return (
     <div className="page operational-page">
       <header className="page-head">
         <div><span className="overline">Comprovação do percurso</span><h1>Evidências</h1><p>Registre documentos e relatos ligados a uma observação, ação ou resultado existente.</p></div>
-        <button className="primary-button" type="button" onClick={() => setSearchParams({ create: '1' })}>Nova evidência</button>
+        {canWrite && <button className="primary-button" type="button" onClick={() => setSearchParams({ create: '1' })}>Nova evidência</button>}
       </header>
 
       {loading && <LoadingState label="Carregando evidências…" />}
       {error && <ErrorState message={error} onRetry={() => void refresh()} />}
       {!loading && !error && evidenceViews.length === 0 && (
-        <EmptyState title="Nenhuma evidência registrada" message="Registre a primeira comprovação vinculada a um item real do percurso." action={<button className="secondary-button" type="button" onClick={() => setSearchParams({ create: '1' })}>Nova evidência</button>} />
+        <EmptyState title="Nenhuma evidência registrada" message="Registre a primeira comprovação vinculada a um item real do percurso." action={canWrite ? <button className="secondary-button" type="button" onClick={() => setSearchParams({ create: '1' })}>Nova evidência</button> : undefined} />
       )}
       {!loading && !error && evidenceViews.length > 0 && (
         <section className="record-sheet" aria-label="Evidências registradas">
@@ -323,7 +327,7 @@ export default function EvidenciasPage() {
         </section>
       )}
 
-      {creating && !loading && !error && (
+      {canWrite && creating && !loading && !error && (
         <EvidenceDialog
           workspaceId={workspaceId}
           records={records}

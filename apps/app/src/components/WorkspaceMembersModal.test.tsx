@@ -20,6 +20,7 @@ function Harness() {
         <WorkspaceMembersModal
           slug="workspace-a"
           workspaceName="Território A"
+          canManage
           onClose={() => setOpen(false)}
         />
       )}

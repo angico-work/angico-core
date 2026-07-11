@@ -289,13 +289,23 @@ describe('AppShell local partition', () => {
     vi.mocked(getSession).mockReturnValue(unavailableSession);
     vi.mocked(revalidateSession).mockResolvedValue(unavailableSession);
     vi.mocked(listWorkspaces).mockResolvedValue([
-      { slug: 'territorio-z', nome: 'Território Z' },
-      { slug: 'territorio-a', nome: 'Território A' }
+      { slug: 'territorio-z', nome: 'Território Z', role: 'OWNER' },
+      { slug: 'territorio-a', nome: 'Território A', role: 'OWNER' }
     ]);
 
     renderShell();
 
     await waitFor(() => expect(setSessionWorkspace).toHaveBeenCalledWith('territorio-z'));
+  });
+
+  it('exposes the active workspace as read-only from its contextual membership role', async () => {
+    vi.mocked(listWorkspaces).mockResolvedValue([
+      { slug: 'territorio-a', nome: 'Território A', role: 'VIEWER' }
+    ]);
+
+    renderShell();
+
+    expect(await screen.findByRole('status')).toHaveTextContent('modo de leitura');
   });
 
   it('does not open profile editing with provisional session data', async () => {

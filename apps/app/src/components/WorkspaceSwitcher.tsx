@@ -24,6 +24,7 @@ export default function WorkspaceSwitcher({ workspaces, activeSlug, onSwitch, on
   const panelId = useId();
 
   const active = workspaces.find((w) => w.slug === activeSlug);
+  const canManageActive = active?.role === 'OWNER' || active?.role === 'ADMIN';
   const activeName = active?.nome ?? activeSlug
     .split(/[-_]/)
     .filter(Boolean)
@@ -113,7 +114,7 @@ export default function WorkspaceSwitcher({ workspaces, activeSlug, onSwitch, on
           <div className="workspace-options">
             {workspaces.map((w) => {
               const isActive = w.slug === activeSlug;
-              const removable = !isActive;
+              const removable = !isActive && (w.role === 'OWNER' || w.role === 'ADMIN');
 
               if (confirmingSlug === w.slug) {
                 return (
@@ -200,6 +201,7 @@ export default function WorkspaceSwitcher({ workspaces, activeSlug, onSwitch, on
         <WorkspaceMembersModal
           slug={activeSlug}
           workspaceName={activeName}
+          canManage={canManageActive}
           returnFocusRef={triggerRef}
           onClose={() => setShowMembers(false)}
         />

@@ -38,11 +38,11 @@ vi.mock('../components/AddressField', () => ({
   )
 }));
 
-function mapView(workspaceId = 'workspace-a') {
+function mapView(workspaceId = 'workspace-a', canWrite = true) {
   return (
     <MemoryRouter initialEntries={['/mapa']}>
       <Routes>
-        <Route element={<Outlet context={{ workspaceId }} />}>
+        <Route element={<Outlet context={{ workspaceId, workspaceRole: canWrite ? 'OWNER' : 'VIEWER', canWrite, canManage: canWrite }} />}>
           <Route path="/mapa" element={<MapPage />} />
         </Route>
       </Routes>
@@ -128,6 +128,19 @@ describe('MapPage real location boundaries', () => {
     view.rerender(mapView('territorio-b'));
 
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+  });
+
+  it('keeps mapped records inspectable without viewer capture controls', async () => {
+    vi.mocked(loadMapPoints).mockResolvedValue([{
+      workspaceId: 'workspace-a', type: 'observacao', id: 7, titulo: 'Ponto A',
+      categoria: 'Água', status: 'ABERTA', latitude: -8, longitude: -34
+    }]);
+    render(mapView('workspace-a', false));
+
+    fireEvent.click(await screen.findByTestId('map-view'));
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(screen.queryByText('Toque no mapa para registrar neste local')).not.toBeInTheDocument();
   });
 
   it('ignores geocoding that finishes after a newer selection', async () => {

@@ -185,7 +185,7 @@ function NewTerritorioDialog({ workspaceId, onClose, onCreated }: {
 }
 
 export default function TerritoriosPage() {
-  const { workspaceId } = useOutletContext<AppContext>();
+  const { workspaceId, canWrite } = useOutletContext<AppContext>();
   const [territories, setTerritories] = useState<Territorio[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -210,7 +210,7 @@ export default function TerritoriosPage() {
   }, [workspaceId]);
 
   useEffect(() => { void refresh(); }, [refresh]);
-  useEffect(() => { setCreating(false); }, [workspaceId]);
+  useEffect(() => { setCreating(false); }, [workspaceId, canWrite]);
 
   return (
     <div className="page territories-page">
@@ -220,7 +220,7 @@ export default function TerritoriosPage() {
           <h1>Territórios</h1>
           <p>Cadastre os lugares reais deste espaço de trabalho sem preencher localização por suposição.</p>
         </div>
-        <button className="primary-button" type="button" onClick={() => setCreating(true)}>Novo território</button>
+        {canWrite && <button className="primary-button" type="button" onClick={() => setCreating(true)}>Novo território</button>}
       </header>
 
       {loading && <LoadingState label="Carregando territórios…" />}
@@ -229,7 +229,7 @@ export default function TerritoriosPage() {
         <EmptyState
           title="Nenhum território cadastrado"
           message="Cadastre o primeiro lugar acompanhado neste espaço de trabalho."
-          action={<button className="secondary-button" type="button" onClick={() => setCreating(true)}>Novo território</button>}
+          action={canWrite ? <button className="secondary-button" type="button" onClick={() => setCreating(true)}>Novo território</button> : undefined}
         />
       )}
       {!loading && territories.length > 0 && (
@@ -253,7 +253,7 @@ export default function TerritoriosPage() {
         </section>
       )}
 
-      {creating && (
+      {canWrite && creating && (
         <NewTerritorioDialog
           workspaceId={workspaceId}
           onClose={() => setCreating(false)}

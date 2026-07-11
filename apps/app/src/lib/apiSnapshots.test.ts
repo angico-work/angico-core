@@ -72,24 +72,24 @@ describe('authorized API snapshots', () => {
 
   it('stores account workspaces outside the active workspace partition', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response(200, [
-      { slug: 'territorio-a', nome: 'Território A' }
+      { slug: 'territorio-a', nome: 'Território A', role: 'OWNER' }
     ])));
 
-    await expect(listWorkspaces()).resolves.toEqual([{ slug: 'territorio-a', nome: 'Território A' }]);
+    await expect(listWorkspaces()).resolves.toEqual([{ slug: 'territorio-a', nome: 'Território A', role: 'OWNER' }]);
     expect(await loadSnapshot({
       ownerId: 'ana.sp',
       workspaceId: ACCOUNT_SNAPSHOT_WORKSPACE,
       resource: 'workspaces',
-      contractVersion: 2
-    })).toMatchObject({ payload: [{ slug: 'territorio-a', nome: 'Território A' }] });
+      contractVersion: 3
+    })).toMatchObject({ payload: [{ slug: 'territorio-a', nome: 'Território A', role: 'OWNER' }] });
 
     Object.defineProperty(navigator, 'onLine', { configurable: true, value: false });
-    await expect(listWorkspaces()).resolves.toEqual([{ slug: 'territorio-a', nome: 'Território A' }]);
+    await expect(listWorkspaces()).resolves.toEqual([{ slug: 'territorio-a', nome: 'Território A', role: 'OWNER' }]);
   });
 
   it('never converts an authorized HTTP failure into an empty list or snapshot', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response(200, [
-      { slug: 'territorio-a', nome: 'Território A' }
+      { slug: 'territorio-a', nome: 'Território A', role: 'OWNER' }
     ])));
     await listWorkspaces();
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response(403, { detail: 'sem acesso' })));

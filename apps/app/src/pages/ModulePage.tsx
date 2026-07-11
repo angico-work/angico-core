@@ -3,7 +3,6 @@ import { useOutletContext, useSearchParams } from 'react-router-dom';
 import type { AppContext } from '../components/AppShell';
 import { createEntity, listEntities, sessionOwnerId } from '../lib/api';
 import { listLocalObservations } from '../lib/offlineStore';
-import AngicoIdField from '../components/AngicoIdField';
 import NewEntityModal, { type EntityType } from '../components/NewEntityModal';
 import RelationalEntityDialog, { type RelationalEntityType } from '../components/RelationalEntityDialog';
 import ModalDialog from '../components/ModalDialog';
@@ -55,17 +54,7 @@ function GenericCreateDialog({ config, workspaceId, onClose, onCreated }: {
           {config.fields.map((field, index) => (
             <div className="field" key={field.name}>
               <label htmlFor={`field-${field.name}`}>{field.label}{field.required ? ' *' : ''}</label>
-              {field.type === 'angico-search' ? (
-                <AngicoIdField
-                  id={`field-${field.name}`}
-                  workspaceId={workspaceId}
-                  value={values[field.name]}
-                  autoFocus={index === 0}
-                  placeholder={field.placeholder}
-                  onChange={(next) => setValues((current) => ({ ...current, [field.name]: next }))}
-                  onPick={(person) => setValues((current) => ({ ...current, angicoId: person.angicoId ?? '', nome: person.nome, papel: person.papel ?? current.papel }))}
-                />
-              ) : field.type === 'textarea' ? (
+              {field.type === 'textarea' ? (
                 <textarea id={`field-${field.name}`} rows={4} autoFocus={index === 0} value={values[field.name]} placeholder={field.placeholder} onChange={(event) => setValues((current) => ({ ...current, [field.name]: event.target.value }))} />
               ) : field.type === 'select' ? (
                 <select id={`field-${field.name}`} autoFocus={index === 0} value={values[field.name]} onChange={(event) => setValues((current) => ({ ...current, [field.name]: event.target.value }))}>
@@ -90,7 +79,7 @@ function formatDate(item: Item): string | null {
 }
 
 export default function ModulePage({ configKey }: { configKey: string }) {
-  const { workspaceId } = useOutletContext<AppContext>();
+  const { workspaceId, workspaceRole, canWrite } = useOutletContext<AppContext>();
   const [searchParams, setSearchParams] = useSearchParams();
   const config = MODULE_CONFIGS[configKey];
   const [items, setItems] = useState<Item[]>([]);
@@ -102,8 +91,18 @@ export default function ModulePage({ configKey }: { configKey: string }) {
   const contextualCreate = searchParams.get('create') === '1';
 
   useEffect(() => {
-    setShowCreate(contextualCreate);
-  }, [contextualCreate]);
+    if (workspaceRole === null) {
+      setShowCreate(false);
+      return;
+    }
+    setShowCreate(canWrite && contextualCreate);
+    if (workspaceRole !== 'VIEWER' || !contextualCreate) return;
+    const next = new URLSearchParams(searchParams);
+    next.delete('create');
+    next.delete('territorioId');
+    next.delete('missaoId');
+    setSearchParams(next, { replace: true });
+  }, [canWrite, contextualCreate, searchParams, setSearchParams, workspaceRole]);
 
   useEffect(() => {
     if (modalWorkspace.current === workspaceId) return;
@@ -186,13 +185,13 @@ export default function ModulePage({ configKey }: { configKey: string }) {
     <div className="page module-page">
       <header className="page-head">
         <div><span className="overline">Memória operacional</span><h1>{config.title}</h1><p>{config.subtitle}</p></div>
-        <button className="primary-button" onClick={() => setShowCreate(true)}>{config.newLabel}</button>
+        {canWrite && <button className="primary-button" onClick={() => setShowCreate(true)}>{config.newLabel}</button>}
       </header>
 
       {loading ? <LoadingState /> : (
         <>
           {error && <ErrorState title={items.length ? 'Mostrando dados salvos neste aparelho' : undefined} message={error} onRetry={() => void refresh()} />}
-          {!error && items.length === 0 && <EmptyState title={config.emptyTitle} message={config.emptyMessage} action={<button className="secondary-button" onClick={() => setShowCreate(true)}>{config.newLabel}</button>} />}
+          {!error && items.length === 0 && <EmptyState title={config.emptyTitle} message={config.emptyMessage} action={canWrite ? <button className="secondary-button" onClick={() => setShowCreate(true)}>{config.newLabel}</button> : undefined} />}
           {items.length > 0 && <section className="record-sheet">
           <header className="record-sheet-head"><span>{items.length} {items.length === 1 ? 'registro' : 'registros'}</span><span>Mais recentes primeiro</span></header>
           <div className="record-list">
@@ -213,7 +212,7 @@ export default function ModulePage({ configKey }: { configKey: string }) {
         </>
       )}
 
-      {showCreate && (GEO_TYPES[configKey] ? (
+      {canWrite && showCreate && (GEO_TYPES[configKey] ? (
         <NewEntityModal
           workspaceId={workspaceId}
           initialType={GEO_TYPES[configKey]}

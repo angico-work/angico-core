@@ -31,7 +31,7 @@ function renderPage(entry = '/resultados') {
   return render(
     <MemoryRouter initialEntries={[entry]}>
       <Routes>
-        <Route element={<Outlet context={{ workspaceId: 'workspace-a' }} />}>
+        <Route element={<Outlet context={{ workspaceId: 'workspace-a', workspaceRole: 'OWNER', canWrite: true, canManage: true }} />}>
           <Route path="/resultados" element={<ResultadosPage />} />
         </Route>
       </Routes>

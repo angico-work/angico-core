@@ -15,11 +15,12 @@ const ROLE_LABELS: Record<string, string> = {
 interface Props {
   slug: string;
   workspaceName: string;
+  canManage: boolean;
   returnFocusRef?: RefObject<HTMLElement | null>;
   onClose: () => void;
 }
 
-export default function WorkspaceMembersModal({ slug, workspaceName, returnFocusRef, onClose }: Props) {
+export default function WorkspaceMembersModal({ slug, workspaceName, canManage, returnFocusRef, onClose }: Props) {
   const [members, setMembers] = useState<WorkspaceMember[]>([]);
   const [loading, setLoading] = useState(true);
   const [actorId, setActorId] = useState('');
@@ -100,15 +101,17 @@ export default function WorkspaceMembersModal({ slug, workspaceName, returnFocus
                   <span className="mono">@{m.actorId}</span>
                 </div>
                 <span className={`role-badge role-${m.role.toLowerCase()}`}>{ROLE_LABELS[m.role] ?? m.role}</span>
-                <button type="button" className="member-remove" title="Remover membro" aria-label={`Remover ${m.displayName}`} onClick={() => drop(m)}>
-                  {icon('trash')}
-                </button>
+                {canManage && (
+                  <button type="button" className="member-remove" title="Remover membro" aria-label={`Remover ${m.displayName}`} onClick={() => drop(m)}>
+                    {icon('trash')}
+                  </button>
+                )}
               </div>
             ))
           )}
         </div>
 
-        <form className="member-add" onSubmit={submit}>
+        {canManage ? <form className="member-add" onSubmit={submit}>
           <div className="field">
             <label htmlFor="member-angico">Adicionar por Angico ID</label>
             <AngicoIdField
@@ -130,7 +133,7 @@ export default function WorkspaceMembersModal({ slug, workspaceName, returnFocus
             </button>
           </div>
           {error && <div className="member-error" role="alert">{error}</div>}
-        </form>
+        </form> : <p className="muted">Você pode consultar os membros, mas não alterar esta equipe.</p>}
 
         <div className="member-actions">
           <button type="button" className="ghost-button" onClick={onClose}>Fechar</button>

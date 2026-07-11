@@ -175,7 +175,7 @@ function gapAction(code: string, subject: RastroReference): { label: string; to:
 }
 
 export default function RastroPage() {
-  const { workspaceId } = useOutletContext<AppContext>();
+  const { workspaceId, canWrite } = useOutletContext<AppContext>();
   const params = useParams();
   const navigate = useNavigate();
   const routeType = isRootType(params.rootType) ? params.rootType : null;
@@ -429,7 +429,7 @@ export default function RastroPage() {
                   return (
                     <li key={`${gap.code}-${index}`}>
                       <div><b>{humanize(gap.code)}</b><p>{gap.reason}</p><span>Próximo passo: {gap.nextAction}</span></div>
-                      {action && <Link className="secondary-button" to={action.to}>{action.label}</Link>}
+                      {canWrite && action && <Link className="secondary-button" to={action.to}>{action.label}</Link>}
                     </li>
                   );
                 })}

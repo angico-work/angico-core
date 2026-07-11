@@ -86,7 +86,7 @@ function LocationProbe() {
 function RouteTree({ workspaceId }: { workspaceId: string }) {
   return (
     <Routes>
-      <Route element={<><Outlet context={{ workspaceId }} /><LocationProbe /></>}>
+      <Route element={<><Outlet context={{ workspaceId, workspaceRole: 'OWNER', canWrite: true, canManage: true }} /><LocationProbe /></>}>
         <Route path="/app/rastro" element={<RastroPage />} />
         <Route path="/app/rastro/:rootType/:rootId" element={<RastroPage />} />
       </Route>

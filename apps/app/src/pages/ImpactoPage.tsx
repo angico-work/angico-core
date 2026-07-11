@@ -188,7 +188,7 @@ function MeasurementDialog({ workspaceId, indicators, requestedIndicatorId, onCl
 }
 
 export default function ImpactoPage() {
-  const { workspaceId } = useOutletContext<AppContext>();
+  const { workspaceId, workspaceRole, canWrite } = useOutletContext<AppContext>();
   const [searchParams, setSearchParams] = useSearchParams();
   const [tab, setTab] = useState<ImpactTab>(searchParams.get('create') === 'medicao' ? 'medicoes' : 'indicadores');
   const [indicators, setIndicators] = useState<Indicador[]>([]);
@@ -254,6 +254,10 @@ export default function ImpactoPage() {
   const panelId = tab === 'indicadores' ? 'impact-indicators-panel' : 'impact-measurements-panel';
   const tabId = tab === 'indicadores' ? 'impact-indicators-tab' : 'impact-measurements-tab';
 
+  useEffect(() => {
+    if (workspaceRole === 'VIEWER' && creation) setSearchParams({}, { replace: true });
+  }, [creation, setSearchParams, workspaceRole]);
+
   function moveTab(current: ImpactTab, event: KeyboardEvent<HTMLButtonElement>) {
     if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
     event.preventDefault();
@@ -267,7 +271,7 @@ export default function ImpactoPage() {
     <div className="page operational-page">
       <header className="page-head">
         <div><span className="overline">Acompanhamento do impacto</span><h1>Indicadores e medições</h1><p>Defina sinais do território e registre cada valor observado sem estimativas da interface.</p></div>
-        <div className="page-actions"><button className="secondary-button" type="button" onClick={() => openCreation('medicao')}>Nova medição</button><button className="primary-button" type="button" onClick={() => openCreation('indicador')}>Novo indicador</button></div>
+        {canWrite && <div className="page-actions"><button className="secondary-button" type="button" onClick={() => openCreation('medicao')}>Nova medição</button><button className="primary-button" type="button" onClick={() => openCreation('indicador')}>Novo indicador</button></div>}
       </header>
 
       {notice && <div className="inline-status" role="status">{notice}</div>}
@@ -284,7 +288,7 @@ export default function ImpactoPage() {
           <EmptyState
             title={tab === 'indicadores' ? 'Nenhum indicador cadastrado' : 'Nenhuma medição registrada'}
             message={tab === 'indicadores' ? 'Defina o primeiro sinal que será acompanhado no território.' : 'Registre o primeiro valor observado para um indicador existente.'}
-            action={<button className="secondary-button" type="button" onClick={() => openCreation(tab === 'indicadores' ? 'indicador' : 'medicao')}>{tab === 'indicadores' ? 'Novo indicador' : 'Nova medição'}</button>}
+            action={canWrite ? <button className="secondary-button" type="button" onClick={() => openCreation(tab === 'indicadores' ? 'indicador' : 'medicao')}>{tab === 'indicadores' ? 'Novo indicador' : 'Nova medição'}</button> : undefined}
           />
         </section>
       )}
@@ -299,8 +303,8 @@ export default function ImpactoPage() {
         ))}</div></section>
       )}
 
-      {creation === 'indicador' && !loading && !error && <IndicatorDialog workspaceId={workspaceId} territories={territories} results={results} requestedResultId={searchParams.get('resultadoId')} onClose={closeDialog} onSubmitted={(result) => submitted(workspaceId, 'indicadores', result)} />}
-      {creation === 'medicao' && !loading && !error && <MeasurementDialog workspaceId={workspaceId} indicators={indicators} requestedIndicatorId={searchParams.get('indicadorId')} onClose={closeDialog} onSubmitted={(result) => submitted(workspaceId, 'medicoes', result)} />}
+      {canWrite && creation === 'indicador' && !loading && !error && <IndicatorDialog workspaceId={workspaceId} territories={territories} results={results} requestedResultId={searchParams.get('resultadoId')} onClose={closeDialog} onSubmitted={(result) => submitted(workspaceId, 'indicadores', result)} />}
+      {canWrite && creation === 'medicao' && !loading && !error && <MeasurementDialog workspaceId={workspaceId} indicators={indicators} requestedIndicatorId={searchParams.get('indicadorId')} onClose={closeDialog} onSubmitted={(result) => submitted(workspaceId, 'medicoes', result)} />}
     </div>
   );
 }

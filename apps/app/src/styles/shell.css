@@ -38,6 +38,7 @@
 .sync-button small, .workspace-profile span { color: var(--muted); font-size: .72rem; }
 .workspace-avatar { width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; color: #fff !important; background: var(--forest); font-family: var(--font-display); font-weight: 700; }
 .sidebar-backdrop { position: fixed; inset: 0; z-index: 35; background: color-mix(in srgb, var(--deep) 48%, transparent); }
+.readonly-notice { padding: .7rem clamp(1rem, 3vw, 3rem); border-bottom: 1px solid var(--line); color: var(--forest); background: color-mix(in srgb, var(--water) 12%, var(--paper)); font-size: .86rem; }
 
 .login-page { min-height: 100vh; display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(380px, .85fr); background: var(--forest); }
 .login-context { min-height: 100vh; padding: clamp(2rem, 5vw, 5.5rem); position: relative; display: flex; flex-direction: column; justify-content: space-between; overflow: hidden; color: #fff; }

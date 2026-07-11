@@ -133,7 +133,7 @@ function UsageDialog({ workspaceId, resource, actions, onClose, onSubmitted }: {
 }
 
 export default function RecursosPage() {
-  const { workspaceId } = useOutletContext<AppContext>();
+  const { workspaceId, canWrite } = useOutletContext<AppContext>();
   const [resources, setResources] = useState<Recurso[]>([]);
   const [actions, setActions] = useState<Acao[]>([]);
   const [usages, setUsages] = useState<Record<number, RecursoUso[]>>({});
@@ -150,7 +150,7 @@ export default function RecursosPage() {
     setCreating(false);
     setUsageResource(null);
     setNotice(null);
-  }, [workspaceId]);
+  }, [workspaceId, canWrite]);
 
   const refresh = useCallback(async () => {
     const current = ++request.current;
@@ -187,25 +187,25 @@ export default function RecursosPage() {
 
   return (
     <div className="page operational-page">
-      <header className="page-head"><div><span className="overline">Meios mobilizados</span><h1>Recursos</h1><p>Cadastre recursos disponíveis e registre os usos vinculados a ações existentes.</p></div><button className="primary-button" type="button" onClick={() => { setNotice(null); setCreating(true); }}>Novo recurso</button></header>
+      <header className="page-head"><div><span className="overline">Meios mobilizados</span><h1>Recursos</h1><p>Cadastre recursos disponíveis e registre os usos vinculados a ações existentes.</p></div>{canWrite && <button className="primary-button" type="button" onClick={() => { setNotice(null); setCreating(true); }}>Novo recurso</button>}</header>
 
       {notice && <div className="inline-status" role="status">{notice}</div>}
 
       {loading && <LoadingState label="Carregando recursos…" />}
       {error && <ErrorState message={error} onRetry={() => void refresh()} />}
-      {!loading && !error && resources.length === 0 && <EmptyState title="Nenhum recurso cadastrado" message="Cadastre o primeiro meio disponível para as ações deste espaço de trabalho." action={<button className="secondary-button" type="button" onClick={() => setCreating(true)}>Novo recurso</button>} />}
+      {!loading && !error && resources.length === 0 && <EmptyState title="Nenhum recurso cadastrado" message="Cadastre o primeiro meio disponível para as ações deste espaço de trabalho." action={canWrite ? <button className="secondary-button" type="button" onClick={() => setCreating(true)}>Novo recurso</button> : undefined} />}
       {!loading && !error && resources.length > 0 && (
         <section className="record-sheet" aria-label="Recursos cadastrados"><header className="record-sheet-head"><span>{resources.length} {resources.length === 1 ? 'recurso' : 'recursos'}</span><span>Usos registrados</span></header><div className="record-list">{resources.map((resource) => (
           <article className="record-row operational-row" key={resource.id} style={{ '--record-accent': '#003952' } as React.CSSProperties}>
             <span className="record-mark" aria-hidden="true" />
             <div className="record-main"><h2>{resource.nome}</h2><p>{resource.descricao || 'Sem descrição adicional.'}</p><div className="record-meta"><span>{RESOURCE_CATEGORIES.find((entry) => entry.value === resource.categoria)?.label ?? resource.categoria}</span><span>Unidade · {resource.unidade}</span></div>{(usages[resource.id]?.length ?? 0) > 0 ? <ul className="record-sublist">{usages[resource.id].map((usage) => <li key={usage.id}><span>{usage.quantidade.toLocaleString('pt-BR')} {usage.unidade} · {actionNames.get(usage.acaoId) ?? 'Ação não disponível'}</span><time dateTime={usage.occurredAt}>{formatDate(usage.occurredAt)}</time></li>)}</ul> : <span className="inline-empty">Nenhum uso registrado.</span>}</div>
-            <div className="record-provenance"><strong>{resource.status}</strong><button className="record-link" type="button" aria-label={`Registrar uso de ${resource.nome}`} onClick={() => { setNotice(null); setUsageResource(resource); }}>Registrar uso</button><time dateTime={resource.createdAt}>Cadastrado em {formatDate(resource.createdAt)}</time></div>
+            <div className="record-provenance"><strong>{resource.status}</strong>{canWrite && <button className="record-link" type="button" aria-label={`Registrar uso de ${resource.nome}`} onClick={() => { setNotice(null); setUsageResource(resource); }}>Registrar uso</button>}<time dateTime={resource.createdAt}>Cadastrado em {formatDate(resource.createdAt)}</time></div>
           </article>
         ))}</div></section>
       )}
 
-      {creating && <ResourceDialog workspaceId={workspaceId} onClose={() => setCreating(false)} onSubmitted={(result) => submitted(workspaceId, result)} />}
-      {usageResource && <UsageDialog workspaceId={workspaceId} resource={usageResource} actions={actions} onClose={() => setUsageResource(null)} onSubmitted={(result) => submitted(workspaceId, result)} />}
+      {canWrite && creating && <ResourceDialog workspaceId={workspaceId} onClose={() => setCreating(false)} onSubmitted={(result) => submitted(workspaceId, result)} />}
+      {canWrite && usageResource && <UsageDialog workspaceId={workspaceId} resource={usageResource} actions={actions} onClose={() => setUsageResource(null)} onSubmitted={(result) => submitted(workspaceId, result)} />}
     </div>
   );
 }

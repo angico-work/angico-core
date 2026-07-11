@@ -25,7 +25,7 @@ function shortDate(value: string): string {
 }
 
 export default function DashboardPage() {
-  const { workspaceId } = useOutletContext<AppContext>();
+  const { workspaceId, canWrite } = useOutletContext<AppContext>();
   const [data, setData] = useState<DashboardData | null>(null);
   const [points, setPoints] = useState<MapPoint[]>([]);
   const [events, setEvents] = useState<MemoriaEvent[]>([]);
@@ -34,7 +34,7 @@ export default function DashboardPage() {
   const [showNew, setShowNew] = useState(false);
   const refreshRequest = useRef(0);
 
-  useEffect(() => setShowNew(false), [workspaceId]);
+  useEffect(() => setShowNew(false), [workspaceId, canWrite]);
 
   const refresh = useCallback(async () => {
     const request = ++refreshRequest.current;
@@ -81,7 +81,7 @@ export default function DashboardPage() {
           <h1>{data?.territory.name || 'Visão geral'}</h1>
           <p>Registros, mobilização e memória em uma leitura operacional.</p>
         </div>
-        <button className="primary-button" onClick={() => setShowNew(true)}>Registrar observação</button>
+        {canWrite && <button className="primary-button" onClick={() => setShowNew(true)}>Registrar observação</button>}
       </header>
 
       {loading && <LoadingState label="Abrindo o caderno do território…" />}
@@ -174,7 +174,7 @@ export default function DashboardPage() {
         </>
       )}
 
-      {showNew && (
+      {canWrite && showNew && (
         <NewEntityModal
           workspaceId={workspaceId}
           initialType="observacao"
