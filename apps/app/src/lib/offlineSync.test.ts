@@ -903,6 +903,35 @@ describe('offline synchronization', () => {
       .toMatchObject({ syncStatus: 'QUEUED' });
   });
 
+  it('does not overlap background synchronization cycles', async () => {
+    const queued = await enqueueObservation(observation, 'ana.sp');
+    let resolveResponse!: (value: Response) => void;
+    const pendingResponse = new Promise<Response>((resolve) => { resolveResponse = resolve; });
+    const fetchMock = vi.fn().mockReturnValue(pendingResponse);
+    const refreshAccess = vi.fn().mockResolvedValue(['territorio-a']);
+    vi.stubGlobal('fetch', fetchMock);
+    Object.defineProperty(navigator, 'onLine', { configurable: true, value: true });
+
+    const stop = startSyncEngine('ana.sp', ['territorio-a'], refreshAccess);
+    try {
+      await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledOnce());
+      window.dispatchEvent(new Event('online'));
+      await Promise.resolve();
+      expect(refreshAccess).toHaveBeenCalledOnce();
+      resolveResponse(response(201, {
+        ...queued,
+        id: 82,
+        status: 'ABERTA',
+        createdAt: new Date().toISOString()
+      }));
+      await vi.waitFor(async () => expect(
+        await getLocalObservation('ana.sp', 'territorio-a', queued.clientMutationId)
+      ).toMatchObject({ syncStatus: 'SYNCED' }));
+    } finally {
+      stop();
+    }
+  });
+
   it('releases a claim without applying a response after the active owner changes', async () => {
     const queued = await enqueueObservation(observation, 'ana.sp');
     let resolveResponse!: (value: Response) => void;

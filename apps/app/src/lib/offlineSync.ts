@@ -628,9 +628,9 @@ export function startSyncEngine(
         || !isAuthenticated()
         || !hasFreshOfflineSession()) return;
       const workspaces = [...new Set(current.map((workspaceId) => workspaceId.trim()).filter(Boolean))];
-      workspaces.forEach((workspaceId) => {
-        void syncPendingOperations({ ownerId: expectedOwnerId, workspaceId });
-      });
+      await Promise.all(workspaces.map((workspaceId) => (
+        syncPendingOperations({ ownerId: expectedOwnerId, workspaceId })
+      )));
     } catch {
     } finally {
       synchronizing = false;
