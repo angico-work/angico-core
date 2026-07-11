@@ -3,5 +3,14 @@ package com.angico.common.idempotency;
 public enum IdempotencyOperation {
     OBSERVACAO_CREATE,
     EVIDENCIA_CREATE,
-    MENSAGEM_SEND
+    MENSAGEM_SEND,
+    PROBLEMA_CREATE,
+    POTENCIALIDADE_CREATE,
+    MISSAO_CREATE,
+    ACAO_CREATE,
+    RESULTADO_CREATE,
+    INDICADOR_CREATE,
+    MEDICAO_CREATE,
+    RECURSO_CREATE,
+    RECURSO_USO_CREATE
 }
