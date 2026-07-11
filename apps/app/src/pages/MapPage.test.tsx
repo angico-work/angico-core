@@ -13,7 +13,6 @@ vi.mock('../lib/api', () => ({
   listEntities: vi.fn().mockResolvedValue([]),
   reverseGeocode: vi.fn(),
   createEntity: vi.fn(),
-  createProblema: vi.fn(),
   getSession: vi.fn()
 }));
 

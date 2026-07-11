@@ -19,13 +19,8 @@ import {
   login,
   revalidateSession,
   apiUrl,
-  createIndicador,
-  createMedicao,
   createOrganizacao,
   createParticipacao,
-  createRecurso,
-  createRecursoUso,
-  createResultado,
   createTerritorio,
   createWorkspace,
   listEvidencias,
@@ -345,41 +340,10 @@ describe('cookie session API', () => {
     }));
   });
 
-  it('uses typed endpoints for results, indicators and measurements without adding an actor', async () => {
-    const fetchMock = vi.fn()
-      .mockResolvedValueOnce(response(201, { id: 1 }))
-      .mockResolvedValueOnce(response(201, { id: 2 }))
-      .mockResolvedValueOnce(response(201, { id: 3 }));
-    vi.stubGlobal('fetch', fetchMock);
-
-    await createResultado({ workspaceId: 'workspace-a', acaoId: 4, titulo: 'Nascente protegida' });
-    await createIndicador({
-      workspaceId: 'workspace-a', territorioId: 9, resultadoId: 1,
-      nome: 'Trechos protegidos', unidade: 'trechos'
-    });
-    await createMedicao({
-      workspaceId: 'workspace-a', indicadorId: 2, valor: 3,
-      unidade: 'trechos', fonte: 'Contagem de campo'
-    });
-
-    expect(fetchMock.mock.calls.map((call) => call[0])).toEqual([
-      '/api/resultados', '/api/indicadores', '/api/medicoes'
-    ]);
-    for (const [, init] of fetchMock.mock.calls) {
-      expect(JSON.parse(String(init.body))).not.toHaveProperty('actorId');
-    }
-    expect(JSON.parse(String(fetchMock.mock.calls[1][1].body))).toEqual(expect.objectContaining({
-      territorioId: 9,
-      resultadoId: 1
-    }));
-  });
-
-  it('uses typed endpoints for organizations, active participation, resources and action usage', async () => {
+  it('uses typed endpoints for organizations and active participation', async () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(response(201, { id: 11 }))
-      .mockResolvedValueOnce(response(201, { id: 12 }))
-      .mockResolvedValueOnce(response(201, { id: 21 }))
-      .mockResolvedValueOnce(response(201, { id: 22 }));
+      .mockResolvedValueOnce(response(201, { id: 12 }));
     vi.stubGlobal('fetch', fetchMock);
 
     await createOrganizacao({ workspaceId: 'workspace-a', nome: 'Coletivo da Serra', tipo: 'COLETIVO' });
@@ -387,24 +351,14 @@ describe('cookie session API', () => {
       workspaceId: 'workspace-a', pessoaId: 7, papel: 'COORDENACAO',
       status: 'ATIVA', startedAt: '2026-07-10'
     });
-    await createRecurso({
-      workspaceId: 'workspace-a', nome: 'Enxada', categoria: 'EQUIPAMENTO', unidade: 'unidade'
-    });
-    await createRecursoUso(21, {
-      workspaceId: 'workspace-a', acaoId: 4, quantidade: 2, unidade: 'unidade'
-    });
-
     expect(fetchMock.mock.calls.map((call) => call[0])).toEqual([
       '/api/organizacoes',
-      '/api/organizacoes/11/participacoes',
-      '/api/recursos',
-      '/api/recursos/21/usos'
+      '/api/organizacoes/11/participacoes'
     ]);
     expect(JSON.parse(String(fetchMock.mock.calls[1][1].body))).toEqual(expect.objectContaining({
       status: 'ATIVA',
       pessoaId: 7
     }));
-    expect(JSON.parse(String(fetchMock.mock.calls[3][1].body))).not.toHaveProperty('actorId');
   });
 
   it('keeps workspace filters encoded on the new operational reads', async () => {

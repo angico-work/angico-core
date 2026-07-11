@@ -1,9 +1,9 @@
 import type {
-  Acao, AcaoInput, DashboardData, Observacao, MapPoint, MemoriaEvent, GeoResult,
+  Acao, DashboardData, Observacao, MapPoint, MemoriaEvent, GeoResult,
   GeoSearchResponse, PessoaHit, Conversa, Mensagem, MensagemBusca, RastroResponse, RastroRootType,
-  MissaoInput, MissaoRegistro, Problema, ProblemaInput, Territorio, TerritorioInput, Workspace, WorkspaceMember,
-  Evidencia, Resultado, ResultadoInput, Indicador, IndicadorInput, Medicao, MedicaoInput,
-  Organizacao, OrganizacaoInput, Participacao, ParticipacaoInput, Recurso, RecursoInput, RecursoUso, RecursoUsoInput
+  MissaoRegistro, Problema, Territorio, TerritorioInput, Workspace, WorkspaceMember,
+  Evidencia, Resultado, Indicador, Medicao,
+  Organizacao, OrganizacaoInput, Participacao, ParticipacaoInput, Recurso, RecursoUso
 } from '../types';
 import { ApiHttpError, ApiNetworkError } from './apiErrors';
 import {
@@ -437,18 +437,6 @@ export function listMissoes(workspaceId = DEFAULT_WORKSPACE): Promise<MissaoRegi
   return listEntities<MissaoRegistro>('/api/missoes', workspaceId);
 }
 
-export function createProblema(input: ProblemaInput): Promise<Problema> {
-  return createJson('/api/problemas', input, 'Não foi possível registrar o problema.');
-}
-
-export function createMissao(input: MissaoInput): Promise<MissaoRegistro> {
-  return createJson('/api/missoes', input, 'Não foi possível criar a missão.');
-}
-
-export function createAcao(input: AcaoInput): Promise<Acao> {
-  return createJson('/api/acoes', input, 'Não foi possível criar a ação.');
-}
-
 export function listObservacoes(workspaceId = DEFAULT_WORKSPACE): Promise<Observacao[]> {
   return listEntities<Observacao>('/api/observacoes', workspaceId);
 }
@@ -473,24 +461,12 @@ export function listResultados(workspaceId = DEFAULT_WORKSPACE): Promise<Resulta
   return listEntities<Resultado>('/api/resultados', workspaceId);
 }
 
-export function createResultado(input: ResultadoInput): Promise<Resultado> {
-  return createJson('/api/resultados', input, 'Não foi possível registrar o resultado.');
-}
-
 export function listIndicadores(workspaceId = DEFAULT_WORKSPACE): Promise<Indicador[]> {
   return listEntities<Indicador>('/api/indicadores', workspaceId);
 }
 
-export function createIndicador(input: IndicadorInput): Promise<Indicador> {
-  return createJson('/api/indicadores', input, 'Não foi possível criar o indicador.');
-}
-
 export function listMedicoes(workspaceId = DEFAULT_WORKSPACE): Promise<Medicao[]> {
   return listEntities<Medicao>('/api/medicoes', workspaceId);
-}
-
-export function createMedicao(input: MedicaoInput): Promise<Medicao> {
-  return createJson('/api/medicoes', input, 'Não foi possível registrar a medição.');
 }
 
 export function listOrganizacoes(workspaceId = DEFAULT_WORKSPACE): Promise<Organizacao[]> {
@@ -520,18 +496,10 @@ export function listRecursos(workspaceId = DEFAULT_WORKSPACE): Promise<Recurso[]
   return listEntities<Recurso>('/api/recursos', workspaceId);
 }
 
-export function createRecurso(input: RecursoInput): Promise<Recurso> {
-  return createJson('/api/recursos', input, 'Não foi possível criar o recurso.');
-}
-
 export function listRecursoUsos(
   recursoId: number, workspaceId = DEFAULT_WORKSPACE
 ): Promise<RecursoUso[]> {
   return listEntities<RecursoUso>(`/api/recursos/${recursoId}/usos`, workspaceId);
-}
-
-export function createRecursoUso(recursoId: number, input: RecursoUsoInput): Promise<RecursoUso> {
-  return createJson(`/api/recursos/${recursoId}/usos`, input, 'Não foi possível registrar o uso.');
 }
 
 export async function listConversas(workspaceId = DEFAULT_WORKSPACE): Promise<Conversa[]> {
