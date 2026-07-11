@@ -311,7 +311,9 @@ export default function EvidenciasPage() {
                   {file && fileSize(file.size) && <span>{fileSize(file.size)}</span>}
                   {view.kind === 'remote' && view.evidence.sha256 && <span className="evidence-hash">SHA-256 {view.evidence.sha256}</span>}
                   {local?.lastError && <span>{local.lastError}</span>}
-                  {view.kind === 'local' ? <span>Arquivo salvo neste aparelho</span> : <span>Autoria: {authorLabel(view.evidence.actorId)}</span>}
+                  {view.kind === 'local'
+                    ? <span>{file ? 'Arquivo salvo neste aparelho' : 'Registro salvo neste aparelho'}</span>
+                    : <span>Autoria: {authorLabel(view.evidence.actorId)}</span>}
                   {view.kind === 'remote' && <time dateTime={view.evidence.recordedAt}>Registrada em {formatDate(view.evidence.recordedAt)}</time>}
                 </div>
               </article>

@@ -157,4 +157,16 @@ describe('EvidenciasPage', () => {
 
     expect(await screen.findAllByRole('heading', { name: 'Registro da retirada' })).toHaveLength(1);
   });
+
+  it('does not claim a local file exists when the queued evidence has none', async () => {
+    vi.mocked(listEvidencias).mockResolvedValue([]);
+    vi.mocked(listLocalEvidences).mockResolvedValue([{
+      ...localEvidence,
+      data: { ...localEvidence.data, file: undefined }
+    }]);
+    renderPage();
+
+    expect(await screen.findByText('Registro salvo neste aparelho')).toBeInTheDocument();
+    expect(screen.queryByText('Arquivo salvo neste aparelho')).not.toBeInTheDocument();
+  });
 });
