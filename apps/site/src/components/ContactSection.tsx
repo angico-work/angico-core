@@ -2,13 +2,12 @@ import { useState } from 'react';
 import type { FormEvent } from 'react';
 
 interface ContactSectionProps {
-  appUrl: string;
   contactApiUrl: string;
 }
 
 type SubmissionState = 'idle' | 'submitting' | 'success' | 'error';
 
-export default function ContactSection({ appUrl, contactApiUrl }: ContactSectionProps) {
+export default function ContactSection({ contactApiUrl }: ContactSectionProps) {
   const [submissionState, setSubmissionState] = useState<SubmissionState>('idle');
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -42,11 +41,11 @@ export default function ContactSection({ appUrl, contactApiUrl }: ContactSection
   return (
     <section id="contato" className="contact site-frame" aria-labelledby="contact-title">
       <div className="contact-heading">
-        <p className="section-label">— 05 – Contato</p>
-        <h2 id="contact-title">Existe um percurso que precisa ganhar memória?</h2>
+        <p className="section-label">— Contato</p>
+        <h2 id="contact-title">Quero levar o Angico ao meu território</h2>
         <p>
-          Conte qual ação, território ou resultado precisa ser registrado, acompanhado ou
-          comprovado.
+          Conte sobre a organização, comunidade ou equipe de campo que precisa preservar e
+          continuar o trabalho no território.
         </p>
       </div>
 
@@ -95,11 +94,6 @@ export default function ContactSection({ appUrl, contactApiUrl }: ContactSection
         <div className="contact-unavailable">
           <p className="register-code">Canal em preparação</p>
           <p>O formulário só será exibido quando houver um destino público configurado.</p>
-          {appUrl && (
-            <a className="text-action" href={appUrl}>
-              Ir para o aplicativo
-            </a>
-          )}
         </div>
       )}
     </section>

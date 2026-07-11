@@ -14,20 +14,23 @@ afterEach(() => {
 });
 
 describe('Site', () => {
-  it('presents Angico as territorial operational memory and links to the app', () => {
+  it('leads with the territory, routes interest to contact and keeps member access separate', () => {
     render(<Site {...urls} />);
 
     expect(
       screen.getByRole('heading', {
         level: 1,
-        name: 'A ação acontece hoje. O território precisa lembrar amanhã.'
+        name: 'O trabalho continua. A memória também.'
       })
     ).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Entrar no aplicativo' })).toHaveAttribute(
+    expect(
+      screen.getByRole('link', { name: 'Quero levar o Angico ao meu território' })
+    ).toHaveAttribute('href', '#contato');
+    expect(screen.getByRole('link', { name: 'Já sou membro' })).toHaveAttribute(
       'href',
       urls.appUrl
     );
-    expect(screen.getByText(/registros dispersos em memória coletiva/i)).toBeInTheDocument();
+    expect(screen.getByText('Demonstração visual — sem dados operacionais')).toBeInTheDocument();
   });
 
   it('renders the versioned Angico identity assets', () => {
@@ -41,23 +44,37 @@ describe('Site', () => {
     ).toHaveAttribute('src', '/angico-logo-white.png');
   });
 
-  it('explains the complete socioenvironmental trace in canonical order', () => {
+  it('integrates the concise operating path in canonical public order', () => {
     render(<Site {...urls} />);
 
-    const trace = screen.getByRole('list', { name: 'Percurso do impacto socioambiental' });
-    const steps = within(trace).getAllByRole('listitem');
+    const journey = screen.getByRole('list', { name: 'Como o Angico funciona' });
+    const steps = within(journey).getAllByRole('listitem');
+    expect(steps).toHaveLength(4);
+    expect(within(steps[0]).getByText('Observar')).toBeInTheDocument();
+    expect(within(steps[1]).getByText('Agir')).toBeInTheDocument();
+    expect(within(steps[2]).getByText('Comprovar')).toBeInTheDocument();
+    expect(within(steps[3]).getByText('Continuar')).toBeInTheDocument();
+    expect(screen.queryByText('Observação ou potencialidade')).not.toBeInTheDocument();
+  });
 
-    expect(steps).toHaveLength(7);
-    expect(within(trace).queryByRole('link')).not.toBeInTheDocument();
-    expect(within(steps[0]).getByText('Território')).toBeInTheDocument();
-    expect(within(steps[1]).getByText('Observação ou potencialidade')).toBeInTheDocument();
-    expect(within(steps[2]).getByText('Missão')).toBeInTheDocument();
-    expect(within(steps[3]).getByText('Ação')).toBeInTheDocument();
-    expect(within(steps[4]).getByText('Evidência')).toBeInTheDocument();
-    expect(within(steps[5]).getByText('Resultado')).toBeInTheDocument();
-    expect(within(steps[6]).getByText('Indicador')).toBeInTheDocument();
-    expect(screen.queryByText(/^Coleta$/i)).not.toBeInTheDocument();
-    expect(screen.queryByText(/^Destino$/i)).not.toBeInTheDocument();
+  it('does not render implicit destinations when public URLs are absent', () => {
+    render(<Site appUrl="" contactApiUrl="" />);
+
+    expect(screen.queryByRole('form', { name: 'Contato' })).not.toBeInTheDocument();
+    expect(screen.getByText('Acesso de membros indisponível')).toBeInTheDocument();
+    expect(
+      screen.getByText('O formulário só será exibido quando houver um destino público configurado.')
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Já sou membro' })).not.toBeInTheDocument();
+  });
+
+  it('states the public and authenticated product boundary', () => {
+    render(<Site {...urls} />);
+
+    expect(
+      screen.getByText('O site demonstra o princípio. O aplicativo autenticado guarda o trabalho.')
+    ).toBeInTheDocument();
+    expect(screen.getByText(/sem dados operacionais/i)).toBeInTheDocument();
   });
 
   it('submits contact details with fetch and reports success without native navigation', async () => {
@@ -140,21 +157,4 @@ describe('Site', () => {
     expect(screen.getByRole('button', { name: 'Tentar novamente' })).toBeEnabled();
   });
 
-  it('does not render a form or implicit destinations when public URLs are absent', () => {
-    render(<Site appUrl="" contactApiUrl="" />);
-
-    expect(screen.queryByRole('form', { name: 'Contato' })).not.toBeInTheDocument();
-    expect(screen.getByText('O acesso ao aplicativo está temporariamente indisponível.')).toBeInTheDocument();
-    expect(screen.getByText('O formulário só será exibido quando houver um destino público configurado.')).toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: 'Entrar no aplicativo' })).not.toBeInTheDocument();
-  });
-
-  it('states the public and authenticated product boundary', () => {
-    render(<Site {...urls} />);
-
-    expect(
-      screen.getByRole('heading', { name: 'O site explica. O aplicativo guarda o trabalho.' })
-    ).toBeInTheDocument();
-    expect(screen.getByText(/não consulta nem exibe registros operacionais/i)).toBeInTheDocument();
-  });
 });
