@@ -122,11 +122,7 @@ export default function AppShell() {
   }
 
   async function handleCreateWorkspace(nome: string) {
-    const current = getSession();
-    const criadoPor = current?.angicoId
-      ? `${current.nome} (@${current.angicoId})`
-      : current?.nome ?? undefined;
-    const created = await createWorkspace(nome, criadoPor);
+    const created = await createWorkspace(nome);
     setWorkspaces((prev) => [...prev, created]);
     switchWorkspace(created.slug);
   }

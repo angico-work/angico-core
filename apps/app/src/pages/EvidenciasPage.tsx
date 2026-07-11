@@ -220,7 +220,7 @@ export default function EvidenciasPage() {
       )}
       {!loading && !error && evidences.length > 0 && (
         <section className="record-sheet" aria-label="Evidências registradas">
-          <header className="record-sheet-head"><span>{evidences.length} {evidences.length === 1 ? 'evidência' : 'evidências'}</span><span>Mais recentes primeiro</span></header>
+          <header className="record-sheet-head"><span>{evidences.length} {evidences.length === 1 ? 'evidência' : 'evidências'}</span><span>Registros disponíveis</span></header>
           <div className="record-list">
             {evidences.map((evidence) => (
               <article className="record-row operational-row" key={evidence.id} style={{ '--record-accent': '#7A6337' } as React.CSSProperties}>
@@ -232,7 +232,7 @@ export default function EvidenciasPage() {
                 </div>
                 <div className="record-provenance">
                   <strong>{evidence.hasFile ? 'Arquivo disponível' : 'Sem arquivo'}</strong>
-                  {evidence.hasFile && <a className="record-link" href={evidenciaFileUrl(evidence.id)}>Abrir arquivo</a>}
+                  {evidence.hasFile && <a className="record-link" href={evidenciaFileUrl(evidence.id)} target="_blank" rel="noreferrer">Abrir arquivo</a>}
                   {fileSize(evidence.sizeBytes) && <span>{fileSize(evidence.sizeBytes)}</span>}
                   <time dateTime={evidence.recordedAt}>Registrada em {formatDate(evidence.recordedAt)}</time>
                 </div>

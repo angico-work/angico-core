@@ -127,7 +127,7 @@ export default function ResultadosPage() {
       {!loading && !error && results.length === 0 && <EmptyState title="Nenhum resultado registrado" message="Registre a primeira mudança observada a partir de uma ação real." action={<button className="secondary-button" type="button" onClick={() => setSearchParams({ create: '1' })}>Novo resultado</button>} />}
       {!loading && !error && results.length > 0 && (
         <section className="record-sheet" aria-label="Resultados registrados">
-          <header className="record-sheet-head"><span>{results.length} {results.length === 1 ? 'resultado' : 'resultados'}</span><span>Mais recentes primeiro</span></header>
+          <header className="record-sheet-head"><span>{results.length} {results.length === 1 ? 'resultado' : 'resultados'}</span><span>Registros disponíveis</span></header>
           <div className="record-list">
             {results.map((result) => (
               <article className="record-row operational-row" key={result.id} style={{ '--record-accent': '#37785B' } as React.CSSProperties}>

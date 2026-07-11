@@ -165,7 +165,7 @@ describe('RastroPage', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('Rastro indisponível');
   });
 
-  it('links only gap actions that already exist in the app', async () => {
+  it('links only gaps backed by a complete creation flow', async () => {
     vi.mocked(loadRastro).mockResolvedValue({
       ...rastro,
       limits: { ...rastro.limits, truncated: false },
@@ -183,6 +183,41 @@ describe('RastroPage', () => {
           reason: 'A ação ainda não possui evidência.',
           nextAction: 'Adicionar uma evidência da ação.',
           expectedRelation: null
+        },
+        {
+          code: 'ACAO_SEM_RESULTADO',
+          subject: { type: 'ACAO', id: '31', resource: '/api/acoes/31' },
+          reason: 'A ação ainda não possui resultado.',
+          nextAction: 'Registrar um resultado da ação.',
+          expectedRelation: null
+        },
+        {
+          code: 'RESULTADO_SEM_EVIDENCIA',
+          subject: { type: 'RESULTADO', id: '41', resource: '/api/resultados/41' },
+          reason: 'O resultado ainda não possui evidência.',
+          nextAction: 'Adicionar uma evidência do resultado.',
+          expectedRelation: null
+        },
+        {
+          code: 'RESULTADO_SEM_INDICADOR',
+          subject: { type: 'RESULTADO', id: '41', resource: '/api/resultados/41' },
+          reason: 'O resultado ainda não possui indicador.',
+          nextAction: 'Criar um indicador.',
+          expectedRelation: null
+        },
+        {
+          code: 'INDICADOR_SEM_MEDICAO',
+          subject: { type: 'INDICADOR', id: '51', resource: '/api/indicadores/51' },
+          reason: 'O indicador ainda não possui medição.',
+          nextAction: 'Registrar uma medição.',
+          expectedRelation: null
+        },
+        {
+          code: 'LACUNA_SEM_FLUXO',
+          subject: { type: 'MISSAO', id: '20', resource: '/api/missoes/20' },
+          reason: 'Fluxo ainda não implementado.',
+          nextAction: 'Aguardar.',
+          expectedRelation: null
         }
       ]
     });
@@ -190,8 +225,13 @@ describe('RastroPage', () => {
 
     const observationLink = await screen.findByRole('link', { name: 'Registrar observação' });
     expect(observationLink).toHaveAttribute('href', '/app/observacoes?create=1&territorioId=4');
-    expect(screen.getByText('Próximo passo: Adicionar uma evidência da ação.')).toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: /evidência/i })).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Adicionar evidência da ação' })).toHaveAttribute('href', '/app/evidencias?create=1&subjectType=ACAO&subjectId=31');
+    expect(screen.getByRole('link', { name: 'Registrar resultado' })).toHaveAttribute('href', '/app/resultados?create=1&acaoId=31');
+    expect(screen.getByRole('link', { name: 'Adicionar evidência do resultado' })).toHaveAttribute('href', '/app/evidencias?create=1&subjectType=RESULTADO&subjectId=41');
+    expect(screen.getByRole('link', { name: 'Criar indicador' })).toHaveAttribute('href', '/app/indicadores?create=indicador&resultadoId=41');
+    expect(screen.getByRole('link', { name: 'Registrar medição' })).toHaveAttribute('href', '/app/indicadores?create=medicao&indicadorId=51');
+    expect(screen.getByText('Fluxo ainda não implementado.').closest('li')?.querySelector('a')).toBeNull();
+    expect(screen.getAllByRole('link')).toHaveLength(6);
   });
 
   it('does not render a late trace response from the previous workspace', async () => {

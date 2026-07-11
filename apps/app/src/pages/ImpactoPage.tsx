@@ -246,7 +246,7 @@ export default function ImpactoPage() {
         ))}</div></section>
       )}
       {!loading && !error && tab === 'medicoes' && measurements.length > 0 && (
-        <section className="record-sheet" role="tabpanel" aria-label="Medições registradas"><header className="record-sheet-head"><span>{measurements.length} {measurements.length === 1 ? 'medição' : 'medições'}</span><span>Mais recentes primeiro</span></header><div className="record-list">{measurements.map((measurement) => (
+        <section className="record-sheet" role="tabpanel" aria-label="Medições registradas"><header className="record-sheet-head"><span>{measurements.length} {measurements.length === 1 ? 'medição' : 'medições'}</span><span>Registros disponíveis</span></header><div className="record-list">{measurements.map((measurement) => (
           <article className="record-row operational-row" key={measurement.id} style={{ '--record-accent': '#0E7C86' } as React.CSSProperties}><span className="record-mark" aria-hidden="true" /><div className="record-main"><h2>{measurement.valor.toLocaleString('pt-BR')} {measurement.unidade ?? ''}</h2><p>{measurement.fonte ? `Fonte: ${measurement.fonte}` : 'Fonte não informada.'}</p><div className="record-meta"><span>Indicador · {indicatorNames.get(measurement.indicadorId) ?? 'Indicador não disponível'}</span><span>Medido em {formatDate(measurement.measuredAt)}</span></div></div><div className="record-provenance"><strong>Valor registrado</strong><time dateTime={measurement.createdAt}>Registrado em {formatDate(measurement.createdAt)}</time></div></article>
         ))}</div></section>
       )}

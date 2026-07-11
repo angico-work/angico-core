@@ -77,6 +77,36 @@ function gapAction(code: string, subject: RastroReference): { label: string; to:
       to: `/app/acoes?create=1&missaoId=${encodeURIComponent(subject.id)}`
     };
   }
+  if (code === 'ACAO_SEM_EVIDENCIA' && subject.type === 'ACAO') {
+    return {
+      label: 'Adicionar evidência da ação',
+      to: `/app/evidencias?create=1&subjectType=ACAO&subjectId=${encodeURIComponent(subject.id)}`
+    };
+  }
+  if (code === 'ACAO_SEM_RESULTADO' && subject.type === 'ACAO') {
+    return {
+      label: 'Registrar resultado',
+      to: `/app/resultados?create=1&acaoId=${encodeURIComponent(subject.id)}`
+    };
+  }
+  if (code === 'RESULTADO_SEM_EVIDENCIA' && subject.type === 'RESULTADO') {
+    return {
+      label: 'Adicionar evidência do resultado',
+      to: `/app/evidencias?create=1&subjectType=RESULTADO&subjectId=${encodeURIComponent(subject.id)}`
+    };
+  }
+  if (code === 'RESULTADO_SEM_INDICADOR' && subject.type === 'RESULTADO') {
+    return {
+      label: 'Criar indicador',
+      to: `/app/indicadores?create=indicador&resultadoId=${encodeURIComponent(subject.id)}`
+    };
+  }
+  if (code === 'INDICADOR_SEM_MEDICAO' && subject.type === 'INDICADOR') {
+    return {
+      label: 'Registrar medição',
+      to: `/app/indicadores?create=medicao&indicadorId=${encodeURIComponent(subject.id)}`
+    };
+  }
   return null;
 }
 

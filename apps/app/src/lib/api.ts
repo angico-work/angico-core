@@ -208,11 +208,11 @@ export async function listWorkspaces(): Promise<Workspace[]> {
   }
 }
 
-export async function createWorkspace(nome: string, criadoPor?: string): Promise<Workspace> {
+export async function createWorkspace(nome: string): Promise<Workspace> {
   const r = await apiFetch(apiUrl('/api/workspaces'), {
     method: 'POST',
     headers: requestHeaders({ 'Content-Type': 'application/json' }),
-    body: JSON.stringify({ nome: nome.trim(), criadoPor })
+    body: JSON.stringify({ nome: nome.trim() })
   });
   if (!r.ok) throw new Error(await readError(r, 'Não foi possível criar o workspace.'));
   return (await r.json()) as Workspace;

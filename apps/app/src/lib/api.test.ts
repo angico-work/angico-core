@@ -25,6 +25,7 @@ import {
   createRecursoUso,
   createResultado,
   createTerritorio,
+  createWorkspace,
   evidenciaFileUrl,
   listEvidencias,
   listParticipacoes,
@@ -207,6 +208,16 @@ describe('cookie session API', () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response(403, { detail: 'forbidden' })));
 
     await expect(listWorkspaces()).resolves.toEqual([]);
+  });
+
+  it('lets the server derive workspace authorship from the authenticated session', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(response(201, { slug: 'nascente', nome: 'Nascente' }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await createWorkspace('  Nascente  ');
+
+    const init = fetchMock.mock.calls[0][1] as RequestInit;
+    expect(JSON.parse(String(init.body))).toEqual({ nome: 'Nascente' });
   });
 
   it('does not create a placeholder territory just because conversations were opened', async () => {
