@@ -17,7 +17,7 @@ function ResultDialog({ workspaceId, actions, requestedActionId, onClose, onSubm
   actions: Acao[];
   requestedActionId: string | null;
   onClose: () => void;
-  onSubmitted: (result: CaptureDomainMutationResult) => void;
+  onSubmitted: (result: CaptureDomainMutationResult) => boolean;
 }) {
   const requested = Number(requestedActionId);
   const [actionId, setActionId] = useState(requestedActionId !== null
@@ -27,6 +27,7 @@ function ResultDialog({ workspaceId, actions, requestedActionId, onClose, onSubm
   const [description, setDescription] = useState('');
   const [occurredAt, setOccurredAt] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -38,18 +39,22 @@ function ResultDialog({ workspaceId, actions, requestedActionId, onClose, onSubm
     setSubmitting(true);
     setError(null);
     try {
-      onSubmitted(await captureDomainMutation('RESULTADO_CREATE', {
+      const result = await captureDomainMutation('RESULTADO_CREATE', {
         workspaceId,
         acaoId: actionId,
         titulo: title.trim(),
         descricao: description.trim() || undefined,
         occurredAt: occurredAt ? new Date(occurredAt).toISOString() : undefined
-      }));
+      });
+      if (onSubmitted(result)) setSubmitted(true);
+      else setSubmitting(false);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Não foi possível registrar o resultado.');
       setSubmitting(false);
     }
   }
+
+  if (submitted) return null;
 
   return (
     <ModalDialog titleId="new-result-title" descriptionId="new-result-description" busy={submitting} onClose={onClose}>
@@ -129,10 +134,11 @@ export default function ResultadosPage() {
     setSearchParams({ create: '1' });
   };
   const submitted = (submittedWorkspace: string, result: CaptureDomainMutationResult) => {
-    if (activeWorkspace.current !== submittedWorkspace) return;
+    if (activeWorkspace.current !== submittedWorkspace) return false;
     closeDialog();
     setNotice(mutationNotice(result.status));
     if (result.status === 'SYNCED') void refresh();
+    return true;
   };
 
   return (

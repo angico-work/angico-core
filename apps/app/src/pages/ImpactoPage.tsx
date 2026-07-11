@@ -22,7 +22,7 @@ function IndicatorDialog({ workspaceId, territories, results, requestedResultId,
   results: Resultado[];
   requestedResultId: string | null;
   onClose: () => void;
-  onSubmitted: (result: CaptureDomainMutationResult) => void;
+  onSubmitted: (result: CaptureDomainMutationResult) => boolean;
 }) {
   const requested = Number(requestedResultId);
   const [territoryId, setTerritoryId] = useState(territories[0]?.id ?? 0);
@@ -31,6 +31,7 @@ function IndicatorDialog({ workspaceId, territories, results, requestedResultId,
   const [unit, setUnit] = useState('');
   const [description, setDescription] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -42,19 +43,23 @@ function IndicatorDialog({ workspaceId, territories, results, requestedResultId,
     setSubmitting(true);
     setError(null);
     try {
-      onSubmitted(await captureDomainMutation('INDICADOR_CREATE', {
+      const result = await captureDomainMutation('INDICADOR_CREATE', {
         workspaceId,
         territorioId: territoryId,
         resultadoId: resultId || undefined,
         nome: name.trim(),
         unidade: unit.trim() || undefined,
         descricao: description.trim() || undefined
-      }));
+      });
+      if (onSubmitted(result)) setSubmitted(true);
+      else setSubmitting(false);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Não foi possível criar o indicador.');
       setSubmitting(false);
     }
   }
+
+  if (submitted) return null;
 
   return (
     <ModalDialog titleId="new-indicator-title" descriptionId="new-indicator-description" busy={submitting} onClose={onClose}>
@@ -105,7 +110,7 @@ function MeasurementDialog({ workspaceId, indicators, requestedIndicatorId, onCl
   indicators: Indicador[];
   requestedIndicatorId: string | null;
   onClose: () => void;
-  onSubmitted: (result: CaptureDomainMutationResult) => void;
+  onSubmitted: (result: CaptureDomainMutationResult) => boolean;
 }) {
   const requested = Number(requestedIndicatorId);
   const initial = requestedIndicatorId !== null
@@ -117,6 +122,7 @@ function MeasurementDialog({ workspaceId, indicators, requestedIndicatorId, onCl
   const [source, setSource] = useState('');
   const [measuredAt, setMeasuredAt] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   function changeIndicator(id: number) {
@@ -134,19 +140,23 @@ function MeasurementDialog({ workspaceId, indicators, requestedIndicatorId, onCl
     setSubmitting(true);
     setError(null);
     try {
-      onSubmitted(await captureDomainMutation('MEDICAO_CREATE', {
+      const result = await captureDomainMutation('MEDICAO_CREATE', {
         workspaceId,
         indicadorId: indicatorId,
         valor: numericValue,
         unidade: unit.trim() || undefined,
         fonte: source.trim() || undefined,
         measuredAt: measuredAt ? new Date(measuredAt).toISOString() : undefined
-      }));
+      });
+      if (onSubmitted(result)) setSubmitted(true);
+      else setSubmitting(false);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Não foi possível registrar a medição.');
       setSubmitting(false);
     }
   }
+
+  if (submitted) return null;
 
   return (
     <ModalDialog titleId="new-measurement-title" descriptionId="new-measurement-description" busy={submitting} onClose={onClose}>
@@ -233,11 +243,12 @@ export default function ImpactoPage() {
     kind: ImpactTab,
     result: CaptureDomainMutationResult
   ) => {
-    if (activeWorkspace.current !== submittedWorkspace) return;
+    if (activeWorkspace.current !== submittedWorkspace) return false;
     setTab(kind);
     closeDialog();
     setNotice(mutationNotice(result.status));
     if (result.status === 'SYNCED') void refresh();
+    return true;
   };
   const visibleCount = tab === 'indicadores' ? indicators.length : measurements.length;
   const panelId = tab === 'indicadores' ? 'impact-indicators-panel' : 'impact-measurements-panel';
