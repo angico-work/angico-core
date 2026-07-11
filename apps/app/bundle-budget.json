@@ -1,5 +1,5 @@
 {
-  "assetsDirectory": "dist/assets",
+  "assetsDirectory": "dist",
   "limits": {
     "javascript": 680000,
     "styles": 68000

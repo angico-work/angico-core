@@ -1,9 +1,21 @@
 import assert from 'node:assert/strict';
-import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join, relative, resolve, sep } from 'node:path';
 import test from 'node:test';
+import { fileURLToPath } from 'node:url';
 import { checkBundleBudget } from './check-bundle-budget.mjs';
+
+const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+
+test('covers the top-level service worker in the configured bundle scope', async () => {
+  const config = JSON.parse(await readFile(join(projectRoot, 'bundle-budget.json'), 'utf8'));
+  const scope = resolve(projectRoot, config.assetsDirectory);
+  const serviceWorker = resolve(projectRoot, 'dist/sw.js');
+  const pathFromScope = relative(scope, serviceWorker);
+
+  assert.equal(pathFromScope === '..' || pathFromScope.startsWith(`..${sep}`), false);
+});
 
 test('reports JavaScript and CSS totals within the configured limits', async () => {
   const root = await mkdtemp(join(tmpdir(), 'angico-budget-'));
