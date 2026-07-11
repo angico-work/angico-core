@@ -201,6 +201,15 @@ class AuthSessionSecurityTest {
     }
 
     @Test
+    void unknownAuthenticatedEndpointReturns404() throws Exception {
+        SessionCredentials credentials = login();
+
+        mvc.perform(get("/api/endpoint-inexistente").cookie(credentials.cookie()))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.status").value(404));
+    }
+
+    @Test
     void explicitLocalSeedCreatesItsWorkspace() {
         int id = IDS.incrementAndGet();
         String seedWorkspace = "local-seed-" + id;
