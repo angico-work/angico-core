@@ -336,6 +336,22 @@ describe('cookie session API', () => {
     await expect(requestJson('/api/territorios')).rejects.toBeInstanceOf(ApiNetworkError);
   });
 
+  it('aborts a stalled request at the client boundary', async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi.fn((_input: RequestInfo | URL, init?: RequestInit) => (
+      new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener('abort', () => reject(init.signal?.reason));
+      })
+    ));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const request = requestJson('/api/territorios').catch((error) => error);
+    await vi.advanceTimersByTimeAsync(20_000);
+
+    await expect(request).resolves.toBeInstanceOf(ApiNetworkError);
+    vi.useRealTimers();
+  });
+
   it('preserves HTTP status without classifying it as an offline failure', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response(403, { detail: 'sem acesso' })));
 

@@ -6,9 +6,9 @@ export class ApiHttpError extends Error {
 }
 
 export class ApiNetworkError extends Error {
-  readonly cause: TypeError;
+  readonly cause: Error;
 
-  constructor(cause: TypeError, message = 'Não foi possível acessar o servidor.') {
+  constructor(cause: Error, message = 'Não foi possível acessar o servidor.') {
     super(message);
     this.name = 'ApiNetworkError';
     this.cause = cause;

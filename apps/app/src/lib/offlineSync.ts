@@ -500,15 +500,19 @@ function requireCaptureOwner(): string {
   return ownerId;
 }
 
+function startImmediateSync(task: Promise<unknown>): void {
+  void task.catch(() => undefined);
+}
+
 export async function captureObservation(input: ObservacaoInput): Promise<CaptureResult> {
   const ownerId = requireCaptureOwner();
   const queued = await enqueueObservation(input, ownerId);
   if (typeof navigator === 'undefined' || navigator.onLine !== false) {
-    await syncPendingObservations({
+    startImmediateSync(syncPendingObservations({
       ownerId,
       workspaceId: input.workspaceId,
       entryId: queued.clientMutationId
-    });
+    }));
   }
   const local = await getLocalObservation(ownerId, input.workspaceId, queued.clientMutationId);
   return {
@@ -522,11 +526,11 @@ export async function captureMessage(input: OfflineMessageCaptureInput): Promise
   const ownerId = requireCaptureOwner();
   const queued = await enqueueMessage(input, ownerId);
   if (typeof navigator === 'undefined' || navigator.onLine !== false) {
-    await syncPendingMessages({
+    startImmediateSync(syncPendingMessages({
       ownerId,
       workspaceId: input.workspaceId,
       entryId: queued.clientMessageId
-    });
+    }));
   }
   const local = await getLocalMessage(ownerId, input.workspaceId, queued.clientMessageId);
   return {
@@ -540,11 +544,11 @@ export async function captureEvidence(input: EvidenciaInput): Promise<CaptureEvi
   const ownerId = requireCaptureOwner();
   const queued = await enqueueEvidence(input, ownerId);
   if (typeof navigator === 'undefined' || navigator.onLine !== false) {
-    await syncPendingEvidence({
+    startImmediateSync(syncPendingEvidence({
       ownerId,
       workspaceId: input.workspaceId,
       entryId: queued.clientMutationId
-    });
+    }));
   }
   const local = await getLocalEvidence(ownerId, input.workspaceId, queued.clientMutationId);
   return {
@@ -573,7 +577,7 @@ export async function captureDomainMutation<K extends DomainMutationOperation>(
   const workspaceId = domainMutationWorkspace(operation, body);
   const queued = await enqueueDomainMutation(operation, body, ownerId);
   if (typeof navigator === 'undefined' || navigator.onLine !== false) {
-    await syncPendingDomainMutations({ ownerId, workspaceId, entryId: queued.clientMutationId });
+    startImmediateSync(syncPendingDomainMutations({ ownerId, workspaceId, entryId: queued.clientMutationId }));
   }
   const entry = (await listOutbox(ownerId, workspaceId))
     .find((candidate) => candidate.id === queued.clientMutationId);

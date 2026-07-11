@@ -47,6 +47,7 @@ export function apiUrl(path: string): string {
 }
 
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
+const REQUEST_TIMEOUT_MS = 20_000;
 
 export async function apiFetch(input: RequestInfo | URL, init: RequestInit = {}): Promise<Response> {
   const method = (init.method ?? 'GET').toUpperCase();
@@ -55,7 +56,28 @@ export async function apiFetch(input: RequestInfo | URL, init: RequestInit = {})
   if (!SAFE_METHODS.has(method) && csrfToken) {
     headers['X-CSRF-Token'] = csrfToken;
   }
-  const response = await fetch(input, { ...init, credentials: 'include', headers });
+  const controller = new AbortController();
+  const sourceSignal = init.signal;
+  const abortFromSource = () => controller.abort(sourceSignal?.reason);
+  if (sourceSignal?.aborted) abortFromSource();
+  else sourceSignal?.addEventListener('abort', abortFromSource, { once: true });
+  const timeout = globalThis.setTimeout(() => {
+    const error = new Error('A solicitação excedeu o tempo limite.');
+    error.name = 'TimeoutError';
+    controller.abort(error);
+  }, REQUEST_TIMEOUT_MS);
+  let response: Response;
+  try {
+    response = await fetch(input, {
+      ...init,
+      credentials: 'include',
+      headers,
+      signal: controller.signal
+    });
+  } finally {
+    globalThis.clearTimeout(timeout);
+    sourceSignal?.removeEventListener('abort', abortFromSource);
+  }
   if (response.status === 401) {
     clearSession();
     if (typeof window !== 'undefined') {
@@ -87,7 +109,9 @@ export async function requestJson<T = unknown>(
   try {
     response = await apiFetch(input, init);
   } catch (error) {
-    if (error instanceof TypeError) throw new ApiNetworkError(error, fallback);
+    if (error instanceof TypeError || error instanceof Error && error.name === 'TimeoutError') {
+      throw new ApiNetworkError(error, fallback);
+    }
     throw error;
   }
   if (!response.ok) {

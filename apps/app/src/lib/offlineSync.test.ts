@@ -205,6 +205,25 @@ describe('offline synchronization', () => {
     });
   });
 
+  it('returns a saved observation without waiting for a stalled immediate sync', async () => {
+    Object.defineProperty(navigator, 'onLine', { configurable: true, value: true });
+    let releaseFetch!: (value: Response) => void;
+    const fetchMock = vi.fn(() => new Promise<Response>((resolve) => { releaseFetch = resolve; }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const capture = captureObservation(observation);
+    const result = await Promise.race([
+      capture,
+      new Promise<null>((resolve) => window.setTimeout(() => resolve(null), 75))
+    ]);
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledOnce());
+    releaseFetch(response(503, { detail: 'conexão interrompida' }));
+    await capture;
+
+    expect(result).not.toBeNull();
+    expect(result).toMatchObject({ status: expect.stringMatching(/QUEUED|SYNCING/) });
+  });
+
   it.each([
     { operation: 'ACAO_CREATE', workspaceId: 'territorio-a', clientMutationId: 'matching', resourceId: '15' },
     { operation: 'MISSAO_CREATE', workspaceId: 'territorio-b', clientMutationId: 'matching', resourceId: '15' },
