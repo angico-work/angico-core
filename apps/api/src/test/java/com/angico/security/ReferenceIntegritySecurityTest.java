@@ -1,10 +1,10 @@
 package com.angico.security;
 
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
-import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import com.angico.auth.PasswordHasher;
 import com.angico.core.memory.MemoryEventRepository;
@@ -215,6 +215,70 @@ class ReferenceIntegritySecurityTest {
     }
 
     @Test
+    void legacyFormattedAngicoIdRemainsUsableThroughASecondaryWorkspaceMembership() throws Exception {
+        String canonicalId = pessoaB.getAngicoId();
+        pessoaB.setAngicoId(" @" + canonicalId.toUpperCase(Locale.ROOT) + " ");
+        pessoaRepository.saveAndFlush(pessoaB);
+        memberRepository.save(new WorkspaceMember(
+                workspaceA,
+                canonicalId,
+                pessoaB.getNome(),
+                "MEMBER",
+                "ACTIVE",
+                Instant.now()));
+
+        mvc.perform(authenticatedPost("/api/missoes", """
+                        {"workspaceId":"%s","titulo":"Missão secundária","responsavelId":"%s"}
+                        """.formatted(workspaceA, pessoaB.getId())))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.responsavelId").value(String.valueOf(pessoaB.getId())));
+    }
+
+    @Test
+    void workspaceLocalParticipantWithoutLoginIdentityCanOwnOperationalWork() throws Exception {
+        long participantId = createdId("/api/pessoas", """
+                {"workspaceId":"%s","nome":"Mara Lima","papel":"Mobilizadora"}
+                """.formatted(workspaceA));
+
+        mvc.perform(authenticatedPost("/api/missoes", """
+                        {"workspaceId":"%s","titulo":"Cuidar da nascente","responsavelId":"%s"}
+                        """.formatted(workspaceA, participantId)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.responsavelId").value(String.valueOf(participantId)));
+    }
+
+    @Test
+    void workspaceLocalParticipantRemainsLinkableWithAnInvalidLegacyIdentity() throws Exception {
+        long participantId = createdId("/api/pessoas", """
+                {"workspaceId":"%s","nome":"Mara Lima","papel":"Mobilizadora"}
+                """.formatted(workspaceA));
+        Pessoa participant = pessoaRepository.findById(participantId).orElseThrow();
+        participant.setAngicoId(" @identidade antiga ");
+        pessoaRepository.saveAndFlush(participant);
+
+        mvc.perform(authenticatedPost("/api/missoes", """
+                        {"workspaceId":"%s","titulo":"Cuidar da nascente","responsavelId":"%s"}
+                        """.formatted(workspaceA, participantId)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.responsavelId").value(String.valueOf(participantId)));
+    }
+
+    @Test
+    void homeWorkspacePersonWithAnInvalidLegacyAngicoIdRemainsLinkable() throws Exception {
+        Pessoa legacyPerson = new Pessoa(
+                workspaceA, "Identidade legada", "Mobilizadora", Instant.now());
+        legacyPerson.setAngicoId("identidade legada invalida");
+        legacyPerson.setStatus("ATIVA");
+        legacyPerson = pessoaRepository.saveAndFlush(legacyPerson);
+
+        mvc.perform(authenticatedPost("/api/missoes", """
+                        {"workspaceId":"%s","titulo":"Missão local legada","responsavelId":"%s"}
+                        """.formatted(workspaceA, legacyPerson.getId())))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.responsavelId").value(String.valueOf(legacyPerson.getId())));
+    }
+
+    @Test
     void missingReferencedResultIsRejectedInsteadOfSilentlyDroppingTheLink() throws Exception {
         mvc.perform(authenticatedPost("/api/indicadores", """
                         {"workspaceId":"%s","territorioId":%s,"resultadoId":999999999,"nome":"Indicador"}
@@ -247,6 +311,19 @@ class ReferenceIntegritySecurityTest {
         mvc.perform(authenticatedPost("/api/pessoas", """
                         {"workspaceId":"%s","nome":"Identidade duplicada","angicoId":"%s"}
                         """.formatted(workspaceA, canonicalId)))
+                .andExpect(status().isBadRequest());
+
+        assertEquals(before, pessoaRepository.count());
+    }
+
+    @Test
+    void domainRegistrationCannotReserveAnUnknownLoginIdentity() throws Exception {
+        long before = pessoaRepository.count();
+        String unknownId = "future.identity." + IDS.incrementAndGet();
+
+        mvc.perform(authenticatedPost("/api/pessoas", """
+                        {"workspaceId":"%s","nome":"Pessoa do território","angicoId":"%s"}
+                        """.formatted(workspaceA, unknownId)))
                 .andExpect(status().isBadRequest());
 
         assertEquals(before, pessoaRepository.count());

@@ -10,7 +10,7 @@ import java.math.BigDecimal;
 import java.time.Instant;
 
 public record UsoRecursoRequest(
-        String workspaceId,
+        @NotBlank @Size(max = 255) String workspaceId,
         @NotNull @Positive Long acaoId,
         @NotNull @DecimalMin(value = "0", inclusive = false) @Digits(integer = 12, fraction = 4)
         BigDecimal quantidade,

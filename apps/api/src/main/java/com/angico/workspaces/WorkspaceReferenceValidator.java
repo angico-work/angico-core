@@ -11,6 +11,7 @@ import com.angico.missoes.Missao;
 import com.angico.missoes.MissaoRepository;
 import com.angico.observacoes.ObservacaoRepository;
 import com.angico.observacoes.ObservacaoTerritorial;
+import com.angico.pessoas.AngicoIdNormalizer;
 import com.angico.pessoas.Pessoa;
 import com.angico.pessoas.PessoaRepository;
 import com.angico.potencialidades.PotencialidadeRepository;
@@ -106,7 +107,16 @@ public class WorkspaceReferenceValidator {
         long id = parseId(rawId, "Pessoa");
         Pessoa pessoa = pessoaRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Pessoa não encontrada: " + id));
-        String actorId = pessoa.getAngicoId();
+        boolean homeWorkspace = workspaceId.equals(pessoa.getWorkspaceId());
+        if (homeWorkspace) {
+            return pessoa;
+        }
+        String actorId;
+        try {
+            actorId = AngicoIdNormalizer.normalizeOptional(pessoa.getAngicoId());
+        } catch (IllegalArgumentException exception) {
+            throw new ForbiddenException("Pessoa fora do workspace autorizado.");
+        }
         boolean activeMember = actorId != null && memberRepository
                 .findByWorkspaceIdAndActorId(workspaceId, actorId)
                 .filter(member -> "ACTIVE".equalsIgnoreCase(member.getStatus()))

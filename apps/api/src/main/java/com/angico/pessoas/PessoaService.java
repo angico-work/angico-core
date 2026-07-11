@@ -44,10 +44,13 @@ public class PessoaService {
             if (existing.isPresent()) {
                 return PessoaResponse.from(existing.get());
             }
-            pessoaRepository.findByAngicoIdIgnoreCase(angicoId).ifPresent(person -> {
+            var globalIdentity = pessoaRepository.findByAngicoIdIgnoreCase(angicoId);
+            if (globalIdentity.isPresent()) {
                 throw new IllegalArgumentException(
                         "Angico ID já está associado a uma pessoa de outro workspace.");
-            });
+            }
+            throw new IllegalArgumentException(
+                    "Identidade Angico não encontrada. Cadastre a pessoa sem identidade ou use uma conta existente.");
         }
 
         Pessoa pessoa = new Pessoa(
@@ -57,8 +60,6 @@ public class PessoaService {
                         ? PAPEL_PADRAO : request.papel(),
                 clock.now()
         );
-        pessoa.setAngicoId(angicoId);
-
         Pessoa saved;
         try {
             saved = pessoaRepository.saveAndFlush(pessoa);

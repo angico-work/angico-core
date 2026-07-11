@@ -7,7 +7,7 @@ import jakarta.validation.constraints.Size;
 import java.time.Instant;
 
 public record ResultadoRequest(
-        String workspaceId,
+        @NotBlank @Size(max = 255) String workspaceId,
         @NotNull @Positive Long acaoId,
         @NotBlank @Size(max = 200) String titulo,
         @Size(max = 2000) String descricao,

@@ -19,6 +19,8 @@ O workspace é a fronteira de isolamento. Um objeto, uma relação ou um evento 
 
 Novos tipos entram somente quando possuem contrato de criação, permissão, memória e consumidor real. Tarefas, coletas, lotes e incidentes permanecem fora do vocabulário atual até que esses quatro pontos existam.
 
+`PESSOA` representa tanto participantes do território quanto pessoas autenticadas. Um participante pode existir sem Angico ID; a identidade de login e o acesso a workspaces são concedidos separadamente por associações ativas. Ao consultar um workspace secundário, membros ativos aparecem no contexto dessa partição sem alterar o workspace de origem da pessoa.
+
 ## Relações canônicas
 
 ```mermaid
@@ -84,6 +86,7 @@ Campos essenciais de um evento:
 6. Indicador sem medição expressa intenção de acompanhar, não resultado medido.
 7. Mensagens preservam a permissão da conversa mesmo quando mencionam outro objeto.
 8. O Rastro é somente leitura e não cria objetos, eventos ou relações para preencher lacunas.
+9. Uma mutação sempre declara seu workspace; ausência ou associação sem papel de escrita encerra a operação antes de alterar o domínio.
 
 ## Rastro Verificável
 

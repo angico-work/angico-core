@@ -7,7 +7,7 @@ import jakarta.validation.constraints.Size;
 import java.time.Instant;
 
 public record ParticipacaoRequest(
-        String workspaceId,
+        @NotBlank @Size(max = 255) String workspaceId,
         @NotNull @Positive Long pessoaId,
         @NotBlank @Size(max = 40) String papel,
         @NotBlank @Size(max = 20) String status,

@@ -30,11 +30,13 @@ O modo offline permite abrir dados locais somente dentro de uma autorização pr
 - Papéis administrativos são verificados na API, não na interface.
 - O papel `VIEWER` não altera o domínio compartilhado. Ele pode atualizar apenas o próprio perfil e o próprio estado de leitura de conversas.
 - Mutações diretas, sincronização offline, uploads e mensagens revalidam no serviço se o papel atual permite escrita.
+- Toda mutação informa o workspace explicitamente; a API não usa o workspace da sessão como fallback para escrita.
 - Serviços validam referências entre entidades antes de persistir relações.
 - Entidades de outro workspace não podem ser ligadas por IDs enviados pelo cliente.
 - Conversas e anexos exigem participação ou papel administrativo.
 - Downloads consultam o registro autorizado antes de resolver o arquivo no disco.
 - Ator e organização não são aceitos como autoridade a partir do payload; são derivados da sessão e das associações persistidas.
+- Pessoas do território podem existir sem identidade de login. Acesso à conta é concedido somente por associação ativa, e o perfil autenticado é lido pelo endpoint de identidade `/api/pessoas/me`.
 
 ## Validação e persistência
 

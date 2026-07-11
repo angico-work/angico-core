@@ -31,7 +31,7 @@ public class EvidenciaController {
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @ResponseStatus(HttpStatus.CREATED)
     public EvidenciaMetadataResponse create(
-            @RequestParam(required = false) String workspaceId,
+            @RequestParam String workspaceId,
             @RequestParam String subjectType,
             @RequestParam Long subjectId,
             @RequestParam String title,

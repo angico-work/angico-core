@@ -6,7 +6,7 @@ import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
 
 public record IndicadorRequest(
-        String workspaceId,
+        @NotBlank @Size(max = 255) String workspaceId,
         @NotNull @Positive Long territorioId,
         @Positive Long resultadoId,
         @NotBlank @Size(max = 200) String nome,

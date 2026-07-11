@@ -51,7 +51,10 @@ public final class WorkspaceAuthorizationService {
     }
 
     public String requireWritableWorkspace(String requestedWorkspaceId) {
-        String workspaceId = requestedWorkspace(requestedWorkspaceId);
+        if (requestedWorkspaceId == null || requestedWorkspaceId.isBlank()) {
+            throw new ForbiddenException("Workspace obrigatório para operações de escrita.");
+        }
+        String workspaceId = requestedWorkspaceId.trim();
         requireRole(workspaceId, WRITE_ROLES);
         return workspaceId;
     }

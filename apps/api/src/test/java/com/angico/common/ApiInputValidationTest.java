@@ -1,5 +1,6 @@
 package com.angico.common;
 
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -10,22 +11,34 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.angico.acoes.AcaoController;
 import com.angico.acoes.AcaoService;
+import com.angico.evidencias.EvidenciaController;
+import com.angico.evidencias.EvidenciaService;
+import com.angico.impacto.IndicadorRequest;
+import com.angico.impacto.MedicaoRequest;
+import com.angico.impacto.ResultadoRequest;
 import com.angico.mensagens.MensagemController;
 import com.angico.mensagens.MensagemService;
 import com.angico.missoes.MissaoController;
 import com.angico.missoes.MissaoService;
 import com.angico.observacoes.ObservacaoController;
 import com.angico.observacoes.ObservacaoService;
+import com.angico.organizacoes.OrganizacaoCreateRequest;
+import com.angico.organizacoes.ParticipacaoRequest;
 import com.angico.pessoas.PessoaController;
 import com.angico.pessoas.PessoaService;
 import com.angico.potencialidades.PotencialidadeController;
 import com.angico.potencialidades.PotencialidadeService;
 import com.angico.problemas.ProblemaController;
 import com.angico.problemas.ProblemaService;
+import com.angico.recursos.RecursoRequest;
+import com.angico.recursos.UsoRecursoRequest;
 import com.angico.territorios.TerritorioController;
 import com.angico.territorios.TerritorioService;
 import com.angico.workspaces.WorkspaceController;
 import com.angico.workspaces.WorkspaceService;
+import jakarta.validation.Validator;
+import java.math.BigDecimal;
+import java.time.Instant;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.MediaType;
@@ -45,6 +58,8 @@ class ApiInputValidationTest {
     private TerritorioService territorioService;
     private MensagemService mensagemService;
     private WorkspaceService workspaceService;
+    private EvidenciaService evidenciaService;
+    private Validator validator;
     private MockMvc mvc;
 
     @BeforeEach
@@ -58,9 +73,11 @@ class ApiInputValidationTest {
         territorioService = mock(TerritorioService.class);
         mensagemService = mock(MensagemService.class);
         workspaceService = mock(WorkspaceService.class);
+        evidenciaService = mock(EvidenciaService.class);
 
-        LocalValidatorFactoryBean validator = new LocalValidatorFactoryBean();
-        validator.afterPropertiesSet();
+        LocalValidatorFactoryBean validatorFactory = new LocalValidatorFactoryBean();
+        validatorFactory.afterPropertiesSet();
+        validator = validatorFactory;
         mvc = MockMvcBuilders.standaloneSetup(
                         new ObservacaoController(observacaoService),
                         new ProblemaController(problemaService),
@@ -70,11 +87,35 @@ class ApiInputValidationTest {
                         new PessoaController(pessoaService),
                         new TerritorioController(territorioService),
                         new MensagemController(mensagemService),
-                        new WorkspaceController(workspaceService)
+                        new WorkspaceController(workspaceService),
+                        new EvidenciaController(evidenciaService)
                 )
                 .setControllerAdvice(new ApiExceptionHandler())
-                .setValidator(validator)
+                .setValidator(validatorFactory)
                 .build();
+    }
+
+    @Test
+    void requiresExplicitWorkspaceAcrossMutationContracts() {
+        assertFalse(validator.validate(new ResultadoRequest(null, 1L, "Resultado", null, null)).isEmpty());
+        assertFalse(validator.validate(new IndicadorRequest(null, 1L, null, "Indicador", null, null)).isEmpty());
+        assertFalse(validator.validate(new MedicaoRequest(null, 1L, 1.0, null, null, null)).isEmpty());
+        assertFalse(validator.validate(new RecursoRequest(null, "Luvas", "MATERIAL", "par", null)).isEmpty());
+        assertFalse(validator.validate(new UsoRecursoRequest(null, 1L, BigDecimal.ONE, "par", null)).isEmpty());
+        assertFalse(validator.validate(new OrganizacaoCreateRequest(null, "Coletivo", "COLETIVO", null, null)).isEmpty());
+        assertFalse(validator.validate(new ParticipacaoRequest(
+                null, 1L, "MEMBRO", "ATIVA", Instant.now(), null)).isEmpty());
+    }
+
+    @Test
+    void rejectsEvidenceCreationWithoutWorkspace() throws Exception {
+        mvc.perform(multipart("/api/evidencias")
+                        .param("subjectType", "OBSERVACAO")
+                        .param("subjectId", "1")
+                        .param("title", "Foto da nascente"))
+                .andExpect(status().isBadRequest());
+
+        verifyNoInteractions(evidenciaService);
     }
 
     @Test
