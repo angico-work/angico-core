@@ -7,6 +7,7 @@ interface Props {
   workspaceLabel: string;
   workspaceId: string;
   ownerId?: string;
+  sidebarOpen: boolean;
   onToggleSidebar: () => void;
   onWorkspaceClick: () => void;
 }
@@ -48,7 +49,7 @@ function syncLabel(online: boolean, state: SyncState): string {
   return online ? 'Em dia' : 'Offline';
 }
 
-export default function Topbar({ workspaceLabel, workspaceId, ownerId, onToggleSidebar, onWorkspaceClick }: Props) {
+export default function Topbar({ workspaceLabel, workspaceId, ownerId, sidebarOpen, onToggleSidebar, onWorkspaceClick }: Props) {
   const online = useOnline();
   const [syncState, setSyncState] = useState<SyncState>(EMPTY_SYNC_STATE);
   const [showSync, setShowSync] = useState(false);
@@ -78,7 +79,13 @@ export default function Topbar({ workspaceLabel, workspaceId, ownerId, onToggleS
   return (
     <>
       <header className="topbar">
-        <button className="sidebar-toggle" aria-label="Abrir menu" onClick={onToggleSidebar}>☰</button>
+        <button
+          className="sidebar-toggle"
+          aria-label={sidebarOpen ? 'Fechar menu' : 'Abrir menu'}
+          aria-controls="app-sidebar"
+          aria-expanded={sidebarOpen}
+          onClick={onToggleSidebar}
+        >☰</button>
         <div className="topbar-context">
           <span>Espaço de trabalho ativo</span>
           <b>{workspaceLabel}</b>

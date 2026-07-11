@@ -12,6 +12,7 @@ describe('Topbar synchronization access', () => {
       <Topbar
         workspaceLabel="Território do Sol"
         workspaceId="territorio-sol"
+        sidebarOpen={false}
         onToggleSidebar={() => undefined}
         onWorkspaceClick={() => undefined}
       />
@@ -19,6 +20,8 @@ describe('Topbar synchronization access', () => {
 
     expect(screen.getByText('Espaço de trabalho ativo')).toBeInTheDocument();
     expect(screen.queryByText('Território ativo')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Abrir menu' })).toHaveAttribute('aria-controls', 'app-sidebar');
+    expect(screen.getByRole('button', { name: 'Abrir menu' })).toHaveAttribute('aria-expanded', 'false');
 
     fireEvent.click(screen.getByRole('button', { name: 'Abrir sincronização' }));
 

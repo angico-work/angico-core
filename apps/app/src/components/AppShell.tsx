@@ -251,6 +251,7 @@ export default function AppShell() {
         workspaceLabel={activeName}
         workspaceId={activeSlug}
         ownerId={activeIdentity.ownerId}
+        sidebarOpen={sidebarOpen}
         onToggleSidebar={() => setSidebarOpen((v) => !v)}
         onWorkspaceClick={() => setShowProfile(true)}
       />

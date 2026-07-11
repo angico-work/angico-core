@@ -71,7 +71,7 @@ function roleLabel(role: string): string {
 
 export default function Sidebar(props: Props) {
   return (
-    <aside className={`sidebar ${props.open ? 'open' : ''}`}>
+    <aside id="app-sidebar" className={`sidebar ${props.open ? 'open' : ''}`}>
       <div className="sidebar-brand"><Brand small /></div>
       <WorkspaceSwitcher
         workspaces={props.workspaces}
