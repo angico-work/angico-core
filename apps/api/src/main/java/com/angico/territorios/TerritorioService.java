@@ -4,6 +4,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 
+import com.angico.common.ClockProvider;
 import com.angico.core.memory.MemoryEvent;
 import com.angico.core.memory.OperationalMemoryService;
 import com.angico.workspaces.WorkspaceAuthorizationService;
@@ -20,17 +21,20 @@ public class TerritorioService {
     private final OperationalMemoryService memoryService;
     private final WorkspaceAuthorizationService authorizationService;
     private final ObjectMapper objectMapper;
+    private final ClockProvider clock;
 
     public TerritorioService(
             TerritorioRepository territorioRepository,
             OperationalMemoryService memoryService,
             WorkspaceAuthorizationService authorizationService,
-            ObjectMapper objectMapper
+            ObjectMapper objectMapper,
+            ClockProvider clock
     ) {
         this.territorioRepository = territorioRepository;
         this.memoryService = memoryService;
         this.authorizationService = authorizationService;
         this.objectMapper = objectMapper;
+        this.clock = clock;
     }
 
     public List<TerritorioResponse> list(String workspaceId) {
@@ -56,7 +60,8 @@ public class TerritorioService {
     @Transactional
     public TerritorioResponse create(TerritorioCreateRequest request) {
         validateCoordinates(request.latitude(), request.longitude());
-        Instant now = Instant.now();
+        validateBoundingBox(request.boundingBox());
+        Instant now = clock.now();
         Territorio territorio = new Territorio();
         territorio.setWorkspaceId(authorizationService.requireAuthorizedWorkspace(request.workspaceId()));
         territorio.setNome(requireText(request.nome(), "nome"));
@@ -74,6 +79,7 @@ public class TerritorioService {
         territorio = territorioRepository.save(territorio);
 
         String entityId = String.valueOf(territorio.getId());
+        String actorId = authorizationService.currentActorId();
         memoryService.registrarObjeto(
                 territorio.getWorkspaceId(),
                 "TERRITORIO",
@@ -89,7 +95,7 @@ public class TerritorioService {
                 entityId,
                 "TERRITORIO_CRIADO",
                 "api",
-                null,
+                actorId,
                 null,
                 null,
                 null,
@@ -138,9 +144,27 @@ public class TerritorioService {
         if ((latitude == null) != (longitude == null)) {
             throw new IllegalArgumentException("Latitude e longitude devem ser informadas juntas.");
         }
-        if (latitude != null && (latitude < -90 || latitude > 90
+        if (latitude != null && (!Double.isFinite(latitude) || !Double.isFinite(longitude)
+                || latitude < -90 || latitude > 90
                 || longitude < -180 || longitude > 180)) {
             throw new IllegalArgumentException("Coordenadas inválidas.");
+        }
+    }
+
+    private void validateBoundingBox(List<Double> values) {
+        if (values == null || values.isEmpty()) {
+            return;
+        }
+        if (values.size() != 4 || values.stream().anyMatch(value -> value == null || !Double.isFinite(value))) {
+            throw new IllegalArgumentException("boundingBox deve conter quatro coordenadas finitas.");
+        }
+        double south = values.get(0);
+        double north = values.get(1);
+        double west = values.get(2);
+        double east = values.get(3);
+        if (south < -90 || north > 90 || west < -180 || east > 180
+                || south > north || west > east) {
+            throw new IllegalArgumentException("boundingBox inválido.");
         }
     }
 
