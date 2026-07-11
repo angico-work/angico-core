@@ -4,7 +4,6 @@ import {
   ApiHttpError,
   ApiNetworkError,
   createEntity,
-  ensureTerritorio,
   getSession,
   hasFreshOfflineSession,
   isAuthenticated,
@@ -20,7 +19,6 @@ import {
   login,
   revalidateSession,
   apiUrl,
-  createEvidencia,
   createIndicador,
   createMedicao,
   createOrganizacao,
@@ -30,7 +28,6 @@ import {
   createResultado,
   createTerritorio,
   createWorkspace,
-  evidenciaFileUrl,
   listEvidencias,
   listParticipacoes,
   listPessoas,
@@ -39,8 +36,7 @@ import {
   requestJson,
   reverseGeocode,
   searchGeocoding,
-  sessionOwnerId,
-  sendMensagem
+  sessionOwnerId
 } from './api';
 import { resetOfflineDatabase } from './offlineStore';
 
@@ -246,16 +242,6 @@ describe('cookie session API', () => {
     expect(JSON.parse(String(init.body))).toEqual({ nome: 'Nascente' });
   });
 
-  it('does not create a placeholder territory just because conversations were opened', async () => {
-    const fetchMock = vi.fn().mockResolvedValue(response(200, []));
-    vi.stubGlobal('fetch', fetchMock);
-
-    await expect(ensureTerritorio('workspace-a')).resolves.toBeNull();
-
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(fetchMock).toHaveBeenCalledWith('/api/territorios?workspaceId=workspace-a', expect.any(Object));
-  });
-
   it('purges the legacy bearer session format instead of retaining its token', () => {
     localStorage.setItem('angico.session', JSON.stringify({ ...session, token: 'legacy-bearer' }));
 
@@ -325,55 +311,6 @@ describe('cookie session API', () => {
     await expect(requestJson('/api/territorios')).rejects.toBe(abort);
   });
 
-  it('rejects attachments that exceed the API per-file limit before upload', async () => {
-    const fetchMock = vi.fn().mockResolvedValue(response(200, {}));
-    vi.stubGlobal('fetch', fetchMock);
-    const oversized = new File(
-      [new Uint8Array(2 * 1024 * 1024 + 1)],
-      'oversized.pdf',
-      { type: 'application/pdf' }
-    );
-
-    await expect(sendMensagem(1, '', [oversized])).rejects.toThrow('2 MB');
-    expect(fetchMock).not.toHaveBeenCalled();
-  });
-
-  it('keeps aggregate attachments below the same-origin function payload ceiling', async () => {
-    const fetchMock = vi.fn().mockResolvedValue(response(200, {}));
-    vi.stubGlobal('fetch', fetchMock);
-    const first = new File([new Uint8Array(2 * 1024 * 1024)], 'first.pdf');
-    const second = new File([new Uint8Array(2 * 1024 * 1024)], 'second.pdf');
-
-    await expect(sendMensagem(1, '', [first, second])).rejects.toThrow('3,75 MB');
-    expect(fetchMock).not.toHaveBeenCalled();
-  });
-
-  it('sends stable offline metadata in both the multipart body and idempotency header', async () => {
-    localStorage.setItem('angico.session', JSON.stringify(session));
-    const fetchMock = vi.fn().mockResolvedValue(response(201, { id: 81 }));
-    vi.stubGlobal('fetch', fetchMock);
-
-    await sendMensagem(12, 'Vamos amanhã.', [], {
-      clientMessageId: 'msg-8f9b',
-      deviceId: 'device-campo-2',
-      occurredAt: '2026-07-10T14:20:00.000Z'
-    });
-
-    expect(fetchMock).toHaveBeenCalledWith('/api/mensagens/conversas/12/mensagens', expect.objectContaining({
-      method: 'POST',
-      credentials: 'include',
-      headers: expect.objectContaining({
-        'Idempotency-Key': 'msg-8f9b',
-        'X-CSRF-Token': 'csrf-secret'
-      })
-    }));
-    const form = fetchMock.mock.calls[0][1].body as FormData;
-    expect(form.get('corpo')).toBe('Vamos amanhã.');
-    expect(form.get('clientMessageId')).toBe('msg-8f9b');
-    expect(form.get('deviceId')).toBe('device-campo-2');
-    expect(form.get('occurredAt')).toBe('2026-07-10T14:20:00.000Z');
-  });
-
   it('marks a conversation as read only through the real mutation endpoint', async () => {
     localStorage.setItem('angico.session', JSON.stringify(session));
     const fetchMock = vi.fn().mockResolvedValue(response(204, null));
@@ -386,67 +323,6 @@ describe('cookie session API', () => {
       credentials: 'include',
       headers: expect.objectContaining({ 'X-CSRF-Token': 'csrf-secret' })
     }));
-  });
-
-  it('creates evidence as multipart with a stable mutation key and an optional safe file', async () => {
-    localStorage.setItem('angico.session', JSON.stringify(session));
-    const fetchMock = vi.fn().mockResolvedValue(response(201, { id: 91, hasFile: true }));
-    vi.stubGlobal('fetch', fetchMock);
-    const file = new File(['relato de campo'], 'relato.txt', { type: 'text/plain' });
-
-    await createEvidencia({
-      workspaceId: 'workspace-a',
-      subjectType: 'ACAO',
-      subjectId: 44,
-      title: 'Registro da retirada',
-      description: 'Equipe concluiu o trecho norte.',
-      capturedAt: '2026-07-10T14:20:00.000Z',
-      deviceId: 'campo-2',
-      clientMutationId: 'evidencia-8f9b',
-      file
-    });
-
-    expect(fetchMock).toHaveBeenCalledWith('/api/evidencias', expect.objectContaining({
-      method: 'POST',
-      credentials: 'include',
-      headers: expect.objectContaining({
-        'Idempotency-Key': 'evidencia-8f9b',
-        'X-CSRF-Token': 'csrf-secret'
-      })
-    }));
-    const form = fetchMock.mock.calls[0][1].body as FormData;
-    expect(Object.fromEntries(form.entries())).toEqual(expect.objectContaining({
-      workspaceId: 'workspace-a',
-      subjectType: 'ACAO',
-      subjectId: '44',
-      title: 'Registro da retirada',
-      description: 'Equipe concluiu o trecho norte.',
-      capturedAt: '2026-07-10T14:20:00.000Z',
-      deviceId: 'campo-2',
-      clientMutationId: 'evidencia-8f9b',
-      file
-    }));
-    expect((fetchMock.mock.calls[0][1].headers as Record<string, string>)['Content-Type']).toBeUndefined();
-    expect(evidenciaFileUrl(91)).toBe('/api/evidencias/91/arquivo');
-  });
-
-  it('rejects an unsupported or oversized evidence file before contacting the API', async () => {
-    const fetchMock = vi.fn();
-    vi.stubGlobal('fetch', fetchMock);
-    const base = {
-      workspaceId: 'workspace-a', subjectType: 'OBSERVACAO' as const, subjectId: 8,
-      title: 'Foto da área', clientMutationId: 'evidencia-1'
-    };
-
-    await expect(createEvidencia({
-      ...base,
-      file: new File(['conteúdo'], 'arquivo.svg', { type: 'image/svg+xml' })
-    })).rejects.toThrow('JPG, PNG, WebP, PDF ou TXT');
-    await expect(createEvidencia({
-      ...base,
-      file: new File([new Uint8Array(2 * 1024 * 1024 + 1)], 'arquivo.pdf', { type: 'application/pdf' })
-    })).rejects.toThrow('2 MB');
-    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it('uses typed endpoints for results, indicators and measurements without adding an actor', async () => {
@@ -553,11 +429,4 @@ describe('cookie session API', () => {
     );
   });
 
-  it('refuses to build a message endpoint from an invalid conversation identifier', async () => {
-    const fetchMock = vi.fn();
-    vi.stubGlobal('fetch', fetchMock);
-
-    await expect(sendMensagem(Number.NaN, 'texto')).rejects.toThrow('Conversa inválida');
-    expect(fetchMock).not.toHaveBeenCalled();
-  });
 });

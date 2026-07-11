@@ -1,8 +1,8 @@
 import type {
-  Acao, AcaoInput, DashboardData, ObservacaoInput, Observacao, MapPoint, MemoriaEvent, GeoResult,
+  Acao, AcaoInput, DashboardData, Observacao, MapPoint, MemoriaEvent, GeoResult,
   GeoSearchResponse, PessoaHit, Conversa, Mensagem, MensagemBusca, RastroResponse, RastroRootType,
   MissaoInput, MissaoRegistro, Problema, ProblemaInput, Territorio, TerritorioInput, Workspace, WorkspaceMember,
-  Evidencia, EvidenciaInput, Resultado, ResultadoInput, Indicador, IndicadorInput, Medicao, MedicaoInput,
+  Evidencia, Resultado, ResultadoInput, Indicador, IndicadorInput, Medicao, MedicaoInput,
   Organizacao, OrganizacaoInput, Participacao, ParticipacaoInput, Recurso, RecursoInput, RecursoUso, RecursoUsoInput
 } from '../types';
 import { ApiHttpError, ApiNetworkError } from './apiErrors';
@@ -18,7 +18,6 @@ import {
   isWorkspaceList,
   isWorkspaceMemberList
 } from './apiContracts';
-import { validateMessageFiles } from './messageFiles';
 import { loadConfirmedOrSnapshot } from './offlineQuery';
 import { ACCOUNT_SNAPSHOT_WORKSPACE } from './offlineReadState';
 import {
@@ -130,11 +129,12 @@ export async function register(input: RegisterInput): Promise<AuthSession> {
 }
 
 export async function logout(): Promise<void> {
+  const request = apiFetch(apiUrl('/api/auth/logout'), { method: 'POST' });
+  clearSession();
   try {
-    await apiFetch(apiUrl('/api/auth/logout'), { method: 'POST' });
+    await request;
   } catch {
   }
-  clearSession();
 }
 
 export async function revalidateSession(): Promise<AuthSession | null> {
@@ -163,18 +163,6 @@ export async function loadDashboard(workspaceId = DEFAULT_WORKSPACE): Promise<Da
     (value): value is DashboardData => isDashboardData(value, workspaceId)
   );
   return result.data;
-}
-
-export async function createObservacao(input: ObservacaoInput): Promise<Observacao> {
-  const response = await apiFetch(apiUrl('/api/observacoes'), {
-    method: 'POST',
-    headers: requestHeaders({ 'Content-Type': 'application/json' }),
-    body: JSON.stringify(input)
-  });
-  if (!response.ok) {
-    throw new Error(`Falha ao registrar observação (HTTP ${response.status})`);
-  }
-  return (await response.json()) as Observacao;
 }
 
 export async function loadMapPoints(workspaceId = DEFAULT_WORKSPACE): Promise<MapPoint[]> {
@@ -444,51 +432,6 @@ export function listEvidencias(workspaceId = DEFAULT_WORKSPACE): Promise<Evidenc
   return listEntities<Evidencia>('/api/evidencias', workspaceId);
 }
 
-const EVIDENCE_MAX_FILE_SIZE = 2 * 1024 * 1024;
-const EVIDENCE_FILE_TYPES = new Map<string, Set<string>>([
-  ['.jpg', new Set(['image/jpeg'])],
-  ['.jpeg', new Set(['image/jpeg'])],
-  ['.png', new Set(['image/png'])],
-  ['.webp', new Set(['image/webp'])],
-  ['.pdf', new Set(['application/pdf'])],
-  ['.txt', new Set(['text/plain'])]
-]);
-
-function validateEvidenceFile(file: File): void {
-  if (file.size > EVIDENCE_MAX_FILE_SIZE) {
-    throw new Error('O arquivo da evidência deve ter no máximo 2 MB.');
-  }
-  const dot = file.name.lastIndexOf('.');
-  const extension = dot >= 0 ? file.name.slice(dot).toLowerCase() : '';
-  const acceptedTypes = EVIDENCE_FILE_TYPES.get(extension);
-  if (!acceptedTypes?.has(file.type.toLowerCase())) {
-    throw new Error('Use um arquivo JPG, PNG, WebP, PDF ou TXT.');
-  }
-}
-
-export async function createEvidencia(input: EvidenciaInput): Promise<Evidencia> {
-  if (input.file) validateEvidenceFile(input.file);
-  const form = new FormData();
-  form.append('workspaceId', input.workspaceId);
-  form.append('subjectType', input.subjectType);
-  form.append('subjectId', String(input.subjectId));
-  form.append('title', input.title.trim());
-  if (input.description?.trim()) form.append('description', input.description.trim());
-  if (input.capturedAt) form.append('capturedAt', input.capturedAt);
-  if (input.deviceId) form.append('deviceId', input.deviceId);
-  if (input.clientMutationId) form.append('clientMutationId', input.clientMutationId);
-  if (input.file) form.append('file', input.file);
-  const response = await apiFetch(apiUrl('/api/evidencias'), {
-    method: 'POST',
-    headers: requestHeaders(input.clientMutationId ? { 'Idempotency-Key': input.clientMutationId } : {}),
-    body: form
-  });
-  if (!response.ok) {
-    throw new Error(await readError(response, 'Não foi possível registrar a evidência.'));
-  }
-  return (await response.json()) as Evidencia;
-}
-
 export function evidenciaFileUrl(evidenciaId: number): string {
   return apiUrl(`/api/evidencias/${evidenciaId}/arquivo`);
 }
@@ -599,37 +542,6 @@ export async function listMensagens(
   return result.data;
 }
 
-export interface MessageSendMetadata {
-  clientMessageId: string;
-  deviceId: string;
-  occurredAt: string;
-}
-
-export async function sendMensagem(
-  conversaId: number,
-  corpo: string,
-  attachments: File[] = [],
-  metadata?: MessageSendMetadata
-): Promise<Mensagem> {
-  requireConversationId(conversaId);
-  validateMessageFiles(attachments);
-  const form = new FormData();
-  if (corpo.trim()) form.append('corpo', corpo.trim());
-  if (metadata) {
-    form.append('clientMessageId', metadata.clientMessageId);
-    form.append('deviceId', metadata.deviceId);
-    form.append('occurredAt', metadata.occurredAt);
-  }
-  attachments.forEach((file) => form.append('attachments', file));
-  const r = await apiFetch(apiUrl(`/api/mensagens/conversas/${conversaId}/mensagens`), {
-    method: 'POST',
-    headers: requestHeaders(metadata ? { 'Idempotency-Key': metadata.clientMessageId } : {}),
-    body: form
-  });
-  if (!r.ok) throw new Error(await readError(r, 'Não foi possível enviar a mensagem.'));
-  return (await r.json()) as Mensagem;
-}
-
 export interface CreateConversaInput {
   workspaceId: string;
   territorioId?: number;
@@ -697,11 +609,6 @@ export async function searchMensagens(workspaceId: string, query: string): Promi
     throw new Error(await readError(response, 'Não foi possível buscar nas conversas.'));
   }
   return (await response.json()) as MensagemBusca[];
-}
-
-export async function ensureTerritorio(workspaceId = DEFAULT_WORKSPACE): Promise<number | null> {
-  const existing = await listTerritorios(workspaceId);
-  return existing[0]?.id ?? null;
 }
 
 export async function getProfile(workspaceId = DEFAULT_WORKSPACE): Promise<PessoaHit | null> {
