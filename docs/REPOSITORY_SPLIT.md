@@ -1,6 +1,6 @@
 # Separação dos repositórios
 
-O Angico está organizado como monorepo, mas `apps/site`, `apps/app` e `apps/api` não compartilham código, dependências ou configuração de build. Cada pasta pode ser extraída para um repositório próprio preservando o histórico dos arquivos que lhe pertencem.
+O Angico está organizado como monorepo, mas `apps/site`, `apps/app` e `apps/api` não compartilham código, dependências ou configuração de build. Cada pasta contém também um workflow standalone e pode ser extraída para um repositório próprio preservando o histórico dos arquivos que lhe pertencem.
 
 ## Estado atual
 
@@ -33,7 +33,12 @@ git bundle verify /caminho/angico-core-before-split.bundle
 git clone https://github.com/angico-work/angico-core.git angico-web
 cd angico-web
 git switch feat/angico-rebuild
-git filter-repo --path apps/site/ --path-rename apps/site/: --force
+git filter-repo \
+  --path apps/site/ \
+  --path docs/DEPLOYMENT.md \
+  --path docs/REPOSITORY_SPLIT.md \
+  --path-rename apps/site/: \
+  --force
 git remote remove origin
 git remote add origin https://github.com/angico-work/angico-web.git
 git push -u origin HEAD:main
@@ -45,7 +50,14 @@ git push -u origin HEAD:main
 git clone https://github.com/angico-work/angico-core.git angico-app
 cd angico-app
 git switch feat/angico-rebuild
-git filter-repo --path apps/app/ --path-rename apps/app/: --force
+git filter-repo \
+  --path apps/app/ \
+  --path docs/DEPLOYMENT.md \
+  --path docs/OFFLINE_ARCHITECTURE.md \
+  --path docs/SECURITY.md \
+  --path docs/UNIQUE_FEATURE.md \
+  --path-rename apps/app/: \
+  --force
 git remote remove origin
 git remote add origin https://github.com/angico-work/angico-app.git
 git push -u origin HEAD:main
@@ -57,7 +69,15 @@ git push -u origin HEAD:main
 git clone https://github.com/angico-work/angico-core.git angico-api
 cd angico-api
 git switch feat/angico-rebuild
-git filter-repo --path apps/api/ --path-rename apps/api/: --force
+git filter-repo \
+  --path apps/api/ \
+  --path docs/DEPLOYMENT.md \
+  --path docs/ONTOLOGY.md \
+  --path docs/SECURITY.md \
+  --path docs/UNIQUE_FEATURE.md \
+  --path-rename apps/api/: \
+  --force
+perl -pi -e 's#\.\./\.\./docs/#docs/#g' README.md
 git remote remove origin
 git remote add origin https://github.com/angico-work/angico-api.git
 git push -u origin HEAD:main
@@ -67,7 +87,7 @@ O nome da branch acima deve ser substituído pelo commit ou tag efetivamente apr
 
 ## Validação após a extração
 
-Em cada repositório:
+Depois do filtro, confirme que `.github/workflows/verify.yml`, `.gitignore`, `.env.example`, o README e os documentos selecionados existem na raiz extraída. Em cada repositório:
 
 ```bash
 git status --short
