@@ -11,8 +11,10 @@ export function LocalMessageAttachment({ attachment, ownerId, workspaceId }: Loc
   const [url, setUrl] = useState<string>();
   const [availability, setAvailability] = useState<'checking' | 'ready' | 'missing'>('checking');
   useEffect(() => {
+    let active = true;
     let objectUrl: string | undefined;
     void getMessageAttachmentFile(attachment.blobKey, ownerId, workspaceId).then((file) => {
+      if (!active) return;
       if (!file) {
         setAvailability('missing');
       } else if (typeof URL.createObjectURL === 'function') {
@@ -22,8 +24,11 @@ export function LocalMessageAttachment({ attachment, ownerId, workspaceId }: Loc
       } else {
         setAvailability('ready');
       }
+    }).catch(() => {
+      if (active) setAvailability('missing');
     });
     return () => {
+      active = false;
       if (objectUrl && typeof URL.revokeObjectURL === 'function') URL.revokeObjectURL(objectUrl);
     };
   }, [attachment.blobKey, ownerId, workspaceId]);
