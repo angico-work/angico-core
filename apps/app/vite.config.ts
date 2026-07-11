@@ -8,6 +8,9 @@ export default defineConfig(({ mode }) => {
 
   return {
     plugins: [react()],
+    build: {
+      manifest: 'asset-manifest.json'
+    },
     server: {
       host: '0.0.0.0',
       port: 5176,

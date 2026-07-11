@@ -1,11 +1,48 @@
-/* Static app-shell cache. Authenticated API responses are never cached here. */
-const CACHE = 'angico-cache-v4';
+const CACHE = 'angico-cache-v5';
+const ASSET_MANIFEST = '/asset-manifest.json';
 const APP_SHELL = ['/', '/index.html', '/manifest.webmanifest', '/angico-icone.png'];
 
+function manifestPrecacheUrls(manifest) {
+  const urls = new Set(APP_SHELL);
+  const visited = new Set();
+
+  function addAsset(value) {
+    if (typeof value !== 'string') return;
+    const url = new URL(value, self.location.origin);
+    if (url.origin !== self.location.origin || url.pathname.startsWith('/api/')) return;
+    if (!url.pathname.endsWith('.js') && !url.pathname.endsWith('.css')) return;
+    urls.add(`${url.pathname}${url.search}`);
+  }
+
+  function visit(key) {
+    if (visited.has(key)) return;
+    visited.add(key);
+    const entry = manifest[key];
+    if (!entry || typeof entry !== 'object') return;
+
+    addAsset(entry.file);
+    for (const value of entry.css ?? []) addAsset(value);
+    for (const value of entry.assets ?? []) addAsset(value);
+    for (const dependency of entry.imports ?? []) visit(dependency);
+    for (const dependency of entry.dynamicImports ?? []) visit(dependency);
+  }
+
+  const entries = Object.keys(manifest).filter((key) => manifest[key]?.isEntry);
+  for (const key of entries.length > 0 ? entries : Object.keys(manifest)) visit(key);
+  return [...urls];
+}
+
+async function installApp() {
+  const response = await fetch(ASSET_MANIFEST, { cache: 'no-store' });
+  if (!response.ok) throw new Error('Manifesto de recursos indisponível.');
+  const manifest = await response.json();
+  const cache = await caches.open(CACHE);
+  await cache.addAll(manifestPrecacheUrls(manifest));
+  await self.skipWaiting();
+}
+
 self.addEventListener('install', (event) => {
-  event.waitUntil(
-    caches.open(CACHE).then((cache) => cache.addAll(APP_SHELL)).then(() => self.skipWaiting())
-  );
+  event.waitUntil(installApp());
 });
 
 self.addEventListener('activate', (event) => {
@@ -27,7 +64,6 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // SPA navigations → network-first, fall back to the cached shell.
   if (request.mode === 'navigate') {
     event.respondWith(
       fetch(request)
@@ -43,7 +79,6 @@ self.addEventListener('fetch', (event) => {
 
   if (url.origin !== self.location.origin) return;
 
-  // Static assets → stale-while-revalidate.
   event.respondWith(
     caches.match(request).then((cached) => {
       const network = fetch(request)
