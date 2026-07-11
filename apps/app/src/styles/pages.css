@@ -202,6 +202,8 @@
 .message-composer { padding: .8rem 1rem 1rem; border-top: 1px solid var(--line); background: #fff; }
 .message-composer > label { display: block; margin-bottom: .35rem; font-weight: 600; }
 .message-link-field { margin: .65rem 0 0; }
+.message-link-unavailable { display: flex; align-items: center; justify-content: space-between; gap: .6rem; }
+.message-link-unavailable button { min-height: 36px; padding: .2rem 0; color: var(--forest); background: transparent; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
 .message-composer footer { margin-top: .6rem; display: flex; justify-content: space-between; gap: .6rem; }
 .selected-files { margin-bottom: .5rem; display: grid; gap: .35rem; }
 .selected-file { min-height: 50px; padding: .4rem .5rem; border: 1px solid var(--line); display: grid; grid-template-columns: auto 1fr 36px; align-items: center; gap: .55rem; background: color-mix(in srgb, var(--water) 7%, var(--surface)); }

@@ -82,6 +82,10 @@ export default function MensagensPage() {
   activeWorkspaceRef.current = workspaceId;
 
   const active = conversations.find((conversation) => conversation.id === activeId) ?? null;
+  const activeDraftKey = activeId != null && ownerId
+    ? `${ownerId}:${workspaceId}:${activeId}`
+    : undefined;
+  const draftReady = activeDraftKey !== undefined && draftKey === activeDraftKey;
   const linkedContextKey = messageLink
     ? `${messageLink.linkedEntityType}:${messageLink.linkedEntityId}`
     : '';
@@ -279,7 +283,7 @@ export default function MensagensPage() {
     if (activeId == null
       || !ownerId
       || sending
-      || draftKey !== `${ownerId}:${workspaceId}:${activeId}`) return;
+      || draftKey !== activeDraftKey) return;
     const generation = ++draftSaveGeneration.current;
     const stillCurrent = () => draftSaveGeneration.current === generation
       && activeWorkspaceRef.current === workspaceId
@@ -318,7 +322,7 @@ export default function MensagensPage() {
       if (draftSaveGeneration.current === generation) draftSaveGeneration.current += 1;
       if (draftSaveTimer.current === timer) draftSaveTimer.current = undefined;
     };
-  }, [activeId, draft, draftKey, files, messageLink, ownerId, sending, workspaceId]);
+  }, [activeDraftKey, activeId, draft, draftKey, files, messageLink, ownerId, sending, workspaceId]);
 
   useEffect(() => {
     const stream = streamRef.current;
@@ -538,18 +542,21 @@ export default function MensagensPage() {
                   ))}</div>}
                   {messageError && <div className="form-error" role="alert">{messageError}</div>}
                   <div className="draft-state" role="status">
-                    {draftState === 'saving' && 'Salvando rascunho…'}
-                    {draftState === 'saved' && 'Rascunho salvo neste aparelho'}
-                    {draftState === 'error' && 'Rascunho não salvo'}
+                    {!draftReady ? 'Carregando rascunho…' : (
+                      draftState === 'saving' ? 'Salvando rascunho…'
+                        : draftState === 'saved' ? 'Rascunho salvo neste aparelho'
+                          : draftState === 'error' ? 'Rascunho não salvo' : ''
+                    )}
                   </div>
                   <label htmlFor="message-draft">Mensagem</label>
-                  <textarea id="message-draft" rows={3} value={draft} onChange={(event) => setDraft(event.target.value)} placeholder="Escreva apenas o que precisa ficar registrado…" />
+                  <textarea id="message-draft" rows={3} value={draft} disabled={!draftReady || sending} onChange={(event) => setDraft(event.target.value)} placeholder="Escreva apenas o que precisa ficar registrado…" />
                   <div className="field message-link-field">
                     <label htmlFor="message-link">Vincular mensagem a <span>(opcional)</span></label>
                     <select
                       id="message-link"
                       aria-label="Vincular mensagem a"
                       value={linkedContextKey}
+                      disabled={!draftReady || sending}
                       onChange={(event) => {
                         const context = contexts.find((candidate) => candidate.key === event.target.value);
                         setMessageLink(context ? {
@@ -561,11 +568,16 @@ export default function MensagensPage() {
                       <option value="">Sem vínculo específico</option>
                       {contexts.map((context) => <option key={context.key} value={context.key}>{context.label}</option>)}
                     </select>
-                    {messageLink && !selectedContext && <small>O vínculo salvo não está disponível. Selecione outro ou remova o vínculo para enviar.</small>}
+                    {messageLink && !selectedContext && (
+                      <div className="message-link-unavailable">
+                        <small>O vínculo salvo não está disponível. Selecione outro ou remova o vínculo para enviar.</small>
+                        <button type="button" disabled={!draftReady || sending} onClick={() => setMessageLink(null)}>Remover vínculo salvo</button>
+                      </div>
+                    )}
                   </div>
                   <footer>
-                    <label className="ghost-button">Anexar evidência<input type="file" accept="image/jpeg,image/png,image/webp,application/pdf,text/plain" multiple hidden onChange={(event) => selectFiles(Array.from(event.target.files ?? []))} /></label>
-                    <button type="submit" className="primary-button" disabled={sending || (!draft.trim() && files.length === 0)}>{sending ? 'Guardando…' : navigator.onLine ? 'Enviar mensagem' : 'Guardar na fila'}</button>
+                    <label className="ghost-button" aria-disabled={!draftReady || sending}>Anexar evidência<input type="file" accept="image/jpeg,image/png,image/webp,application/pdf,text/plain" multiple hidden disabled={!draftReady || sending} onChange={(event) => selectFiles(Array.from(event.target.files ?? []))} /></label>
+                    <button type="submit" className="primary-button" disabled={!draftReady || sending || (!draft.trim() && files.length === 0)}>{sending ? 'Guardando…' : navigator.onLine ? 'Enviar mensagem' : 'Guardar na fila'}</button>
                   </footer>
                   {hasRetryable && navigator.onLine && <button type="button" className="message-retry" disabled={sending} onClick={() => void retryMessages()}>Tentar reenviar mensagens pendentes</button>}
                 </form>

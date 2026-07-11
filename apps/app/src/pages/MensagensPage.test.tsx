@@ -235,14 +235,20 @@ describe('MensagensPage', () => {
 
   it('queues the selected authorized context with the message', async () => {
     Object.defineProperty(navigator, 'onLine', { configurable: true, value: false });
+    const draftLoad = deferred<Awaited<ReturnType<typeof loadMessageDraft>>>();
+    vi.mocked(loadMessageDraft).mockReturnValue(draftLoad.promise);
     vi.mocked(captureMessage).mockResolvedValue({ clientMessageId: 'msg-linked', status: 'QUEUED' });
     renderPage();
 
     const editor = await screen.findByLabelText('Mensagem');
-    fireEvent.change(screen.getByRole('combobox', { name: 'Vincular mensagem a' }), {
+    const link = screen.getByRole('combobox', { name: 'Vincular mensagem a' });
+    expect(editor).toBeDisabled();
+    expect(link).toBeDisabled();
+    draftLoad.resolve(undefined);
+    await waitFor(() => expect(editor).toBeEnabled());
+    fireEvent.change(link, {
       target: { value: 'TERRITORIO:4' }
     });
-    const link = screen.getByRole('combobox', { name: 'Vincular mensagem a' });
     fireEvent.change(editor, { target: { value: 'A nascente foi vistoriada.' } });
     fireEvent.click(screen.getByRole('button', { name: 'Guardar na fila' }));
 
@@ -397,6 +403,28 @@ describe('MensagensPage', () => {
 
     expect(await screen.findByRole('alert')).toHaveTextContent('contextos indisponíveis');
     expect(screen.getByRole('button', { name: 'Nova conversa' })).toBeDisabled();
+  });
+
+  it('lets the user remove a restored link that is no longer available', async () => {
+    vi.mocked(listTerritorios).mockRejectedValue(new Error('contextos indisponíveis'));
+    vi.mocked(loadMessageDraft).mockResolvedValue({
+      body: 'Revisar contexto.',
+      attachments: [],
+      linkedEntityType: 'MISSAO',
+      linkedEntityId: '8',
+      updatedAt: '2026-07-10T14:00:00Z'
+    });
+    vi.mocked(saveMessageDraft).mockResolvedValue(undefined);
+    renderPage();
+
+    expect(await screen.findByText(/O vínculo salvo não está disponível/)).toBeInTheDocument();
+    const remove = screen.getByRole('button', { name: 'Remover vínculo salvo' });
+    fireEvent.click(remove);
+
+    expect(screen.getByRole('combobox', { name: 'Vincular mensagem a' })).toHaveValue('');
+    await waitFor(() => expect(saveMessageDraft).toHaveBeenLastCalledWith(
+      'stable-owner', 'territorio-a', 12, 'Revisar contexto.', undefined
+    ));
   });
 
   it('does not let a late response from the previous conversation replace the active timeline', async () => {
