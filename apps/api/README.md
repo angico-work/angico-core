@@ -28,7 +28,7 @@ ANGICO_SMOKE_UPGRADE_FROM_REF=<commit-anterior> scripts/smoke-prod-postgres.sh
 
 Nenhum desses comandos usa banco remoto ou publica a aplicação.
 
-O endpoint de saúde está disponível em `GET /health`.
+`GET /health` informa que o processo está ativo. `GET /health/ready` também verifica uma consulta ao banco e só responde como pronto quando a conexão está disponível.
 
 ## Banco e migrations
 
