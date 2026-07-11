@@ -1,5 +1,7 @@
-import { ApiNetworkError, hasFreshOfflineSession, isAuthenticated, sessionOwnerId } from './api';
+import { ApiNetworkError } from './apiErrors';
 import { loadSnapshot, saveSnapshot, type SnapshotIdentity } from './offlineStore';
+import { clearOfflineReadSource, recordOfflineReadSource } from './offlineReadState';
+import { hasFreshOfflineSession, isAuthenticated, sessionOwnerId } from './session';
 
 export interface OfflineQueryResult<T> {
   data: T;
@@ -27,6 +29,7 @@ export async function loadConfirmedOrSnapshot<T>(
       if (networkError) throw networkError;
       throw new Error('Nenhum dado confirmado está salvo neste aparelho.');
     }
+    recordOfflineReadSource(partition, snapshot.savedAt);
     return { data: snapshot.payload, source: 'snapshot', savedAt: snapshot.savedAt };
   };
 
@@ -45,5 +48,6 @@ export async function loadConfirmedOrSnapshot<T>(
     throw new Error('A resposta recebida não corresponde ao contrato esperado.');
   }
   const snapshot = await saveSnapshot(partition, payload);
+  clearOfflineReadSource(partition);
   return { data: payload, source: 'remote', savedAt: snapshot.savedAt };
 }

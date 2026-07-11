@@ -21,11 +21,9 @@ import {
 import { validateMessageFiles } from '../lib/messageFiles';
 import { startOnlinePolling } from '../lib/messagePolling';
 import {
-  cacheConversations,
   cacheRemoteMessages,
   clearMessageDraft,
   listLocalMessages,
-  loadCachedConversations,
   loadMessageDraft,
   saveMessageDraft
 } from '../lib/offlineStore';
@@ -59,10 +57,10 @@ export default function MensagensPage() {
   const [draftKey, setDraftKey] = useState<string>();
   const [draftState, setDraftState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [loading, setLoading] = useState(true);
-  const [usingCache, setUsingCache] = useState(false);
   const [messageLoading, setMessageLoading] = useState(false);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [contextError, setContextError] = useState<string | null>(null);
   const [messageError, setMessageError] = useState<string | null>(null);
   const [showNew, setShowNew] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -88,49 +86,33 @@ export default function MensagensPage() {
     }
     if (!background) setLoading(true);
     setError(null);
+    setContextError(null);
     try {
-      let conversationList: Conversa[];
-      if (navigator.onLine) {
-        conversationList = await listConversas(workspaceId);
-        await cacheConversations(ownerId, workspaceId, conversationList);
-        if (activeWorkspaceRef.current !== requestedWorkspace) return;
-        setUsingCache(false);
-        try {
-          const [territories, missions, actions] = await Promise.all([
-            listTerritorios(workspaceId).catch(() => []),
-            listEntities<Record<string, unknown>>('/api/missoes', workspaceId).catch(() => []),
-            listEntities<Record<string, unknown>>('/api/acoes', workspaceId).catch(() => [])
-          ]);
-          if (activeWorkspaceRef.current !== requestedWorkspace) return;
-          setContexts(conversationContexts(territories, missions, actions));
-        } catch {
-          setContexts([]);
-        }
-      } else {
-        conversationList = await loadCachedConversations(ownerId, workspaceId);
-        if (activeWorkspaceRef.current !== requestedWorkspace) return;
-        setContexts([]);
-        setUsingCache(true);
-      }
+      const conversationList = await listConversas(workspaceId);
+      if (activeWorkspaceRef.current !== requestedWorkspace) return;
       setConversations(conversationList);
       setActiveId((current) => current && conversationList.some((entry) => entry.id === current)
         ? current
         : conversationList[0]?.id ?? null);
-      if (!navigator.onLine && conversationList.length === 0) {
-        setError('Nenhuma conversa confirmada está salva neste aparelho.');
+      try {
+        const [territories, missions, actions] = await Promise.all([
+          listTerritorios(workspaceId),
+          listEntities<Record<string, unknown>>('/api/missoes', workspaceId),
+          listEntities<Record<string, unknown>>('/api/acoes', workspaceId)
+        ]);
+        if (activeWorkspaceRef.current !== requestedWorkspace) return;
+        setContexts(conversationContexts(territories, missions, actions));
+      } catch (caught) {
+        if (activeWorkspaceRef.current !== requestedWorkspace) return;
+        setContexts([]);
+        setContextError(caught instanceof Error ? caught.message : 'Não foi possível carregar os contextos das conversas.');
       }
     } catch (caught) {
-      const cached = await loadCachedConversations(ownerId, workspaceId);
       if (activeWorkspaceRef.current !== requestedWorkspace) return;
-      if (cached.length > 0) {
-        setConversations(cached);
-        setActiveId((current) => current && cached.some((entry) => entry.id === current)
-          ? current
-          : cached[0].id);
-        setUsingCache(true);
-      } else {
-        setError(caught instanceof Error ? caught.message : 'Não foi possível carregar as conversas.');
-      }
+      setConversations([]);
+      setActiveId(null);
+      setContexts([]);
+      setError(caught instanceof Error ? caught.message : 'Não foi possível carregar as conversas.');
     } finally {
       if (!background && activeWorkspaceRef.current === requestedWorkspace) setLoading(false);
     }
@@ -146,29 +128,28 @@ export default function MensagensPage() {
     let remote: Mensagem[] = [];
     let readFailed = false;
     let networkError: unknown;
-    if (navigator.onLine) {
-      try {
-        remote = await listMensagens(conversationId);
-        await cacheRemoteMessages(ownerId, workspaceId, conversationId, meId, remote);
-        if (markRead
+    try {
+      remote = await listMensagens(conversationId, workspaceId);
+      await cacheRemoteMessages(ownerId, workspaceId, conversationId, meId, remote);
+      if (navigator.onLine
+          && markRead
           && activeConversationRef.current === conversationId
           && activeWorkspaceRef.current === workspaceId) {
-          try {
-            await markConversaRead(conversationId);
-            setConversations((current) => current.map((conversation) => (
-              conversation.id === conversationId ? { ...conversation, unreadCount: 0 } : conversation
-            )));
-          } catch (caught) {
-            readFailed = true;
-            if (propagateNetworkError) networkError = caught;
-          }
+        try {
+          await markConversaRead(conversationId);
+          setConversations((current) => current.map((conversation) => (
+            conversation.id === conversationId ? { ...conversation, unreadCount: 0 } : conversation
+          )));
+        } catch (caught) {
+          readFailed = true;
+          if (propagateNetworkError) networkError = caught;
         }
-      } catch (caught) {
-        networkError = caught;
-        if (activeConversationRef.current === conversationId
-          && activeWorkspaceRef.current === workspaceId) {
-          setMessageError(caught instanceof Error ? caught.message : 'Não foi possível atualizar as mensagens.');
-        }
+      }
+    } catch (caught) {
+      networkError = caught;
+      if (activeConversationRef.current === conversationId
+        && activeWorkspaceRef.current === workspaceId) {
+        setMessageError(caught instanceof Error ? caught.message : 'Não foi possível atualizar as mensagens.');
       }
     }
     const refreshedLocal = remote.length > 0
@@ -180,20 +161,19 @@ export default function MensagensPage() {
       return;
     }
     setTimeline(mergeTimeline(remote, refreshedLocal, meId));
-    if (!readFailed && remote.length > 0) setMessageError(null);
+    if (!readFailed && !networkError) setMessageError(null);
     if (networkError && propagateNetworkError) throw networkError;
   }, [meId, ownerId, workspaceId]);
 
   const refreshConversationBadges = useCallback(async () => {
-    if (!ownerId || !navigator.onLine) return;
+    if (!navigator.onLine) return;
     const next = await listConversas(workspaceId);
-    await cacheConversations(ownerId, workspaceId, next);
     if (activeWorkspaceRef.current !== workspaceId) return;
     setConversations(next);
     setActiveId((current) => current && next.some((conversation) => conversation.id === current)
       ? current
       : next[0]?.id ?? null);
-  }, [ownerId, workspaceId]);
+  }, [workspaceId]);
 
   useEffect(() => {
     setConversations([]);
@@ -398,6 +378,8 @@ export default function MensagensPage() {
         <button className="primary-button" disabled={!navigator.onLine || contexts.length === 0} onClick={() => setShowNew(true)}>Nova conversa</button>
       </header>
 
+      {contextError && <div className="form-error" role="alert">{contextError}</div>}
+
       <form className="message-search" role="search" onSubmit={handleSearch}>
         <label htmlFor="message-search">Buscar nas conversas</label>
         <div>
@@ -422,8 +404,6 @@ export default function MensagensPage() {
           ))}
         </section>
       )}
-
-      {usingCache && <div className="offline-message-note" role="status"><b>Dados salvos neste aparelho</b><span>Novas mensagens serão enviadas quando a conexão voltar.</span></div>}
 
       {loading ? <LoadingState label="Carregando conversas…" /> : error && conversations.length === 0 ? (
         <ErrorState message={error} onRetry={() => void refreshConversations()} />

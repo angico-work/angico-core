@@ -63,7 +63,8 @@ const evidenceEntry = {
       blobKey: 'evidence-file-1',
       name: 'nascente.jpg',
       type: 'image/jpeg',
-      size: 1200
+      size: 1200,
+      sha256: 'a'.repeat(64)
     }
   },
   status: 'QUEUED' as const

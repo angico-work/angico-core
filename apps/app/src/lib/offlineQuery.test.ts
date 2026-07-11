@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiHttpError, ApiNetworkError } from './api';
 import { loadSnapshot, resetOfflineDatabase, saveSnapshot } from './offlineStore';
 import { loadConfirmedOrSnapshot } from './offlineQuery';
+import { getOfflineReadSources, resetOfflineReadSources } from './offlineReadState';
 
 const session = {
   pessoaId: 7,
@@ -32,6 +33,7 @@ function isList(value: unknown): value is Array<{ id: number }> {
 describe('confirmed response snapshots', () => {
   beforeEach(async () => {
     await resetOfflineDatabase();
+    resetOfflineReadSources();
     localStorage.clear();
     localStorage.setItem('angico.session', JSON.stringify(session));
     localStorage.setItem('angico.session.validatedAt', new Date().toISOString());
@@ -59,6 +61,9 @@ describe('confirmed response snapshots', () => {
     expect(result).toEqual({
       data: [{ id: 8 }], source: 'snapshot', savedAt: '2026-07-10T12:00:00.000Z'
     });
+    expect(getOfflineReadSources()).toEqual([
+      expect.objectContaining({ ownerId: 'ana.sp', workspaceId: 'territorio-a', resource: 'evidencias' })
+    ]);
   });
 
   it('uses a snapshot only for a typed fetch network failure', async () => {

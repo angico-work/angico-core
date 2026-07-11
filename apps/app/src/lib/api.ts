@@ -5,107 +5,47 @@ import type {
   Evidencia, EvidenciaInput, Resultado, ResultadoInput, Indicador, IndicadorInput, Medicao, MedicaoInput,
   Organizacao, OrganizacaoInput, Participacao, ParticipacaoInput, Recurso, RecursoInput, RecursoUso, RecursoUsoInput
 } from '../types';
+import { ApiHttpError, ApiNetworkError } from './apiErrors';
+import {
+  entityListContract,
+  isConversaList,
+  isDashboardData,
+  isMapPointList,
+  isMemoriaEventList,
+  isMensagemList,
+  isRastroResponse,
+  isTerritorioList,
+  isWorkspaceList,
+  isWorkspaceMemberList
+} from './apiContracts';
 import { validateMessageFiles } from './messageFiles';
+import { loadConfirmedOrSnapshot } from './offlineQuery';
+import { ACCOUNT_SNAPSHOT_WORKSPACE } from './offlineReadState';
+import {
+  clearSession,
+  getSession,
+  saveSession,
+  type AuthSession
+} from './session';
+
+export { ApiHttpError, ApiNetworkError } from './apiErrors';
+export {
+  clearSession,
+  getSession,
+  hasFreshOfflineSession,
+  isAuthenticated,
+  offlineSessionExpiresAt,
+  sessionOwnerId,
+  setSessionWorkspace
+} from './session';
+export type { AuthSession } from './session';
 
 export const DEFAULT_WORKSPACE = 'coletivo-jardim-novo';
 
 export const API_BASE = '';
 
-export class ApiHttpError extends Error {
-  constructor(readonly status: number, message: string) {
-    super(message);
-    this.name = 'ApiHttpError';
-  }
-}
-
-export class ApiNetworkError extends Error {
-  readonly cause: TypeError;
-
-  constructor(cause: TypeError) {
-    super('Não foi possível acessar o servidor.');
-    this.name = 'ApiNetworkError';
-    this.cause = cause;
-  }
-}
-
 export function apiUrl(path: string): string {
   return `${API_BASE}${path}`;
-}
-
-const SESSION_KEY = 'angico.session';
-const SESSION_VALIDATED_KEY = 'angico.session.validatedAt';
-const OWNER_ALIAS_PREFIX = 'angico.offlineOwner.';
-const OFFLINE_SESSION_LEASE_MS = 7 * 24 * 60 * 60 * 1000;
-
-export interface AuthSession {
-  pessoaId: number;
-  nome: string;
-  email: string | null;
-  angicoId: string | null;
-  papel: string | null;
-  workspaceId: string | null;
-  expiresAt: string;
-  csrfToken: string;
-}
-
-export function getSession(): AuthSession | null {
-  try {
-    const raw = localStorage.getItem(SESSION_KEY);
-    if (!raw) return null;
-    const session = JSON.parse(raw) as AuthSession & { token?: unknown };
-    if (Object.prototype.hasOwnProperty.call(session, 'token')) {
-      clearSession();
-      return null;
-    }
-    return session;
-  } catch {
-    return null;
-  }
-}
-
-export function isAuthenticated(): boolean {
-  const session = getSession();
-  return Boolean(session && Date.parse(session.expiresAt) > Date.now());
-}
-
-export function sessionOwnerId(session = getSession()): string | undefined {
-  if (!session) return undefined;
-  const key = `${OWNER_ALIAS_PREFIX}${session.pessoaId}`;
-  const existing = localStorage.getItem(key)?.trim();
-  if (existing) return existing;
-  const ownerId = session.angicoId || `pessoa-${session.pessoaId}`;
-  localStorage.setItem(key, ownerId);
-  return ownerId;
-}
-
-function saveSession(session: AuthSession, validated = false): AuthSession {
-  localStorage.setItem(SESSION_KEY, JSON.stringify(session, (key, value) => key === 'token' ? undefined : value));
-  if (validated) localStorage.setItem(SESSION_VALIDATED_KEY, new Date().toISOString());
-  return session;
-}
-
-export function clearSession(): void {
-  localStorage.removeItem(SESSION_KEY);
-  localStorage.removeItem(SESSION_VALIDATED_KEY);
-  localStorage.removeItem('angico_session');
-}
-
-export function offlineSessionExpiresAt(session = getSession()): number | undefined {
-  if (!session) return undefined;
-  const validatedAt = Date.parse(localStorage.getItem(SESSION_VALIDATED_KEY) ?? '');
-  const serverExpiry = Date.parse(session.expiresAt);
-  if (!Number.isFinite(validatedAt) || !Number.isFinite(serverExpiry)) return undefined;
-  return Math.min(serverExpiry, validatedAt + OFFLINE_SESSION_LEASE_MS);
-}
-
-export function hasFreshOfflineSession(): boolean {
-  const expiresAt = offlineSessionExpiresAt();
-  return expiresAt !== undefined && Date.now() < expiresAt;
-}
-
-export function setSessionWorkspace(slug: string): void {
-  const session = getSession();
-  if (session) saveSession({ ...session, workspaceId: slug });
 }
 
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
@@ -149,7 +89,7 @@ export async function requestJson<T = unknown>(
   try {
     response = await apiFetch(input, init);
   } catch (error) {
-    if (error instanceof TypeError) throw new ApiNetworkError(error);
+    if (error instanceof TypeError) throw new ApiNetworkError(error, fallback);
     throw error;
   }
   if (!response.ok) {
@@ -205,21 +145,16 @@ export async function revalidateSession(): Promise<AuthSession | null> {
 }
 
 export async function loadDashboard(workspaceId = DEFAULT_WORKSPACE): Promise<DashboardData> {
-  try {
-    const response = await apiFetch(apiUrl(`/api/glimpse/dashboard?workspaceId=${encodeURIComponent(workspaceId)}`), {
-      headers: requestHeaders()
-    });
-    if (!response.ok) {
-      throw new Error(await readError(response, 'Não foi possível carregar o painel do território.'));
-    }
-    return (await response.json()) as DashboardData;
-  } catch (error) {
-    if (error instanceof TypeError) {
-      throw new Error('Não foi possível carregar o painel do território. Verifique a conexão.');
-    }
-    if (error instanceof Error) throw error;
-    throw new Error('Não foi possível carregar o painel do território. Verifique a conexão.');
-  }
+  const result = await loadConfirmedOrSnapshot(
+    { workspaceId, resource: 'dashboard', contractVersion: 1 },
+    () => requestJson(
+      apiUrl(`/api/glimpse/dashboard?workspaceId=${encodeURIComponent(workspaceId)}`),
+      { headers: requestHeaders() },
+      'Não foi possível carregar o painel do território.'
+    ),
+    (value): value is DashboardData => isDashboardData(value, workspaceId)
+  );
+  return result.data;
 }
 
 export async function createObservacao(input: ObservacaoInput): Promise<Observacao> {
@@ -235,26 +170,29 @@ export async function createObservacao(input: ObservacaoInput): Promise<Observac
 }
 
 export async function loadMapPoints(workspaceId = DEFAULT_WORKSPACE): Promise<MapPoint[]> {
-  try {
-    const r = await apiFetch(apiUrl(`/api/glimpse/map?workspaceId=${encodeURIComponent(workspaceId)}`), {
-      headers: requestHeaders()
-    });
-    if (!r.ok) throw new Error(await readError(r, 'Não foi possível carregar os pontos do mapa.'));
-    return (await r.json()) as MapPoint[];
-  } catch (error) {
-    if (error instanceof Error && !(error instanceof TypeError)) throw error;
-    throw new Error('Não foi possível carregar os pontos do mapa.');
-  }
+  const result = await loadConfirmedOrSnapshot(
+    { workspaceId, resource: 'map-points', contractVersion: 1 },
+    () => requestJson(
+      apiUrl(`/api/glimpse/map?workspaceId=${encodeURIComponent(workspaceId)}`),
+      { headers: requestHeaders() },
+      'Não foi possível carregar os pontos do mapa.'
+    ),
+    isMapPointList
+  );
+  return result.data;
 }
 
 export async function listWorkspaces(): Promise<Workspace[]> {
-  try {
-    const r = await apiFetch(apiUrl('/api/workspaces'), { headers: requestHeaders() });
-    if (!r.ok) throw new Error();
-    return (await r.json()) as Workspace[];
-  } catch {
-    return [];
-  }
+  const result = await loadConfirmedOrSnapshot(
+    { workspaceId: ACCOUNT_SNAPSHOT_WORKSPACE, resource: 'workspaces', contractVersion: 1 },
+    () => requestJson(
+      apiUrl('/api/workspaces'),
+      { headers: requestHeaders() },
+      'Não foi possível carregar os espaços de trabalho.'
+    ),
+    isWorkspaceList
+  );
+  return result.data;
 }
 
 export async function createWorkspace(nome: string): Promise<Workspace> {
@@ -278,13 +216,16 @@ export async function deleteWorkspace(slug: string): Promise<void> {
 }
 
 export async function listMembers(slug: string): Promise<WorkspaceMember[]> {
-  try {
-    const r = await apiFetch(apiUrl(`/api/workspaces/${encodeURIComponent(slug)}/members`), { headers: requestHeaders() });
-    if (!r.ok) return [];
-    return (await r.json()) as WorkspaceMember[];
-  } catch {
-    return [];
-  }
+  const result = await loadConfirmedOrSnapshot(
+    { workspaceId: slug, resource: 'workspace-members', contractVersion: 1 },
+    () => requestJson(
+      apiUrl(`/api/workspaces/${encodeURIComponent(slug)}/members`),
+      { headers: requestHeaders() },
+      'Não foi possível carregar os integrantes.'
+    ),
+    (value): value is WorkspaceMember[] => isWorkspaceMemberList(value, slug)
+  );
+  return result.data;
 }
 
 export interface AddMemberInput {
@@ -317,20 +258,20 @@ export async function searchGeocoding(query: string, signal?: AbortSignal): Prom
   const q = query.trim();
   if (q.length < 3) return [];
   try {
-    const r = await apiFetch(apiUrl(`/api/geocoding/search?q=${encodeURIComponent(q)}`), {
-      headers: requestHeaders(),
-      signal
-    });
-    if (!r.ok) return [];
-    const body = (await r.json()) as GeoSearchResponse;
+    const body = await requestJson<GeoSearchResponse>(
+      apiUrl(`/api/geocoding/search?q=${encodeURIComponent(q)}`),
+      { headers: requestHeaders(), signal },
+      'Não foi possível buscar o endereço.'
+    );
     const seen = new Set<string>();
     return (body.results ?? []).filter((g) => {
       if (seen.has(g.displayName)) return false;
       seen.add(g.displayName);
       return true;
     });
-  } catch {
-    return [];
+  } catch (error) {
+    if (signal?.aborted) return [];
+    throw error;
   }
 }
 
@@ -345,14 +286,14 @@ export async function resolveCoords(r: GeoResult, signal?: AbortSignal): Promise
 
 export async function reverseGeocode(lat: number, lng: number, signal?: AbortSignal): Promise<GeoResult | null> {
   try {
-    const r = await apiFetch(apiUrl(`/api/geocoding/reverse?lat=${lat}&lng=${lng}`), {
-      headers: requestHeaders(),
-      signal
-    });
-    if (!r.ok) return null;
-    return (await r.json()) as GeoResult;
-  } catch {
-    return null;
+    return await requestJson<GeoResult>(
+      apiUrl(`/api/geocoding/reverse?lat=${lat}&lng=${lng}`),
+      { headers: requestHeaders(), signal },
+      'Não foi possível identificar o endereço.'
+    );
+  } catch (error) {
+    if (signal?.aborted) return null;
+    throw error;
   }
 }
 
@@ -374,16 +315,16 @@ export async function searchPessoas(workspaceId: string, q: string, signal?: Abo
 }
 
 export async function loadMemoria(workspaceId = DEFAULT_WORKSPACE): Promise<MemoriaEvent[]> {
-  try {
-    const r = await apiFetch(apiUrl(`/api/history/workspaces/${encodeURIComponent(workspaceId)}`), {
-      headers: requestHeaders()
-    });
-    if (!r.ok) throw new Error(await readError(r, 'Não foi possível carregar a memória do território.'));
-    return (await r.json()) as MemoriaEvent[];
-  } catch (error) {
-    if (error instanceof Error && !(error instanceof TypeError)) throw error;
-    throw new Error('Não foi possível carregar a memória do território.');
-  }
+  const result = await loadConfirmedOrSnapshot(
+    { workspaceId, resource: 'memory-events', contractVersion: 1 },
+    () => requestJson(
+      apiUrl(`/api/history/workspaces/${encodeURIComponent(workspaceId)}`),
+      { headers: requestHeaders() },
+      'Não foi possível carregar a memória do território.'
+    ),
+    isMemoriaEventList
+  );
+  return result.data;
 }
 
 export async function loadRastro(
@@ -393,37 +334,46 @@ export async function loadRastro(
 ): Promise<RastroResponse> {
   const normalizedId = rootId.trim();
   if (!normalizedId) throw new Error('Selecione uma raiz para consultar o Rastro.');
-  try {
-    const path = `/api/rastro/${rootType}/${encodeURIComponent(normalizedId)}?workspaceId=${encodeURIComponent(workspaceId)}`;
-    const response = await apiFetch(apiUrl(path), { headers: requestHeaders() });
-    if (!response.ok) {
-      throw new Error(await readError(response, 'Não foi possível carregar o Rastro.'));
-    }
-    return (await response.json()) as RastroResponse;
-  } catch (error) {
-    if (error instanceof Error && !(error instanceof TypeError)) throw error;
-    throw new Error('Não foi possível carregar o Rastro. Verifique a conexão.');
-  }
+  const path = `/api/rastro/${rootType}/${encodeURIComponent(normalizedId)}?workspaceId=${encodeURIComponent(workspaceId)}`;
+  const result = await loadConfirmedOrSnapshot(
+    {
+      workspaceId,
+      resource: 'rastro',
+      query: { rootType },
+      root: normalizedId,
+      contractVersion: 1
+    },
+    () => requestJson(
+      apiUrl(path),
+      { headers: requestHeaders() },
+      'Não foi possível carregar o Rastro.'
+    ),
+    (value): value is RastroResponse => isRastroResponse(value, workspaceId)
+      && value.root.reference.type === rootType
+      && value.root.reference.id === normalizedId
+  );
+  return result.data;
 }
 
 export async function listEntities<T = Record<string, unknown>>(
   path: string, workspaceId = DEFAULT_WORKSPACE
 ): Promise<T[]> {
-  try {
-    const r = await apiFetch(apiUrl(`${path}?workspaceId=${encodeURIComponent(workspaceId)}`), {
-      headers: requestHeaders()
-    });
-    if (!r.ok) {
-      if (r.status === 401) {
-        throw new Error('Sua sessão expirou. Entre novamente para continuar.');
-      }
-      throw new Error(await readError(r, 'Não foi possível carregar os registros.'));
-    }
-    return (await r.json()) as T[];
-  } catch (error) {
-    if (error instanceof Error && !(error instanceof TypeError)) throw error;
-    throw new Error('Não foi possível carregar os registros. Verifique a conexão e tente novamente.');
-  }
+  const contract = entityListContract(path);
+  const result = await loadConfirmedOrSnapshot(
+    {
+      workspaceId,
+      resource: contract.resource,
+      root: contract.root,
+      contractVersion: 1
+    },
+    () => requestJson(
+      apiUrl(`${path}?workspaceId=${encodeURIComponent(workspaceId)}`),
+      { headers: requestHeaders() },
+      'Não foi possível carregar os registros.'
+    ),
+    (value): value is T[] => contract.validate(value, workspaceId)
+  );
+  return result.data;
 }
 
 export async function createEntity<T = Record<string, unknown>>(
@@ -601,14 +551,16 @@ export function createRecursoUso(recursoId: number, input: RecursoUsoInput): Pro
 }
 
 export async function listConversas(workspaceId = DEFAULT_WORKSPACE): Promise<Conversa[]> {
-  try {
-    const r = await apiFetch(apiUrl(`/api/mensagens/conversas?workspaceId=${encodeURIComponent(workspaceId)}`), { headers: requestHeaders() });
-    if (!r.ok) throw new Error(await readError(r, 'Não foi possível carregar as conversas.'));
-    return (await r.json()) as Conversa[];
-  } catch (error) {
-    if (error instanceof Error && !(error instanceof TypeError)) throw error;
-    throw new Error('Não foi possível carregar as conversas. Verifique a conexão.');
-  }
+  const result = await loadConfirmedOrSnapshot(
+    { workspaceId, resource: 'conversations', contractVersion: 1 },
+    () => requestJson(
+      apiUrl(`/api/mensagens/conversas?workspaceId=${encodeURIComponent(workspaceId)}`),
+      { headers: requestHeaders() },
+      'Não foi possível carregar as conversas.'
+    ),
+    (value): value is Conversa[] => isConversaList(value, workspaceId)
+  );
+  return result.data;
 }
 
 function requireConversationId(conversaId: number): void {
@@ -617,16 +569,26 @@ function requireConversationId(conversaId: number): void {
   }
 }
 
-export async function listMensagens(conversaId: number): Promise<Mensagem[]> {
+export async function listMensagens(
+  conversaId: number,
+  workspaceId = DEFAULT_WORKSPACE
+): Promise<Mensagem[]> {
   requireConversationId(conversaId);
-  try {
-    const r = await apiFetch(apiUrl(`/api/mensagens/conversas/${conversaId}/mensagens`), { headers: requestHeaders() });
-    if (!r.ok) throw new Error(await readError(r, 'Não foi possível carregar as mensagens.'));
-    return (await r.json()) as Mensagem[];
-  } catch (error) {
-    if (error instanceof Error && !(error instanceof TypeError)) throw error;
-    throw new Error('Não foi possível carregar as mensagens. Verifique a conexão.');
-  }
+  const result = await loadConfirmedOrSnapshot(
+    {
+      workspaceId,
+      resource: 'conversation-messages',
+      root: String(conversaId),
+      contractVersion: 1
+    },
+    () => requestJson(
+      apiUrl(`/api/mensagens/conversas/${conversaId}/mensagens`),
+      { headers: requestHeaders() },
+      'Não foi possível carregar as mensagens.'
+    ),
+    (value): value is Mensagem[] => isMensagemList(value, workspaceId, conversaId)
+  );
+  return result.data;
 }
 
 export interface MessageSendMetadata {
@@ -678,14 +640,16 @@ export async function createConversa(input: CreateConversaInput): Promise<Conver
 }
 
 export async function listTerritorios(workspaceId = DEFAULT_WORKSPACE): Promise<Territorio[]> {
-  try {
-    const r = await apiFetch(apiUrl(`/api/territorios?workspaceId=${encodeURIComponent(workspaceId)}`), { headers: requestHeaders() });
-    if (!r.ok) throw new Error(await readError(r, 'Não foi possível carregar os territórios.'));
-    return (await r.json()) as Territorio[];
-  } catch (error) {
-    if (error instanceof Error && !(error instanceof TypeError)) throw error;
-    throw new Error('Não foi possível carregar os territórios. Verifique a conexão.');
-  }
+  const result = await loadConfirmedOrSnapshot(
+    { workspaceId, resource: 'territories', contractVersion: 1 },
+    () => requestJson(
+      apiUrl(`/api/territorios?workspaceId=${encodeURIComponent(workspaceId)}`),
+      { headers: requestHeaders() },
+      'Não foi possível carregar os territórios.'
+    ),
+    (value): value is Territorio[] => isTerritorioList(value, workspaceId)
+  );
+  return result.data;
 }
 
 export async function createTerritorio(input: TerritorioInput): Promise<Territorio> {
@@ -735,14 +699,8 @@ export async function ensureTerritorio(workspaceId = DEFAULT_WORKSPACE): Promise
 export async function getProfile(workspaceId = DEFAULT_WORKSPACE): Promise<PessoaHit | null> {
   const session = getSession();
   if (!session) return null;
-  try {
-    const r = await apiFetch(apiUrl(`/api/pessoas?workspaceId=${encodeURIComponent(workspaceId)}`), { headers: requestHeaders() });
-    if (!r.ok) return null;
-    const list = (await r.json()) as PessoaHit[];
-    return list.find((p) => p.id === session.pessoaId) ?? null;
-  } catch {
-    return null;
-  }
+  const people = await listPessoas(workspaceId);
+  return people.find((person) => person.id === session.pessoaId) ?? null;
 }
 
 export interface ProfileUpdate {

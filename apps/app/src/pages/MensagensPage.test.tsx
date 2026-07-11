@@ -13,12 +13,10 @@ import {
   searchMensagens
 } from '../lib/api';
 import {
-  cacheConversations,
   cacheRemoteMessages,
   clearMessageDraft,
   getMessageAttachmentFile,
   listLocalMessages,
-  loadCachedConversations,
   loadMessageDraft
 } from '../lib/offlineStore';
 import { captureMessage } from '../lib/offlineSync';
@@ -51,12 +49,10 @@ vi.mock('../lib/api', async (importOriginal) => {
 });
 
 vi.mock('../lib/offlineStore', () => ({
-  cacheConversations: vi.fn(),
   cacheRemoteMessages: vi.fn(),
   clearMessageDraft: vi.fn(),
   getMessageAttachmentFile: vi.fn(),
   listLocalMessages: vi.fn(),
-  loadCachedConversations: vi.fn(),
   loadMessageDraft: vi.fn(),
   saveMessageDraft: vi.fn()
 }));
@@ -151,10 +147,8 @@ describe('MensagensPage', () => {
     }]);
     vi.mocked(listMensagens).mockResolvedValue([remoteMessage]);
     vi.mocked(markConversaRead).mockRejectedValue(new Error('leitura indisponível'));
-    vi.mocked(loadCachedConversations).mockResolvedValue([]);
     vi.mocked(loadMessageDraft).mockResolvedValue(undefined);
     vi.mocked(listLocalMessages).mockResolvedValue([]);
-    vi.mocked(cacheConversations).mockResolvedValue(undefined);
     vi.mocked(cacheRemoteMessages).mockResolvedValue(undefined);
     vi.mocked(clearMessageDraft).mockResolvedValue(undefined);
     vi.mocked(getMessageAttachmentFile).mockResolvedValue(undefined);
@@ -174,6 +168,7 @@ describe('MensagensPage', () => {
     expect(screen.getByText('2 novas')).toBeInTheDocument();
     expect(screen.getByText('Território relacionado')).toBeInTheDocument();
     expect(markConversaRead).toHaveBeenCalledWith(12);
+    expect(listMensagens).toHaveBeenCalledWith(12, 'territorio-a');
     expect(cacheRemoteMessages).toHaveBeenCalledWith('stable-owner', 'territorio-a', 12, 7, [remoteMessage]);
   });
 
@@ -193,7 +188,6 @@ describe('MensagensPage', () => {
 
   it('keeps an offline send visible in the queue after the atomic capture succeeds', async () => {
     Object.defineProperty(navigator, 'onLine', { configurable: true, value: false });
-    vi.mocked(loadCachedConversations).mockResolvedValue([conversation]);
     const local = {
       key: 'local-queued',
       ownerId: 'ana.sp',
@@ -247,17 +241,23 @@ describe('MensagensPage', () => {
     expect(searchMensagens).toHaveBeenCalledWith('territorio-a', 'nascente');
   });
 
-  it('falls back to the last confirmed conversation list when offline', async () => {
+  it('uses the authorized conversation and message snapshot readers when offline', async () => {
     Object.defineProperty(navigator, 'onLine', { configurable: true, value: false });
-    vi.mocked(listConversas).mockRejectedValue(new TypeError('offline'));
-    vi.mocked(listTerritorios).mockRejectedValue(new TypeError('offline'));
-    vi.mocked(loadCachedConversations).mockResolvedValue([conversation]);
 
     renderPage();
 
     expect((await screen.findAllByText('Cuidado da nascente')).length).toBeGreaterThan(0);
-    expect(screen.getByText('Dados salvos neste aparelho')).toBeInTheDocument();
-    expect(cacheConversations).not.toHaveBeenCalled();
+    expect(listConversas).toHaveBeenCalledWith('territorio-a');
+    expect(listMensagens).toHaveBeenCalledWith(12, 'territorio-a');
+  });
+
+  it('reports unavailable conversation contexts instead of presenting them as an empty result', async () => {
+    vi.mocked(listTerritorios).mockRejectedValue(new Error('contextos indisponíveis'));
+
+    renderPage();
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('contextos indisponíveis');
+    expect(screen.getByRole('button', { name: 'Nova conversa' })).toBeDisabled();
   });
 
   it('does not let a late response from the previous conversation replace the active timeline', async () => {
@@ -282,7 +282,6 @@ describe('MensagensPage', () => {
 
   it('does not offer a queued message for duplicate submission if draft cleanup fails', async () => {
     Object.defineProperty(navigator, 'onLine', { configurable: true, value: false });
-    vi.mocked(loadCachedConversations).mockResolvedValue([conversation]);
     const local = {
       key: 'local-queued',
       ownerId: 'ana.sp',
@@ -312,7 +311,6 @@ describe('MensagensPage', () => {
 
   it('does not describe a missing local attachment as safely stored', async () => {
     Object.defineProperty(navigator, 'onLine', { configurable: true, value: false });
-    vi.mocked(loadCachedConversations).mockResolvedValue([conversation]);
     vi.mocked(listLocalMessages).mockResolvedValue([{
       key: 'local-missing',
       ownerId: 'ana.sp',

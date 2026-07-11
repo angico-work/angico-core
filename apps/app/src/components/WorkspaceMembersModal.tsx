@@ -28,8 +28,13 @@ export default function WorkspaceMembersModal({ slug, workspaceName, onClose }: 
 
   function refresh() {
     setLoading(true);
+    setError(null);
     void listMembers(slug).then((list) => {
       setMembers(list);
+    }).catch((caught) => {
+      setMembers([]);
+      setError(caught instanceof Error ? caught.message : 'Não foi possível carregar os integrantes.');
+    }).finally(() => {
       setLoading(false);
     });
   }

@@ -1,3 +1,4 @@
+import 'fake-indexeddb/auto';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   ApiHttpError,
@@ -36,9 +37,12 @@ import {
   listRecursos,
   offlineSessionExpiresAt,
   requestJson,
+  reverseGeocode,
+  searchGeocoding,
   sessionOwnerId,
   sendMensagem
 } from './api';
+import { resetOfflineDatabase } from './offlineStore';
 
 const session = {
   pessoaId: 7,
@@ -60,8 +64,12 @@ function response(status: number, body: unknown): Response {
 }
 
 describe('cookie session API', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
+    await resetOfflineDatabase();
     localStorage.clear();
+    localStorage.setItem('angico.session', JSON.stringify(session));
+    localStorage.setItem('angico.session.validatedAt', new Date().toISOString());
+    Object.defineProperty(navigator, 'onLine', { configurable: true, value: true });
     vi.restoreAllMocks();
   });
 
@@ -117,7 +125,7 @@ describe('cookie session API', () => {
     localStorage.setItem('angico.session', JSON.stringify(session));
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response(401, { detail: 'expired' })));
 
-    await expect(listEntities('/api/observacoes', 'workspace-a')).rejects.toThrow('sessão');
+    await expect(listEntities('/api/observacoes', 'workspace-a')).rejects.toThrow('expired');
 
     expect(getSession()).toBeNull();
     expect(isAuthenticated()).toBe(false);
@@ -147,7 +155,10 @@ describe('cookie session API', () => {
   it('loads a bounded Rastro for an authorized root', async () => {
     const fetchMock = vi.fn().mockResolvedValue(response(200, {
       workspaceId: 'workspace-a',
-      root: { reference: { type: 'MISSAO', id: '42', resource: '/api/missoes/42' }, name: 'Cuidar da nascente' },
+      root: {
+        reference: { type: 'MISSAO', id: '42/campo', resource: '/api/missoes/42' },
+        name: 'Cuidar da nascente', status: null, occurredAt: null, recordedAt: null, syncStatus: null
+      },
       stages: [], relations: [], events: [], participants: [], gaps: [],
       limits: { maxNodes: 100, maxRelations: 200, maxEvents: 300, truncated: false },
       asOf: '2026-07-10T14:00:00Z'
@@ -214,7 +225,7 @@ describe('cookie session API', () => {
     localStorage.setItem('angico.session', JSON.stringify(session));
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response(403, { detail: 'forbidden' })));
 
-    await expect(listWorkspaces()).resolves.toEqual([]);
+    await expect(listWorkspaces()).rejects.toMatchObject({ status: 403, message: 'forbidden' });
   });
 
   it('lets the server derive workspace authorship from the authenticated session', async () => {
@@ -513,6 +524,13 @@ describe('cookie session API', () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response(503, { detail: 'busca de pessoas indisponível' })));
 
     await expect(searchPessoas('workspace-a', 'Mara')).rejects.toThrow('busca de pessoas indisponível');
+  });
+
+  it('keeps geocoding HTTP failures distinct from an empty result', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response(503, { detail: 'geocodificação indisponível' })));
+
+    await expect(searchGeocoding('Nascente Sul')).rejects.toThrow('geocodificação indisponível');
+    await expect(reverseGeocode(-8.1, -34.9)).rejects.toThrow('geocodificação indisponível');
   });
 
   it('searches messages inside the authorized workspace with an encoded query', async () => {

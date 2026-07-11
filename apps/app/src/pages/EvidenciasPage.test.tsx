@@ -57,7 +57,10 @@ const localEvidence = {
     capturedAt: '2026-07-10T14:20:00Z',
     deviceId: 'device-1',
     clientMutationId: 'evidence-local-1',
-    file: { blobKey: 'blob-1', name: 'nascente.jpg', type: 'image/jpeg', size: 1200 }
+    file: {
+      blobKey: 'blob-1', name: 'nascente.jpg', type: 'image/jpeg', size: 1200,
+      sha256: 'a'.repeat(64)
+    }
   },
   syncStatus: 'QUEUED' as const,
   updatedAt: '2026-07-10T14:21:00Z'

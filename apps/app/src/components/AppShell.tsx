@@ -3,6 +3,7 @@ import { Navigate, Outlet, useNavigate } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import Topbar from './Topbar';
 import ProfileModal from './ProfileModal';
+import OfflineReadNotice from './OfflineReadNotice';
 import {
   DEFAULT_WORKSPACE, createWorkspace, deleteWorkspace, getProfile, getSession,
   hasFreshOfflineSession, isAuthenticated, listWorkspaces, logout, revalidateSession,
@@ -28,6 +29,8 @@ export default function AppShell() {
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [profile, setProfile] = useState<PessoaHit | null>(null);
+  const [accountError, setAccountError] = useState<string | null>(null);
+  const [profileError, setProfileError] = useState<string | null>(null);
   const [showProfile, setShowProfile] = useState(false);
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [authStatus, setAuthStatus] = useState<'checking' | 'authenticated' | 'anonymous'>(
@@ -68,6 +71,7 @@ export default function AppShell() {
   useEffect(() => {
     if (authStatus !== 'authenticated') return;
     let active = true;
+    setAccountError(null);
     listWorkspaces().then((list) => {
       if (!active) return;
       setWorkspaces(list);
@@ -76,6 +80,8 @@ export default function AppShell() {
         setActiveSlug(fallback);
         setSessionWorkspace(fallback);
       }
+    }).catch((caught) => {
+      if (active) setAccountError(caught instanceof Error ? caught.message : 'Não foi possível carregar os espaços de trabalho.');
     });
     return () => { active = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -84,7 +90,12 @@ export default function AppShell() {
   useEffect(() => {
     if (authStatus !== 'authenticated') return;
     let active = true;
-    getProfile(activeSlug).then((p) => { if (active) setProfile(p); });
+    setProfileError(null);
+    getProfile(activeSlug).then((p) => {
+      if (active) setProfile(p);
+    }).catch((caught) => {
+      if (active) setProfileError(caught instanceof Error ? caught.message : 'Não foi possível carregar o perfil.');
+    });
     return () => { active = false; };
   }, [activeSlug, authStatus]);
 
@@ -175,6 +186,14 @@ export default function AppShell() {
         onWorkspaceClick={() => setShowProfile(true)}
       />
       <main className="app-main">
+        {(accountError || profileError) && (
+          <div className="form-error" role="alert">{accountError || profileError}</div>
+        )}
+        <OfflineReadNotice
+          ownerId={sessionOwnerId(session)}
+          workspaceId={activeSlug}
+          active={hasFreshOfflineSession()}
+        />
         <Outlet context={context} />
       </main>
       {showProfile && effectiveProfile && (

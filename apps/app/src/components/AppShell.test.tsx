@@ -3,7 +3,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import AppShell from './AppShell';
-import { logout, sessionOwnerId } from '../lib/api';
+import { getProfile, listWorkspaces, logout, sessionOwnerId } from '../lib/api';
 import { clearOfflineOwner, getOfflineOwnerState } from '../lib/offlineStore';
 
 const { session } = vi.hoisted(() => ({
@@ -49,7 +49,11 @@ vi.mock('../lib/offlineStore', () => ({
 vi.mock('../lib/offlineSync', () => ({ startSyncEngine: vi.fn(() => vi.fn()) }));
 
 describe('AppShell local partition', () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(listWorkspaces).mockResolvedValue([]);
+    vi.mocked(getProfile).mockResolvedValue(null);
+  });
   afterEach(cleanup);
 
   it('clears the partition selected by the persisted owner alias during logout', async () => {
@@ -70,5 +74,22 @@ describe('AppShell local partition', () => {
     expect(getOfflineOwnerState).toHaveBeenCalledWith('ana.sp');
     expect(clearOfflineOwner).toHaveBeenCalledWith('ana.sp', { discardPending: false });
     expect(logout).toHaveBeenCalled();
+  });
+
+  it('reports an authorized workspace read failure instead of treating it as an empty account', async () => {
+    vi.mocked(listWorkspaces).mockRejectedValue(new Error('Espaços indisponíveis'));
+
+    render(
+      <MemoryRouter initialEntries={['/app']}>
+        <Routes>
+          <Route path="/app" element={<AppShell />}>
+            <Route index element={<div>Conteúdo</div>} />
+          </Route>
+          <Route path="/login" element={<div>Login</div>} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Espaços indisponíveis');
   });
 });

@@ -43,20 +43,25 @@ export default function DashboardPage() {
     setData(null);
     setPoints([]);
     setEvents([]);
-    const [dashboard, map, memory] = await Promise.allSettled([
-      loadDashboard(workspaceId),
-      loadMapPoints(workspaceId),
-      loadMemoria(workspaceId)
-    ]);
-    if (request !== refreshRequest.current) return;
-    if (dashboard.status === 'fulfilled') setData(dashboard.value);
-    else {
+    try {
+      const [dashboard, map, memory] = await Promise.all([
+        loadDashboard(workspaceId),
+        loadMapPoints(workspaceId),
+        loadMemoria(workspaceId)
+      ]);
+      if (request !== refreshRequest.current) return;
+      setData(dashboard);
+      setPoints(map);
+      setEvents(memory);
+    } catch (caught) {
+      if (request !== refreshRequest.current) return;
       setData(null);
-      setError(dashboard.reason instanceof Error ? dashboard.reason.message : 'O painel não respondeu.');
+      setPoints([]);
+      setEvents([]);
+      setError(caught instanceof Error ? caught.message : 'O painel não respondeu.');
+    } finally {
+      if (request === refreshRequest.current) setLoading(false);
     }
-    setPoints(map.status === 'fulfilled' ? map.value : []);
-    setEvents(memory.status === 'fulfilled' ? memory.value : []);
-    setLoading(false);
   }, [workspaceId]);
 
   useEffect(() => { void refresh(); }, [refresh]);

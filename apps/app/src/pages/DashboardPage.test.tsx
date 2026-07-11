@@ -52,4 +52,14 @@ describe('DashboardPage', () => {
     await act(async () => first.resolve({ ...dashboard, territory: { ...dashboard.territory, name: 'Território antigo' } }));
     expect(screen.queryByRole('heading', { name: 'Território antigo' })).not.toBeInTheDocument();
   });
+
+  it('reports a failed confirmed read instead of presenting an empty section', async () => {
+    vi.mocked(loadDashboard).mockResolvedValue(dashboard);
+    vi.mocked(loadMapPoints).mockRejectedValue(new Error('Mapa confirmado indisponível'));
+
+    render(<Page workspaceId="workspace-a" />);
+
+    expect(await screen.findByText('Mapa confirmado indisponível')).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Território A' })).not.toBeInTheDocument();
+  });
 });
