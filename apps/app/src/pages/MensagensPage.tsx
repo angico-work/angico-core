@@ -496,7 +496,7 @@ export default function MensagensPage() {
         <EmptyState
           title={contexts.length === 0 ? 'Nenhuma conversa disponível' : 'Nenhuma conversa iniciada'}
           message={online ? 'Crie uma conversa ligada a um território, missão ou ação existente.' : 'Conecte este aparelho uma vez para guardar as conversas autorizadas.'}
-          action={contexts.length > 0 ? <button className="secondary-button" onClick={() => setShowNew(true)}>Nova conversa</button> : undefined}
+          action={contexts.length > 0 ? <button className="secondary-button" disabled={!online} onClick={() => setShowNew(true)}>Nova conversa</button> : undefined}
         />
       ) : (
         <div className="message-layout">

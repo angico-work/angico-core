@@ -186,6 +186,20 @@ describe('MensagensPage', () => {
     expect(create).toBeDisabled();
   });
 
+  it('keeps every new-conversation action disabled offline in the empty state', async () => {
+    vi.mocked(listConversas).mockResolvedValue([]);
+    renderPage();
+    expect(await screen.findByText('Nenhuma conversa iniciada')).toBeInTheDocument();
+
+    Object.defineProperty(navigator, 'onLine', { configurable: true, value: false });
+    fireEvent(window, new Event('offline'));
+
+    const actions = await screen.findAllByRole('button', { name: 'Nova conversa' });
+    expect(actions).toHaveLength(2);
+    actions.forEach((action) => expect(action).toBeDisabled());
+    expect(screen.queryByRole('dialog', { name: 'Nova conversa' })).not.toBeInTheDocument();
+  });
+
   it('restores a saved draft and its local attachment', async () => {
     vi.mocked(loadMessageDraft).mockResolvedValue({
       body: 'Confirmar horário do mutirão.',
