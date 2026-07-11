@@ -56,6 +56,7 @@ public class WorkspaceService {
 
     @Transactional
     public WorkspaceResponse criar(WorkspaceCreateRequest request) {
+        validateCoordinatePair(request.centerLatitude(), request.centerLongitude());
         String actorId = authorizationService.currentActorId();
         Instant now = clock.now();
         Workspace workspace = new Workspace(uniqueSlug(slugify(request.nome().trim())),
@@ -80,6 +81,7 @@ public class WorkspaceService {
     @Transactional
     public WorkspaceResponse atualizar(String slug, WorkspaceUpdateRequest request) {
         accessService.requireManage(slug);
+        validateCoordinatePair(request.centerLatitude(), request.centerLongitude());
         Workspace workspace = workspaceRepository.findBySlug(slug)
                 .orElseThrow(() -> new IllegalArgumentException("Workspace não encontrado: " + slug));
         if (request.nome() != null && !request.nome().isBlank()) {
@@ -94,14 +96,9 @@ public class WorkspaceService {
         if (request.estado() != null) {
             workspace.setEstado(blankToNull(request.estado()));
         }
-        if (request.centerLatitude() != null) {
+        if (request.centerLatitude() != null && request.centerLongitude() != null) {
             workspace.setCenterLatitude(request.centerLatitude());
-        }
-        if (request.centerLongitude() != null) {
             workspace.setCenterLongitude(request.centerLongitude());
-        }
-        if (request.status() != null && !request.status().isBlank()) {
-            workspace.setStatus(request.status().trim().toUpperCase(java.util.Locale.ROOT));
         }
         workspace.setUpdatedAt(clock.now());
         Workspace saved = workspaceRepository.save(workspace);
@@ -283,5 +280,13 @@ public class WorkspaceService {
 
     private static String blankToNull(String value) {
         return value == null || value.isBlank() ? null : value;
+    }
+
+    private static void validateCoordinatePair(Double latitude, Double longitude) {
+        if ((latitude == null) != (longitude == null)
+                || latitude != null && (!Double.isFinite(latitude) || !Double.isFinite(longitude)
+                || latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180)) {
+            throw new IllegalArgumentException("Coordenadas centrais inválidas.");
+        }
     }
 }

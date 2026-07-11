@@ -23,6 +23,8 @@ import com.angico.problemas.ProblemaController;
 import com.angico.problemas.ProblemaService;
 import com.angico.territorios.TerritorioController;
 import com.angico.territorios.TerritorioService;
+import com.angico.workspaces.WorkspaceController;
+import com.angico.workspaces.WorkspaceService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.MediaType;
@@ -41,6 +43,7 @@ class ApiInputValidationTest {
     private PessoaService pessoaService;
     private TerritorioService territorioService;
     private MensagemService mensagemService;
+    private WorkspaceService workspaceService;
     private MockMvc mvc;
 
     @BeforeEach
@@ -53,6 +56,7 @@ class ApiInputValidationTest {
         pessoaService = mock(PessoaService.class);
         territorioService = mock(TerritorioService.class);
         mensagemService = mock(MensagemService.class);
+        workspaceService = mock(WorkspaceService.class);
 
         LocalValidatorFactoryBean validator = new LocalValidatorFactoryBean();
         validator.afterPropertiesSet();
@@ -64,7 +68,8 @@ class ApiInputValidationTest {
                         new AcaoController(acaoService),
                         new PessoaController(pessoaService),
                         new TerritorioController(territorioService),
-                        new MensagemController(mensagemService)
+                        new MensagemController(mensagemService),
+                        new WorkspaceController(workspaceService)
                 )
                 .setControllerAdvice(new ApiExceptionHandler())
                 .setValidator(validator)
@@ -236,6 +241,24 @@ class ApiInputValidationTest {
                 .andExpect(status().isBadRequest());
 
         verifyNoInteractions(territorioService);
+    }
+
+    @Test
+    void rejectsOversizedOrIncompleteWorkspaceGeometry() throws Exception {
+        mvc.perform(post("/api/workspaces")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"nome":"%s","centerLatitude":-23.5}
+                                """.formatted("w".repeat(256))))
+                .andExpect(status().isBadRequest());
+        mvc.perform(put("/api/workspaces/equipe")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"descricao":"%s","centerLongitude":-46.5}
+                                """.formatted("d".repeat(2001))))
+                .andExpect(status().isBadRequest());
+
+        verifyNoInteractions(workspaceService);
     }
 
     @Test

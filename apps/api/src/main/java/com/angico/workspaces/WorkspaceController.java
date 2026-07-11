@@ -35,7 +35,7 @@ public class WorkspaceController {
     }
 
     @PutMapping("/{slug}")
-    public WorkspaceResponse atualizar(@PathVariable String slug, @RequestBody WorkspaceUpdateRequest request) {
+    public WorkspaceResponse atualizar(@PathVariable String slug, @Valid @RequestBody WorkspaceUpdateRequest request) {
         return workspaceService.atualizar(slug, request);
     }
 

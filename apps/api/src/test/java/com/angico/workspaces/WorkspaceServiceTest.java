@@ -121,8 +121,8 @@ class WorkspaceServiceTest {
         return pessoa;
     }
 
-    private WorkspaceResponse create(String nome, String criadoPor) {
-        return service.criar(new WorkspaceCreateRequest(nome, null, null, null, null, null, criadoPor));
+    private WorkspaceResponse create(String nome) {
+        return service.criar(new WorkspaceCreateRequest(nome, null, null, null, null, null));
     }
 
     @Test
@@ -132,7 +132,7 @@ class WorkspaceServiceTest {
 
     @Test
     void creatingMintsAnAccentFoldedSlugFromTheName() {
-        WorkspaceResponse created = create("Mutirão da Horta", "forged.actor");
+        WorkspaceResponse created = create("Mutirão da Horta");
         assertEquals("mutirao-da-horta", created.slug());
         assertEquals("Mutirão da Horta", created.nome());
         assertEquals("test.actor", created.createdBy());
@@ -141,13 +141,13 @@ class WorkspaceServiceTest {
 
     @Test
     void duplicateNamesGetDistinctSlugsSoDataNeverCollides() {
-        assertEquals("horta", create("Horta", null).slug());
-        assertEquals("horta-2", create("Horta", null).slug());
+        assertEquals("horta", create("Horta").slug());
+        assertEquals("horta-2", create("Horta").slug());
     }
 
     @Test
     void removingDropsTheWorkspaceFromTheRegistry() {
-        WorkspaceResponse created = create("Temporário", null);
+        WorkspaceResponse created = create("Temporário");
         WorkspaceMember owner = memberStore.getFirst();
         service.remover(created.slug());
         assertFalse(service.listar().stream().anyMatch(w -> created.slug().equals(w.slug())));
@@ -158,7 +158,7 @@ class WorkspaceServiceTest {
 
     @Test
     void aWorkspaceNamedLikeTheLocalDemoCanBeRemoved() {
-        WorkspaceResponse created = create("Coletivo Jardim Novo", null);
+        WorkspaceResponse created = create("Coletivo Jardim Novo");
 
         service.remover(created.slug());
 
@@ -167,10 +167,10 @@ class WorkspaceServiceTest {
 
     @Test
     void archivedWorkspaceSlugIsNeverReused() {
-        WorkspaceResponse archived = create("Horta Comunitária", null);
+        WorkspaceResponse archived = create("Horta Comunitária");
         service.remover(archived.slug());
 
-        WorkspaceResponse replacement = create("Horta Comunitária", null);
+        WorkspaceResponse replacement = create("Horta Comunitária");
 
         assertEquals("horta-comunitaria-2", replacement.slug());
     }
@@ -182,7 +182,7 @@ class WorkspaceServiceTest {
 
     @Test
     void addingAMemberStoresItWithNormalizedRole() {
-        String slug = create("Equipe", null).slug();
+        String slug = create("Equipe").slug();
         WorkspaceMemberResponse member = service.adicionarMembro(slug,
                 new WorkspaceMemberRequest("@MARIA.SP", "Maria", "coordinator", null));
         assertEquals("maria.sp", member.actorId());
@@ -193,7 +193,7 @@ class WorkspaceServiceTest {
 
     @Test
     void addingUsesTheExistingPersonsNameWhenDisplayNameIsBlank() {
-        String slug = create("Equipe", null).slug();
+        String slug = create("Equipe").slug();
 
         WorkspaceMemberResponse member = service.adicionarMembro(slug,
                 new WorkspaceMemberRequest("maria.sp", " ", null, null));
@@ -203,7 +203,7 @@ class WorkspaceServiceTest {
 
     @Test
     void addingAnUnknownPersonIsRejected() {
-        String slug = create("Equipe", null).slug();
+        String slug = create("Equipe").slug();
 
         assertThrows(IllegalArgumentException.class, () -> service.adicionarMembro(slug,
                 new WorkspaceMemberRequest("desconhecida.sp", "Desconhecida", null, null)));
@@ -211,7 +211,7 @@ class WorkspaceServiceTest {
 
     @Test
     void addingAnInactivePersonIsRejected() {
-        String slug = create("Equipe", null).slug();
+        String slug = create("Equipe").slug();
 
         assertThrows(IllegalArgumentException.class, () -> service.adicionarMembro(slug,
                 new WorkspaceMemberRequest("bia.sp", "Bia", null, null)));
@@ -219,7 +219,7 @@ class WorkspaceServiceTest {
 
     @Test
     void addingTheSameMemberTwiceIsRejected() {
-        String slug = create("Equipe", null).slug();
+        String slug = create("Equipe").slug();
         service.adicionarMembro(slug, new WorkspaceMemberRequest("maria.sp", "Maria", null, null));
         assertThrows(IllegalArgumentException.class, () ->
                 service.adicionarMembro(slug, new WorkspaceMemberRequest("maria.sp", "Maria", null, null)));
@@ -227,14 +227,14 @@ class WorkspaceServiceTest {
 
     @Test
     void anInvalidRoleIsRejected() {
-        String slug = create("Equipe", null).slug();
+        String slug = create("Equipe").slug();
         assertThrows(IllegalArgumentException.class, () ->
                 service.adicionarMembro(slug, new WorkspaceMemberRequest("ana.sp", "Ana", "BOSS", null)));
     }
 
     @Test
     void anInvalidMemberStatusIsRejectedOnAddAndUpdate() {
-        String slug = create("Equipe", null).slug();
+        String slug = create("Equipe").slug();
         assertThrows(IllegalArgumentException.class, () -> service.adicionarMembro(slug,
                 new WorkspaceMemberRequest("maria.sp", "Maria", null, "PENDING")));
         WorkspaceMemberResponse member = service.adicionarMembro(slug,
@@ -248,7 +248,7 @@ class WorkspaceServiceTest {
 
     @Test
     void theLastActiveOwnerCannotBeDemoted() {
-        String slug = create("Equipe", null).slug();
+        String slug = create("Equipe").slug();
         WorkspaceMember owner = memberStore.getFirst();
 
         assertThrows(IllegalArgumentException.class, () -> service.atualizarMembro(
@@ -260,7 +260,7 @@ class WorkspaceServiceTest {
 
     @Test
     void theLastActiveOwnerCannotBeDeactivated() {
-        String slug = create("Equipe", null).slug();
+        String slug = create("Equipe").slug();
         WorkspaceMember owner = memberStore.getFirst();
 
         assertThrows(IllegalArgumentException.class, () -> service.atualizarMembro(
@@ -272,7 +272,7 @@ class WorkspaceServiceTest {
 
     @Test
     void theLastActiveOwnerCannotBeRemoved() {
-        String slug = create("Equipe", null).slug();
+        String slug = create("Equipe").slug();
         WorkspaceMember owner = memberStore.getFirst();
 
         assertThrows(IllegalArgumentException.class, () -> service.removerMembro(slug, owner.getId()));
@@ -281,7 +281,7 @@ class WorkspaceServiceTest {
 
     @Test
     void anOwnerCanBeDemotedWhenAnotherActiveOwnerExists() {
-        String slug = create("Equipe", null).slug();
+        String slug = create("Equipe").slug();
         WorkspaceMember originalOwner = memberStore.getFirst();
         service.adicionarMembro(slug, new WorkspaceMemberRequest("ana.sp", "Ana", "OWNER", "ACTIVE"));
 
@@ -296,7 +296,7 @@ class WorkspaceServiceTest {
 
     @Test
     void updatingAndRemovingMembersPublishMemoryEvents() {
-        String slug = create("Equipe", null).slug();
+        String slug = create("Equipe").slug();
         WorkspaceMemberResponse added = service.adicionarMembro(
                 slug,
                 new WorkspaceMemberRequest("maria.sp", "Maria", "MEMBER", "ACTIVE"));
@@ -316,7 +316,7 @@ class WorkspaceServiceTest {
 
     @Test
     void changingMembershipAcquiresTheWorkspaceLock() {
-        String slug = create("Equipe", null).slug();
+        String slug = create("Equipe").slug();
         WorkspaceMemberResponse added = service.adicionarMembro(
                 slug,
                 new WorkspaceMemberRequest("maria.sp", "Maria", "MEMBER", "ACTIVE"));
