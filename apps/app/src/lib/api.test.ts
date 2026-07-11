@@ -385,6 +385,19 @@ describe('cookie session API', () => {
     expect(error).not.toBeInstanceOf(ApiNetworkError);
   });
 
+  it('requests workspace access refresh after a denied mutation', async () => {
+    const listener = vi.fn();
+    window.addEventListener('angico:workspace-access-changed', listener);
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response(403, { detail: 'sem acesso' })));
+
+    try {
+      await apiFetch('/api/observacoes', { method: 'POST' });
+      expect(listener).toHaveBeenCalledOnce();
+    } finally {
+      window.removeEventListener('angico:workspace-access-changed', listener);
+    }
+  });
+
   it('does not classify invalid JSON or request abortion as a network failure', async () => {
     const parseFailure = new SyntaxError('invalid json');
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({

@@ -78,6 +78,18 @@ describe('confirmed response snapshots', () => {
     expect(result).toMatchObject({ data: [{ id: 9 }], source: 'snapshot' });
   });
 
+  it('rejects a network failure when current authorization is required', async () => {
+    await saveSnapshot({ ...identity, ownerId: 'ana.sp' }, [{ id: 9 }]);
+    const failure = new ApiNetworkError(new TypeError('Failed to fetch'));
+
+    await expect(loadConfirmedOrSnapshot(
+      identity,
+      async () => { throw failure; },
+      isList,
+      { allowSnapshotFallback: false }
+    )).rejects.toBe(failure);
+  });
+
   it.each([401, 403, 404, 409, 422, 500])(
     'never uses a snapshot after HTTP %s',
     async (status) => {

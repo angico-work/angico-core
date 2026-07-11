@@ -602,23 +602,47 @@ export async function getSyncState(ownerId: string, workspaceId?: string): Promi
   }, { pending: 0, syncing: 0, conflicts: 0, blocked: 0, actionRequired: 0 });
 }
 
-export function startSyncEngine(expectedOwnerId: string, writableWorkspaceIds: readonly string[]): () => void {
-  const workspaces = [...new Set(writableWorkspaceIds.map((workspaceId) => workspaceId.trim()).filter(Boolean))];
-  const synchronize = () => {
-    if (sessionOwnerId() === expectedOwnerId
-      && navigator.onLine
-      && isAuthenticated()
-      && hasFreshOfflineSession()) {
+export function startSyncEngine(
+  expectedOwnerId: string,
+  writableWorkspaceIds: readonly string[],
+  refreshWorkspaceAccess?: () => Promise<readonly string[]>
+): () => void {
+  const initialWorkspaces = [...new Set(
+    writableWorkspaceIds.map((workspaceId) => workspaceId.trim()).filter(Boolean)
+  )];
+  let stopped = false;
+  let synchronizing = false;
+  const synchronize = async () => {
+    if (stopped
+      || synchronizing
+      || sessionOwnerId() !== expectedOwnerId
+      || !navigator.onLine
+      || !isAuthenticated()
+      || !hasFreshOfflineSession()) return;
+    synchronizing = true;
+    try {
+      const current = refreshWorkspaceAccess ? await refreshWorkspaceAccess() : initialWorkspaces;
+      if (stopped
+        || sessionOwnerId() !== expectedOwnerId
+        || !navigator.onLine
+        || !isAuthenticated()
+        || !hasFreshOfflineSession()) return;
+      const workspaces = [...new Set(current.map((workspaceId) => workspaceId.trim()).filter(Boolean))];
       workspaces.forEach((workspaceId) => {
         void syncPendingOperations({ ownerId: expectedOwnerId, workspaceId });
       });
+    } catch {
+    } finally {
+      synchronizing = false;
     }
   };
-  window.addEventListener('online', synchronize);
-  const interval = window.setInterval(synchronize, 30_000);
-  synchronize();
+  const trigger = () => { void synchronize(); };
+  window.addEventListener('online', trigger);
+  const interval = window.setInterval(trigger, 30_000);
+  trigger();
   return () => {
-    window.removeEventListener('online', synchronize);
+    stopped = true;
+    window.removeEventListener('online', trigger);
     window.clearInterval(interval);
   };
 }

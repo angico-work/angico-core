@@ -884,6 +884,25 @@ describe('offline synchronization', () => {
       .toMatchObject({ syncStatus: 'QUEUED' });
   });
 
+  it('refreshes workspace access before a background synchronization', async () => {
+    const queued = await enqueueObservation(observation, 'ana.sp');
+    const fetchMock = vi.fn();
+    const refreshAccess = vi.fn().mockResolvedValue([]);
+    vi.stubGlobal('fetch', fetchMock);
+    Object.defineProperty(navigator, 'onLine', { configurable: true, value: true });
+
+    const stop = startSyncEngine('ana.sp', ['territorio-a'], refreshAccess);
+    try {
+      await vi.waitFor(() => expect(refreshAccess).toHaveBeenCalledOnce());
+    } finally {
+      stop();
+    }
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(await getLocalObservation('ana.sp', 'territorio-a', queued.clientMutationId))
+      .toMatchObject({ syncStatus: 'QUEUED' });
+  });
+
   it('releases a claim without applying a response after the active owner changes', async () => {
     const queued = await enqueueObservation(observation, 'ana.sp');
     let resolveResponse!: (value: Response) => void;

@@ -323,7 +323,41 @@ describe('AppShell local partition', () => {
 
     renderShell();
 
-    await waitFor(() => expect(startSyncEngine).toHaveBeenCalledWith('ana.sp', ['territorio-a']));
+    await waitFor(() => expect(startSyncEngine).toHaveBeenCalledWith(
+      'ana.sp', ['territorio-a'], expect.any(Function)
+    ));
+  });
+
+  it('revokes local write controls when a remote role changes', async () => {
+    vi.mocked(listWorkspaces)
+      .mockResolvedValueOnce([{ slug: 'territorio-a', nome: 'Território A', role: 'OWNER' }])
+      .mockResolvedValue([{ slug: 'territorio-a', nome: 'Território A', role: 'VIEWER' }]);
+
+    renderShell();
+    await waitFor(() => expect(startSyncEngine).toHaveBeenCalled());
+
+    act(() => window.dispatchEvent(new Event('focus')));
+
+    expect(await screen.findByRole('status')).toHaveTextContent('modo de leitura');
+    expect(stopSyncEngine).toHaveBeenCalled();
+  });
+
+  it('keeps one sync engine when a fresh access check is unchanged', async () => {
+    vi.mocked(listWorkspaces).mockImplementation(async () => ([
+      { slug: 'territorio-a', nome: 'Território A', role: 'OWNER' }
+    ]));
+    vi.mocked(startSyncEngine).mockImplementation((_ownerId, _workspaceIds, refreshAccess) => {
+      void refreshAccess?.();
+      return stopSyncEngine;
+    });
+
+    renderShell();
+    await screen.findByText('Conteúdo');
+    await act(async () => {
+      await new Promise((resolve) => window.setTimeout(resolve, 20));
+    });
+
+    expect(startSyncEngine).toHaveBeenCalledOnce();
   });
 
   it('does not open profile editing with provisional session data', async () => {

@@ -13,6 +13,10 @@ export interface OfflineQueryResult<T> {
   savedAt: string;
 }
 
+export interface OfflineQueryOptions {
+  allowSnapshotFallback?: boolean;
+}
+
 let lastRequestStartedAt = 0;
 
 function nextRequestStartedAt(): number {
@@ -26,8 +30,10 @@ function nextRequestStartedAt(): number {
 export async function loadConfirmedOrSnapshot<T>(
   identity: Omit<SnapshotIdentity, 'ownerId'>,
   loadRemote: () => Promise<unknown>,
-  validate: (value: unknown) => value is T
+  validate: (value: unknown) => value is T,
+  options: OfflineQueryOptions = {}
 ): Promise<OfflineQueryResult<T>> {
+  const allowSnapshotFallback = options.allowSnapshotFallback ?? true;
   const ownerId = sessionOwnerId();
   if (!ownerId || !isAuthenticated()) {
     throw new Error('A sessão expirou. Entre novamente para acessar os dados deste aparelho.');
@@ -57,6 +63,9 @@ export async function loadConfirmedOrSnapshot<T>(
   };
 
   if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+    if (!allowSnapshotFallback) {
+      throw new ApiNetworkError(new TypeError('O navegador está offline.'));
+    }
     return local();
   }
 
@@ -65,7 +74,7 @@ export async function loadConfirmedOrSnapshot<T>(
   try {
     payload = await loadRemote();
   } catch (error) {
-    if (error instanceof ApiNetworkError) return local(error);
+    if (error instanceof ApiNetworkError && allowSnapshotFallback) return local(error);
     throw error;
   }
   assertActiveIdentity();

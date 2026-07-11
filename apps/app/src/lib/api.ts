@@ -89,6 +89,9 @@ export async function apiFetch(input: RequestInfo | URL, init: ApiRequestInit = 
       window.dispatchEvent(new Event('angico:unauthorized'));
     }
   }
+  if (response.status === 403 && !SAFE_METHODS.has(method) && typeof window !== 'undefined') {
+    window.dispatchEvent(new Event('angico:workspace-access-changed'));
+  }
   return response;
 }
 
@@ -210,7 +213,7 @@ export async function loadMapPoints(workspaceId: string): Promise<MapPoint[]> {
   return result.data;
 }
 
-export async function listWorkspaces(): Promise<Workspace[]> {
+export async function listWorkspaces(options: { requireFresh?: boolean } = {}): Promise<Workspace[]> {
   const result = await loadConfirmedOrSnapshot(
     { workspaceId: ACCOUNT_SNAPSHOT_WORKSPACE, resource: 'workspaces', contractVersion: 3 },
     () => requestJson(
@@ -218,7 +221,8 @@ export async function listWorkspaces(): Promise<Workspace[]> {
       { headers: requestHeaders() },
       'Não foi possível carregar os espaços de trabalho.'
     ),
-    isWorkspaceList
+    isWorkspaceList,
+    { allowSnapshotFallback: !options.requireFresh }
   );
   return result.data;
 }

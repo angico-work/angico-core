@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Navigate, Outlet, useNavigate } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import Topbar from './Topbar';
@@ -60,6 +60,25 @@ export default function AppShell() {
     () => workspaces.filter((workspace) => workspace.role !== 'VIEWER').map((workspace) => workspace.slug),
     [workspaces]
   );
+  const hasWritableWorkspaces = writableWorkspaceIds.length > 0;
+  const applyWorkspaceAccess = useCallback((list: Workspace[]) => {
+    setWorkspaces((current) => (
+      JSON.stringify(current) === JSON.stringify(list) ? current : list
+    ));
+    if (list.length && !list.some((workspace) => workspace.slug === activeSlug)) {
+      const fallback = list[0].slug;
+      setActiveSlug(fallback);
+      setSessionWorkspace(fallback);
+    }
+  }, [activeSlug]);
+  const refreshWorkspaceAccess = useCallback(async () => {
+    const list = await listWorkspaces({ requireFresh: true });
+    applyWorkspaceAccess(list);
+    setAccountError(null);
+    return list
+      .filter((workspace) => workspace.role !== 'VIEWER')
+      .map((workspace) => workspace.slug);
+  }, [applyWorkspaceAccess]);
 
   useEffect(() => {
     let active = true;
@@ -100,9 +119,9 @@ export default function AppShell() {
   }, [activeIdentity.session, activeOwnerId, activePessoaId]);
 
   useEffect(() => {
-    if (authStatus !== 'authenticated' || !activeOwnerId || writableWorkspaceIds.length === 0) return;
-    return startSyncEngine(activeOwnerId, writableWorkspaceIds);
-  }, [activeOwnerId, authStatus, writableWorkspaceIds]);
+    if (authStatus !== 'authenticated' || !activeOwnerId || !hasWritableWorkspaces) return;
+    return startSyncEngine(activeOwnerId, writableWorkspaceIds, refreshWorkspaceAccess);
+  }, [activeOwnerId, authStatus, hasWritableWorkspaces, refreshWorkspaceAccess, writableWorkspaceIds]);
 
   useEffect(() => {
     if (!sidebarOpen) return;
@@ -189,20 +208,45 @@ export default function AppShell() {
   useEffect(() => {
     if (authStatus !== 'authenticated') return;
     let active = true;
+    const refresh = () => {
+      if (!active || navigator.onLine === false) return;
+      void refreshWorkspaceAccess().catch((caught) => {
+        if (!active || caught instanceof ApiNetworkError) return;
+        setAccountError(caught instanceof Error
+          ? caught.message
+          : 'Não foi possível atualizar os acessos aos espaços de trabalho.');
+      });
+    };
+    const refreshVisible = () => {
+      if (document.visibilityState !== 'hidden') refresh();
+    };
+    window.addEventListener('focus', refresh);
+    window.addEventListener('online', refresh);
+    window.addEventListener('angico:workspace-access-changed', refresh);
+    document.addEventListener('visibilitychange', refreshVisible);
+    const interval = hasWritableWorkspaces ? undefined : window.setInterval(refresh, 30_000);
+    return () => {
+      active = false;
+      window.removeEventListener('focus', refresh);
+      window.removeEventListener('online', refresh);
+      window.removeEventListener('angico:workspace-access-changed', refresh);
+      document.removeEventListener('visibilitychange', refreshVisible);
+      if (interval !== undefined) window.clearInterval(interval);
+    };
+  }, [authStatus, hasWritableWorkspaces, refreshWorkspaceAccess]);
+
+  useEffect(() => {
+    if (authStatus !== 'authenticated') return;
+    let active = true;
     setAccountError(null);
     listWorkspaces().then((list) => {
       if (!active) return;
-      setWorkspaces(list);
-      if (list.length && !list.some((w) => w.slug === activeSlug)) {
-        const fallback = list[0].slug;
-        setActiveSlug(fallback);
-        setSessionWorkspace(fallback);
-      }
+      applyWorkspaceAccess(list);
     }).catch((caught) => {
       if (active) setAccountError(caught instanceof Error ? caught.message : 'Não foi possível carregar os espaços de trabalho.');
     });
     return () => { active = false; };
-  }, [activeSlug, authStatus]);
+  }, [applyWorkspaceAccess, authStatus]);
 
   useEffect(() => {
     if (authStatus !== 'authenticated') return;
