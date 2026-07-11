@@ -3,6 +3,8 @@ package com.angico.glimpse;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.verify;
+import static org.mockito.ArgumentMatchers.any;
 
 import com.angico.acoes.AcaoRepository;
 import com.angico.common.ClockProvider;
@@ -76,8 +78,9 @@ class GlimpseServiceTest {
         String workspaceId = "coletivo-rio";
         when(authorization.requireAuthorizedWorkspace(workspaceId)).thenReturn(workspaceId);
         when(clock.now()).thenReturn(Instant.parse("2026-07-10T12:00:00Z"));
-        when(observacoes.findByWorkspaceIdOrderByCreatedAtDesc(workspaceId)).thenReturn(List.of());
-        when(missoes.findByWorkspaceIdOrderByCreatedAtDesc(workspaceId)).thenReturn(List.of());
+        when(observacoes.findTop8ByWorkspaceIdOrderByCreatedAtDesc(workspaceId)).thenReturn(List.of());
+        when(observacoes.countByCategory(workspaceId)).thenReturn(List.of());
+        when(missoes.findTop6ByWorkspaceIdOrderByCreatedAtDesc(workspaceId)).thenReturn(List.of());
         when(resultados.countByWorkspaceId(workspaceId)).thenReturn(2L);
         when(workspaces.findBySlug(workspaceId)).thenReturn(Optional.of(
                 new Workspace(workspaceId, "Coletivo do Rio", "actor", Instant.EPOCH)));
@@ -101,10 +104,9 @@ class GlimpseServiceTest {
         orphan.setIndicadorId(999L);
         orphan.setValor(100.0);
         orphan.setCreatedAt(Instant.parse("2026-07-10T15:00:00Z"));
-        when(medicoes.findByWorkspaceIdOrderByCreatedAtDesc(workspaceId))
+        when(medicoes.findTop64ByWorkspaceIdOrderByCreatedAtDesc(workspaceId))
                 .thenReturn(List.of(orphan, measurement));
-        when(indicadores.findById(999L)).thenReturn(Optional.empty());
-        when(indicadores.findById(42L)).thenReturn(Optional.of(indicator));
+        when(indicadores.findAllById(any())).thenReturn(List.of(indicator));
 
         DashboardResponse response = service.dashboard(workspaceId);
 
@@ -120,6 +122,10 @@ class GlimpseServiceTest {
                 .value());
         assertFalse(response.stats().stream()
                 .anyMatch(stat -> stat.label().contains("Jovens")));
+        verify(observacoes).findTop8ByWorkspaceIdOrderByCreatedAtDesc(workspaceId);
+        verify(missoes).findTop6ByWorkspaceIdOrderByCreatedAtDesc(workspaceId);
+        verify(medicoes).findTop64ByWorkspaceIdOrderByCreatedAtDesc(workspaceId);
+        verify(indicadores).findAllById(any());
     }
 
     @Test
@@ -130,9 +136,11 @@ class GlimpseServiceTest {
                 null, null, null, Instant.parse("2026-07-10T10:00:00Z"));
         when(authorization.requireAuthorizedWorkspace(workspaceId)).thenReturn(workspaceId);
         when(clock.now()).thenReturn(Instant.parse("2026-07-10T12:00:00Z"));
-        when(observacoes.findByWorkspaceIdOrderByCreatedAtDesc(workspaceId)).thenReturn(List.of());
-        when(missoes.findByWorkspaceIdOrderByCreatedAtDesc(workspaceId)).thenReturn(List.of(mission));
-        when(medicoes.findByWorkspaceIdOrderByCreatedAtDesc(workspaceId)).thenReturn(List.of());
+        when(observacoes.findTop8ByWorkspaceIdOrderByCreatedAtDesc(workspaceId)).thenReturn(List.of());
+        when(observacoes.countByCategory(workspaceId)).thenReturn(List.of());
+        when(missoes.findTop6ByWorkspaceIdOrderByCreatedAtDesc(workspaceId)).thenReturn(List.of(mission));
+        when(medicoes.findTop64ByWorkspaceIdOrderByCreatedAtDesc(workspaceId)).thenReturn(List.of());
+        when(indicadores.findAllById(any())).thenReturn(List.of());
         when(workspaces.findBySlug(workspaceId)).thenReturn(Optional.of(
                 new Workspace(workspaceId, "Coletivo do Rio", "actor", Instant.EPOCH)));
 

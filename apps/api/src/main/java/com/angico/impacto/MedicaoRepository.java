@@ -7,6 +7,7 @@ import org.springframework.stereotype.Repository;
 @Repository
 public interface MedicaoRepository extends JpaRepository<Medicao, Long> {
     List<Medicao> findByWorkspaceIdOrderByCreatedAtDesc(String workspaceId);
+    List<Medicao> findTop64ByWorkspaceIdOrderByCreatedAtDesc(String workspaceId);
     List<Medicao> findByIndicadorIdOrderByCreatedAtDesc(Long indicadorId);
     long countByWorkspaceId(String workspaceId);
 }

@@ -14,6 +14,7 @@ import com.angico.missoes.Missao;
 import com.angico.missoes.MissaoRepository;
 import com.angico.mensagens.ConversationAccessPolicy;
 import com.angico.observacoes.ObservacaoRepository;
+import com.angico.observacoes.ObservacaoCategoryCount;
 import com.angico.observacoes.ObservacaoTerritorial;
 import com.angico.potencialidades.PotencialidadeRepository;
 import com.angico.potencialidades.PotencialidadeTerritorial;
@@ -30,6 +31,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -42,7 +44,6 @@ public class GlimpseService {
     private static final String MEMORY_CLAIM =
             "Contagens operacionais e medições registradas permanecem separadas e rastreáveis.";
     private static final int MAX_ACTIVITIES = 8;
-    private static final int MAX_MISSIONS = 6;
     private static final int MAX_MEASUREMENTS = 8;
     private static final DateTimeFormatter MEASUREMENT_DATE =
             DateTimeFormatter.ofPattern("dd/MM/uuuu").withZone(ZoneOffset.UTC);
@@ -97,7 +98,7 @@ public class GlimpseService {
     @Transactional(readOnly = true)
     public DashboardResponse dashboard(String workspaceId) {
         workspaceId = authorizationService.requireAuthorizedWorkspace(workspaceId);
-        List<ObservacaoTerritorial> recent = observacoes.findByWorkspaceIdOrderByCreatedAtDesc(workspaceId);
+        List<ObservacaoTerritorial> recent = observacoes.findTop8ByWorkspaceIdOrderByCreatedAtDesc(workspaceId);
         Instant now = clock.now();
 
         List<DashboardResponse.Stat> stats = List.of(
@@ -125,7 +126,7 @@ public class GlimpseService {
                 activities,
                 missions(workspaceId),
                 impact(workspaceId),
-                categoryDistribution(recent),
+                categoryDistribution(observacoes.countByCategory(workspaceId)),
                 MEMORY_CLAIM
         );
     }
@@ -177,8 +178,7 @@ public class GlimpseService {
     }
 
     private List<DashboardResponse.Mission> missions(String workspaceId) {
-        return missoes.findByWorkspaceIdOrderByCreatedAtDesc(workspaceId).stream()
-                .limit(MAX_MISSIONS)
+        return missoes.findTop6ByWorkspaceIdOrderByCreatedAtDesc(workspaceId).stream()
                 .map(m -> toMission(workspaceId, m))
                 .toList();
     }
@@ -193,17 +193,24 @@ public class GlimpseService {
     }
 
     private List<DashboardResponse.Impact> impact(String workspaceId) {
+        List<Medicao> recent = medicoes.findTop64ByWorkspaceIdOrderByCreatedAtDesc(workspaceId);
+        Set<Long> indicatorIds = recent.stream()
+                .map(Medicao::getIndicadorId)
+                .filter(java.util.Objects::nonNull)
+                .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
+        Map<Long, Indicador> indicatorsById = new LinkedHashMap<>();
+        indicadores.findAllById(indicatorIds).stream()
+                .filter(indicator -> workspaceId.equals(indicator.getWorkspaceId()))
+                .forEach(indicator -> indicatorsById.put(indicator.getId(), indicator));
         List<DashboardResponse.Impact> measured = new ArrayList<>();
         Set<Long> seenIndicators = new HashSet<>();
-        for (Medicao medicao : medicoes.findByWorkspaceIdOrderByCreatedAtDesc(workspaceId)) {
+        for (Medicao medicao : recent) {
             if (measured.size() == MAX_MEASUREMENTS
                     || medicao.getIndicadorId() == null
                     || !seenIndicators.add(medicao.getIndicadorId())) {
                 continue;
             }
-            Indicador indicador = indicadores.findById(medicao.getIndicadorId())
-                    .filter(candidate -> workspaceId.equals(candidate.getWorkspaceId()))
-                    .orElse(null);
+            Indicador indicador = indicatorsById.get(medicao.getIndicadorId());
             if (indicador == null || medicao.getValor() == null) {
                 continue;
             }
@@ -230,14 +237,10 @@ public class GlimpseService {
         return List.copyOf(measured);
     }
 
-    private List<DashboardResponse.Category> categoryDistribution(List<ObservacaoTerritorial> observacoes) {
-        Map<String, Long> byCategory = new LinkedHashMap<>();
-        for (ObservacaoTerritorial o : observacoes) {
-            byCategory.merge(o.getCategoria(), 1L, Long::sum);
-        }
-        List<DashboardResponse.Category> categories = new ArrayList<>();
-        byCategory.forEach((name, value) -> categories.add(new DashboardResponse.Category(name, value)));
-        return categories;
+    private List<DashboardResponse.Category> categoryDistribution(List<ObservacaoCategoryCount> counts) {
+        return counts.stream()
+                .map(count -> new DashboardResponse.Category(count.getCategory(), count.getTotal()))
+                .toList();
     }
 
     private DashboardResponse.Territory territory(String workspaceId) {
