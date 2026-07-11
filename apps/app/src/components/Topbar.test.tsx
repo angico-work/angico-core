@@ -17,6 +17,9 @@ describe('Topbar synchronization access', () => {
       />
     );
 
+    expect(screen.getByText('Espaço de trabalho ativo')).toBeInTheDocument();
+    expect(screen.queryByText('Território ativo')).not.toBeInTheDocument();
+
     fireEvent.click(screen.getByRole('button', { name: 'Abrir sincronização' }));
 
     expect(await screen.findByRole('dialog', { name: 'Sincronização' })).toBeInTheDocument();

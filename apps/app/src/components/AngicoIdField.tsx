@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react';
 import { searchPessoas } from '../lib/api';
 import type { PessoaHit } from '../types';
 
@@ -9,37 +9,49 @@ interface Props {
   onPick: (pessoa: PessoaHit) => void;
   id?: string;
   placeholder?: string;
+  autoFocus?: boolean;
 }
 
-export default function AngicoIdField({ workspaceId, value, onChange, onPick, id, placeholder }: Props) {
+export default function AngicoIdField({ workspaceId, value, onChange, onPick, id, placeholder, autoFocus }: Props) {
   const [results, setResults] = useState<PessoaHit[]>([]);
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [active, setActive] = useState(-1);
   const boxRef = useRef<HTMLDivElement>(null);
   const justPicked = useRef(false);
+  const searchRequest = useRef(0);
+  const generatedId = useId();
+  const inputId = id ?? `person-search-${generatedId}`;
+  const listboxId = `${inputId}-options`;
 
   useEffect(() => {
     if (justPicked.current) {
       justPicked.current = false;
       return;
     }
+    const request = ++searchRequest.current;
+    setResults([]);
+    setOpen(false);
+    setActive(-1);
     const q = value.trim();
     if (q.length < 2) {
-      setResults([]);
-      setOpen(false);
+      setLoading(false);
       return;
     }
     const ctrl = new AbortController();
     setLoading(true);
     const timer = setTimeout(async () => {
       const found = await searchPessoas(workspaceId, q, ctrl.signal);
+      if (request !== searchRequest.current) return;
       setResults(found);
+      setActive(-1);
       setOpen(true);
       setLoading(false);
     }, 300);
     return () => {
       clearTimeout(timer);
       ctrl.abort();
+      if (searchRequest.current === request) searchRequest.current += 1;
     };
   }, [value, workspaceId]);
 
@@ -56,6 +68,26 @@ export default function AngicoIdField({ workspaceId, value, onChange, onPick, id
     onPick(pessoa);
     setOpen(false);
     setResults([]);
+    setActive(-1);
+  }
+
+  function onKeyDown(event: KeyboardEvent<HTMLInputElement>) {
+    if (event.key === 'Escape') {
+      setOpen(false);
+      setActive(-1);
+      return;
+    }
+    if (!open || results.length === 0) return;
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      setActive((current) => Math.min(current + 1, results.length - 1));
+    } else if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      setActive((current) => current <= 0 ? results.length - 1 : current - 1);
+    } else if (event.key === 'Enter' && active >= 0) {
+      event.preventDefault();
+      choose(results[active]);
+    }
   }
 
   const showEmpty = open && !loading && results.length === 0 && value.trim().length >= 2;
@@ -63,24 +95,33 @@ export default function AngicoIdField({ workspaceId, value, onChange, onPick, id
   return (
     <div className="address-field" ref={boxRef}>
       <input
-        id={id}
+        id={inputId}
         type="text"
+        autoFocus={autoFocus}
         value={value}
         autoComplete="off"
         placeholder={placeholder}
         onChange={(e) => onChange(e.target.value)}
         onFocus={() => results.length > 0 && setOpen(true)}
+        onKeyDown={onKeyDown}
         role="combobox"
         aria-expanded={open}
         aria-autocomplete="list"
+        aria-controls={listboxId}
+        aria-activedescendant={open && active >= 0 ? `${listboxId}-${active}` : undefined}
+        aria-busy={loading}
       />
       {loading && <span className="address-field__spinner" aria-hidden="true" />}
       {open && results.length > 0 && (
-        <ul className="address-field__menu" role="listbox">
-          {results.map((p) => (
+        <ul id={listboxId} className="address-field__menu" role="listbox">
+          {results.map((p, index) => (
             <li
               key={p.id}
+              id={`${listboxId}-${index}`}
               role="option"
+              aria-selected={index === active}
+              className={index === active ? 'is-active' : ''}
+              onMouseEnter={() => setActive(index)}
               onMouseDown={(e) => {
                 e.preventDefault();
                 choose(p);
@@ -98,7 +139,7 @@ export default function AngicoIdField({ workspaceId, value, onChange, onPick, id
         <ul className="address-field__menu">
           <li className="address-field__empty">
             Nenhuma pessoa encontrada para “{value.trim()}”.
-            <span className="address-field__hint">Preencha o nome abaixo para cadastrar uma nova pessoa com este Angico ID.</span>
+            <span className="address-field__hint">Confira a grafia ou busque por outra parte do nome ou @identidade.</span>
           </li>
         </ul>
       )}

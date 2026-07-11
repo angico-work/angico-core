@@ -7,8 +7,20 @@ import ModulePage from './ModulePage';
 
 vi.mock('../lib/api', () => ({
   listEntities: vi.fn().mockRejectedValue(new Error('Sem conexão com o servidor.')),
+  listMissoes: vi.fn().mockResolvedValue([{
+    id: 20, workspaceId: 'territorio-a', territorioId: '4', problemaId: '11', responsavelId: '7',
+    titulo: 'Recuperar a nascente', descricao: null, status: 'PLANEJADA', progresso: 0, createdAt: ''
+  }]),
+  listProblemas: vi.fn().mockResolvedValue([]),
+  listTerritorios: vi.fn().mockResolvedValue([{
+    id: 4, workspaceId: 'territorio-a', nome: 'Nascente Sul', tipo: 'MICROBACIA', cidade: null,
+    bairro: null, estado: null, pais: null, latitude: null, longitude: null, boundingBox: [], status: 'ATIVO', updatedAt: null
+  }]),
   getSession: vi.fn().mockReturnValue({ pessoaId: 7, angicoId: 'ana.sp' }),
   createEntity: vi.fn(),
+  createAcao: vi.fn(),
+  createMissao: vi.fn(),
+  createProblema: vi.fn(),
   reverseGeocode: vi.fn(),
   resolveCoords: vi.fn(),
   searchPessoas: vi.fn().mockResolvedValue([]),
@@ -80,5 +92,37 @@ describe('ModulePage offline observations', () => {
 
     expect(await screen.findByText('Horta comunitária confirmada')).toBeInTheDocument();
     expect(screen.getByText('Compartilhado')).toBeInTheDocument();
+  });
+
+  it('opens an action deep link with its mission selected by name', async () => {
+    render(
+      <MemoryRouter initialEntries={['/acoes?create=1&missaoId=20']}>
+        <Routes>
+          <Route element={<Outlet context={{ workspaceId: 'territorio-a' }} />}>
+            <Route path="/acoes" element={<ModulePage configKey="acoes" />} />
+          </Route>
+        </Routes>
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByRole('dialog', { name: 'Nova ação' })).toBeInTheDocument();
+    expect(await screen.findByLabelText('Missão')).toHaveValue('20');
+    expect(screen.getByRole('option', { name: 'Recuperar a nascente' })).toBeInTheDocument();
+  });
+
+  it('opens an observation deep link with its territory selected by name', async () => {
+    render(
+      <MemoryRouter initialEntries={['/observacoes?create=1&territorioId=4']}>
+        <Routes>
+          <Route element={<Outlet context={{ workspaceId: 'territorio-a' }} />}>
+            <Route path="/observacoes" element={<ModulePage configKey="observacoes" />} />
+          </Route>
+        </Routes>
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByRole('dialog', { name: 'Nova observação' })).toBeInTheDocument();
+    expect(await screen.findByLabelText('Território relacionado')).toHaveValue('4');
+    expect(screen.getByRole('option', { name: 'Nascente Sul' })).toBeInTheDocument();
   });
 });

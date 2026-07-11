@@ -10,6 +10,7 @@ const NAV_GROUPS = [
     items: [
       { to: '/app', label: 'Visão geral', icon: 'leaf', end: true },
       { to: '/app/observacoes', label: 'Observações', icon: 'observation' },
+      { to: '/app/territorios', label: 'Territórios', icon: 'map' },
       { to: '/app/mapa', label: 'Mapa do território', icon: 'map' }
     ]
   },
@@ -28,7 +29,8 @@ const NAV_GROUPS = [
       { to: '/app/pessoas', label: 'Pessoas e grupos', icon: 'people' },
       { to: '/app/mensagens', label: 'Conversas', icon: 'message' },
       { to: '/app/indicadores', label: 'Indicadores', icon: 'indicator' },
-      { to: '/app/memoria', label: 'Rastro verificável', icon: 'memory' },
+      { to: '/app/memoria', label: 'Memória', icon: 'memory' },
+      { to: '/app/rastro', label: 'Rastro', icon: 'memory' },
       { to: '/app/relatorios', label: 'Síntese', icon: 'report' }
     ]
   }

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
+import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react';
 import { searchGeocoding } from '../lib/api';
 import type { GeoResult } from '../types';
 
@@ -18,6 +18,9 @@ export default function AddressField({ value, onChange, onSelect, placeholder, i
   const [active, setActive] = useState(-1);
   const boxRef = useRef<HTMLDivElement>(null);
   const justSelected = useRef(false);
+  const generatedId = useId();
+  const inputId = id ?? `address-search-${generatedId}`;
+  const listboxId = `${inputId}-options`;
 
   useEffect(() => {
     if (justSelected.current) {
@@ -82,7 +85,7 @@ export default function AddressField({ value, onChange, onSelect, placeholder, i
   return (
     <div className="address-field" ref={boxRef}>
       <input
-        id={id}
+        id={inputId}
         type="text"
         value={value}
         autoFocus={autoFocus}
@@ -94,13 +97,17 @@ export default function AddressField({ value, onChange, onSelect, placeholder, i
         role="combobox"
         aria-expanded={open}
         aria-autocomplete="list"
+        aria-controls={listboxId}
+        aria-activedescendant={open && active >= 0 ? `${listboxId}-${active}` : undefined}
+        aria-busy={loading}
       />
       {loading && <span className="address-field__spinner" aria-hidden="true" />}
       {open && results.length > 0 && (
-        <ul className="address-field__menu" role="listbox">
+        <ul id={listboxId} className="address-field__menu" role="listbox">
           {results.map((r, i) => (
             <li
               key={`${r.displayName}-${i}`}
+              id={`${listboxId}-${i}`}
               role="option"
               aria-selected={i === active}
               className={i === active ? 'is-active' : ''}

@@ -80,7 +80,7 @@ export default function Topbar({ workspaceLabel, workspaceId, ownerId, onToggleS
       <header className="topbar">
         <button className="sidebar-toggle" aria-label="Abrir menu" onClick={onToggleSidebar}>☰</button>
         <div className="topbar-context">
-          <span>Território ativo</span>
+          <span>Espaço de trabalho ativo</span>
           <b>{workspaceLabel}</b>
         </div>
         <div className="top-actions">

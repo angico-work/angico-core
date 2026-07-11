@@ -65,6 +65,45 @@
 .memory-filters button.active { color: #fff; border-color: var(--forest); background: var(--forest); }
 .memory-filters i { width: 8px; height: 8px; border-radius: 50%; }
 .memory-filters button > span { padding: .08rem .34rem; border-radius: 10px; color: inherit; background: rgba(120,120,120,.12); font-size: .7rem; }
+
+.rastro-picker { margin-bottom: 1.2rem; padding: 1.2rem; border: 1px solid var(--line); display: grid; grid-template-columns: minmax(210px, .55fr) 1fr; gap: 1.4rem; background: var(--surface); }
+.rastro-picker h2 { margin: 0 0 .25rem; font-size: 1.2rem; }
+.rastro-picker p { margin: 0; color: var(--muted); }
+.rastro-picker .field { margin-bottom: 0; }
+.rastro-picker > .inline-status, .rastro-picker > .inline-empty, .rastro-picker > .form-error { grid-column: 2; }
+.inline-status, .inline-empty { color: var(--muted); font-size: .86rem; }
+.rastro-sheet { border: 1px solid var(--line); background: var(--surface); }
+.rastro-root { min-height: 130px; padding: 1.4rem; border-bottom: 1px solid var(--line); display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; }
+.rastro-root > div:first-child > span, .rastro-asof span { color: var(--water); font-family: 'Spline Sans Mono', monospace; font-size: .68rem; letter-spacing: .08em; text-transform: uppercase; }
+.rastro-root h2 { margin: .35rem 0; font-size: clamp(1.6rem, 3vw, 2.2rem); }
+.rastro-root p { margin: 0; color: var(--muted); }
+.rastro-asof { display: grid; justify-items: end; color: var(--muted); text-align: right; }
+.rastro-limit { min-height: 64px; padding: .8rem 1.2rem; border-bottom: 1px solid var(--line); border-left: 4px solid var(--clay); display: grid; background: rgba(198, 93, 54, .06); }
+.rastro-limit span { color: var(--muted); }
+.rastro-section { min-width: 0; padding: 1.2rem 1.4rem; border-bottom: 1px solid var(--line); }
+.rastro-section > header { min-height: 38px; margin-bottom: .6rem; display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+.rastro-section > header h3 { margin: 0; font-size: 1.15rem; }
+.rastro-section > header span { color: var(--muted); font-family: 'Spline Sans Mono', monospace; font-size: .72rem; }
+.rastro-stages, .rastro-lines, .rastro-events, .rastro-gaps > ul { margin: 0; padding: 0; list-style: none; }
+.rastro-stages li { position: relative; min-height: 70px; padding: .75rem 0 .75rem 1.8rem; display: grid; grid-template-columns: 1fr minmax(180px, .35fr); gap: 1rem; border-bottom: 1px solid var(--line); }
+.rastro-stages li:last-child { border-bottom: 0; }
+.rastro-stages li > span { position: absolute; top: 1rem; left: .2rem; width: 10px; height: 10px; border: 2px solid var(--surface); border-radius: 50%; background: var(--water); box-shadow: 0 0 0 1px var(--water); }
+.rastro-stages li > span::after { content: ''; position: absolute; top: 10px; left: 3px; width: 1px; height: 54px; background: var(--line); }
+.rastro-stages li:last-child > span::after { display: none; }
+.rastro-stages li > div, .rastro-provenance { display: grid; }
+.rastro-stages small, .rastro-provenance, .rastro-lines span, .rastro-lines small, .rastro-events span, .rastro-events small { color: var(--muted); }
+.rastro-provenance { justify-items: end; font-size: .78rem; text-align: right; }
+.rastro-lines li, .rastro-events li { min-height: 66px; padding: .7rem 0; border-bottom: 1px solid var(--line); display: grid; gap: .12rem; }
+.rastro-lines li:last-child, .rastro-events li:last-child { border-bottom: 0; }
+.rastro-lines li > small, .rastro-events li > small { font-size: .76rem; }
+.rastro-columns { display: grid; grid-template-columns: 1fr 1fr; }
+.rastro-columns .rastro-section:first-child { border-right: 1px solid var(--line); }
+.rastro-gaps > ul > li { min-height: 94px; padding: .9rem 0; border-bottom: 1px solid var(--line); display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+.rastro-gaps > ul > li:last-child { border-bottom: 0; }
+.rastro-gaps p { margin: .2rem 0; }
+.rastro-gaps li span { color: var(--muted); font-size: .82rem; }
+.rastro-gaps .secondary-button { flex: 0 0 auto; }
+.rastro-complete { margin: 0; color: var(--growth); }
 .memory-sheet-head { display: grid; grid-template-columns: 1.2fr .8fr; }
 .memory-timeline { margin: 0; padding: 0; list-style: none; }
 .memory-timeline > li { position: relative; min-height: 130px; padding: 1.25rem 1.2rem 1.25rem 2rem; display: grid; grid-template-columns: 1.2fr .8fr; gap: 1.5rem; border-bottom: 1px solid var(--line); }
@@ -174,6 +213,14 @@
   .map-toolbar > p { padding-left: .2rem; }
   .memory-sheet-head { display: none; }
   .memory-timeline > li { grid-template-columns: 1fr; gap: .8rem; }
+  .rastro-picker { grid-template-columns: 1fr; }
+  .rastro-picker > .inline-status, .rastro-picker > .inline-empty, .rastro-picker > .form-error { grid-column: 1; }
+  .rastro-root { flex-direction: column; }
+  .rastro-asof { justify-items: start; text-align: left; }
+  .rastro-stages li, .rastro-columns { grid-template-columns: 1fr; }
+  .rastro-provenance { justify-items: start; text-align: left; }
+  .rastro-columns .rastro-section:first-child { border-right: 0; }
+  .rastro-gaps > ul > li { align-items: stretch; flex-direction: column; }
   .indicator-sheet > header { display: none; }
   .indicator-sheet > article { grid-template-columns: 1fr auto; }
   .indicator-sheet > article > span { grid-area: 2 / 1 / 3 / 3; }

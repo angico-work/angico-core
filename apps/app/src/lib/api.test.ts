@@ -7,6 +7,7 @@ import {
   isAuthenticated,
   loadDashboard,
   loadMemoria,
+  loadRastro,
   listConversas,
   markConversaRead,
   searchMensagens,
@@ -15,6 +16,7 @@ import {
   login,
   revalidateSession,
   apiUrl,
+  createTerritorio,
   sendMensagem
 } from './api';
 
@@ -120,6 +122,52 @@ describe('cookie session API', () => {
     await loadMemoria('workspace-a');
 
     expect(fetchMock).toHaveBeenCalledWith('/api/history/workspaces/workspace-a', expect.any(Object));
+  });
+
+  it('loads a bounded Rastro for an authorized root', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(response(200, {
+      workspaceId: 'workspace-a',
+      root: { reference: { type: 'MISSAO', id: '42', resource: '/api/missoes/42' }, name: 'Cuidar da nascente' },
+      stages: [], relations: [], events: [], participants: [], gaps: [],
+      limits: { maxNodes: 100, maxRelations: 200, maxEvents: 300, truncated: false },
+      asOf: '2026-07-10T14:00:00Z'
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await loadRastro('MISSAO', '42/campo', 'workspace-a');
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/rastro/MISSAO/42%2Fcampo?workspaceId=workspace-a',
+      expect.objectContaining({ credentials: 'include' })
+    );
+  });
+
+  it('creates a territory without manufacturing coordinates', async () => {
+    localStorage.setItem('angico.session', JSON.stringify(session));
+    const fetchMock = vi.fn().mockResolvedValue(response(201, { id: 9, nome: 'Vila da Serra' }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await createTerritorio({
+      workspaceId: 'workspace-a',
+      nome: 'Vila da Serra',
+      tipo: 'BAIRRO',
+      cidade: null,
+      bairro: null,
+      estado: null,
+      pais: null,
+      latitude: null,
+      longitude: null,
+      boundingBox: null
+    });
+
+    const init = fetchMock.mock.calls[0][1] as RequestInit;
+    expect(fetchMock.mock.calls[0][0]).toBe('/api/territorios');
+    expect(JSON.parse(String(init.body))).toEqual(expect.objectContaining({
+      latitude: null,
+      longitude: null,
+      boundingBox: null
+    }));
+    expect(JSON.parse(String(init.body))).not.toHaveProperty('autorId');
   });
 
   it('reports an unavailable conversation list', async () => {

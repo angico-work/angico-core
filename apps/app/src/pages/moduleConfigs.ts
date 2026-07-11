@@ -70,10 +70,7 @@ export const MODULE_CONFIGS: Record<string, ModuleConfig> = {
     subtitle: 'Compromissos coletivos que organizam uma resposta no tempo.',
     emptyTitle: 'Nenhuma missão em curso', emptyMessage: 'Crie uma missão quando houver um problema e uma resposta possível.',
     path: '/api/missoes', accent: '#063F4D',
-    fields: [
-      { name: 'titulo', label: 'Objetivo da missão', type: 'text', required: true },
-      { name: 'descricao', label: 'Resultado esperado', type: 'textarea' }
-    ],
+    fields: [],
     primary: (item) => value(item, 'titulo'), badge: (item) => value(item, 'status') || undefined,
     meta: (item) => [`Progresso ${value(item, 'progresso') || '0'}%`, value(item, 'descricao')].filter(Boolean)
   },
@@ -82,10 +79,7 @@ export const MODULE_CONFIGS: Record<string, ModuleConfig> = {
     subtitle: 'Trabalho realizado por pessoas, organizações e comunidades.',
     emptyTitle: 'Nenhuma ação registrada', emptyMessage: 'Registre uma ação executada para preservar autoria e continuidade.',
     path: '/api/acoes', accent: '#35A86B',
-    fields: [
-      { name: 'titulo', label: 'Ação realizada', type: 'text', required: true },
-      { name: 'descricao', label: 'O que foi feito', type: 'textarea' }
-    ],
+    fields: [],
     primary: (item) => value(item, 'titulo'), badge: (item) => value(item, 'status') || undefined,
     meta: (item) => [value(item, 'descricao')].filter(Boolean)
   },

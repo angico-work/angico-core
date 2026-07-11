@@ -1,6 +1,7 @@
 import type {
-  DashboardData, ObservacaoInput, Observacao, MapPoint, MemoriaEvent, GeoResult,
-  GeoSearchResponse, PessoaHit, Conversa, Mensagem, MensagemBusca, Territorio, Workspace, WorkspaceMember
+  Acao, AcaoInput, DashboardData, ObservacaoInput, Observacao, MapPoint, MemoriaEvent, GeoResult,
+  GeoSearchResponse, PessoaHit, Conversa, Mensagem, MensagemBusca, RastroResponse, RastroRootType,
+  MissaoInput, MissaoRegistro, Problema, ProblemaInput, Territorio, TerritorioInput, Workspace, WorkspaceMember
 } from '../types';
 import { validateMessageFiles } from './messageFiles';
 
@@ -332,6 +333,26 @@ export async function loadMemoria(workspaceId = DEFAULT_WORKSPACE): Promise<Memo
   }
 }
 
+export async function loadRastro(
+  rootType: RastroRootType,
+  rootId: string,
+  workspaceId = DEFAULT_WORKSPACE
+): Promise<RastroResponse> {
+  const normalizedId = rootId.trim();
+  if (!normalizedId) throw new Error('Selecione uma raiz para consultar o Rastro.');
+  try {
+    const path = `/api/rastro/${rootType}/${encodeURIComponent(normalizedId)}?workspaceId=${encodeURIComponent(workspaceId)}`;
+    const response = await apiFetch(apiUrl(path), { headers: requestHeaders() });
+    if (!response.ok) {
+      throw new Error(await readError(response, 'Não foi possível carregar o Rastro.'));
+    }
+    return (await response.json()) as RastroResponse;
+  } catch (error) {
+    if (error instanceof Error && !(error instanceof TypeError)) throw error;
+    throw new Error('Não foi possível carregar o Rastro. Verifique a conexão.');
+  }
+}
+
 export async function listEntities<T = Record<string, unknown>>(
   path: string, workspaceId = DEFAULT_WORKSPACE
 ): Promise<T[]> {
@@ -364,6 +385,36 @@ export async function createEntity<T = Record<string, unknown>>(
     throw new Error(`Falha ao salvar (HTTP ${r.status})`);
   }
   return (await r.json()) as T;
+}
+
+async function createJson<T>(path: string, body: object, fallback: string): Promise<T> {
+  const response = await apiFetch(apiUrl(path), {
+    method: 'POST',
+    headers: requestHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify(body)
+  });
+  if (!response.ok) throw new Error(await readError(response, fallback));
+  return (await response.json()) as T;
+}
+
+export function listProblemas(workspaceId = DEFAULT_WORKSPACE): Promise<Problema[]> {
+  return listEntities<Problema>('/api/problemas', workspaceId);
+}
+
+export function listMissoes(workspaceId = DEFAULT_WORKSPACE): Promise<MissaoRegistro[]> {
+  return listEntities<MissaoRegistro>('/api/missoes', workspaceId);
+}
+
+export function createProblema(input: ProblemaInput): Promise<Problema> {
+  return createJson('/api/problemas', input, 'Não foi possível registrar o problema.');
+}
+
+export function createMissao(input: MissaoInput): Promise<MissaoRegistro> {
+  return createJson('/api/missoes', input, 'Não foi possível criar a missão.');
+}
+
+export function createAcao(input: AcaoInput): Promise<Acao> {
+  return createJson('/api/acoes', input, 'Não foi possível criar a ação.');
 }
 
 export async function listConversas(workspaceId = DEFAULT_WORKSPACE): Promise<Conversa[]> {
@@ -452,6 +503,18 @@ export async function listTerritorios(workspaceId = DEFAULT_WORKSPACE): Promise<
     if (error instanceof Error && !(error instanceof TypeError)) throw error;
     throw new Error('Não foi possível carregar os territórios. Verifique a conexão.');
   }
+}
+
+export async function createTerritorio(input: TerritorioInput): Promise<Territorio> {
+  const response = await apiFetch(apiUrl('/api/territorios'), {
+    method: 'POST',
+    headers: requestHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify(input)
+  });
+  if (!response.ok) {
+    throw new Error(await readError(response, 'Não foi possível criar o território.'));
+  }
+  return (await response.json()) as Territorio;
 }
 
 export function attachmentUrl(anexoId: number): string {

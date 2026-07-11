@@ -163,7 +163,7 @@ export default function AppShell() {
         onCreateWorkspace={handleCreateWorkspace}
         onDeleteWorkspace={handleDeleteWorkspace}
         userName={effectiveProfile?.nome ?? session?.nome ?? 'Visitante'}
-        userRole={session?.papel ?? 'Membro do território'}
+        userRole={session?.papel ?? 'Membro do espaço de trabalho'}
         userFoto={effectiveProfile?.foto ?? null}
         open={sidebarOpen}
         onNavigate={() => setSidebarOpen(false)}

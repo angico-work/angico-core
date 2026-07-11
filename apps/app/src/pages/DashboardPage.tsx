@@ -8,8 +8,6 @@ import { icon } from '../lib/icons';
 import { loadDashboard, loadMapPoints, loadMemoria } from '../lib/api';
 import type { DashboardData, MapPoint, MemoriaEvent } from '../types';
 
-const DEFAULT_CENTER: [number, number] = [-14.235, -51.925];
-
 function eventLabel(event: MemoriaEvent): string {
   const labels: Record<string, string> = {
     'observacao.registrada': 'Observação registrada',
@@ -57,7 +55,7 @@ export default function DashboardPage() {
 
   const center = points.length
     ? [points[0].latitude, points[0].longitude] as [number, number]
-    : DEFAULT_CENTER;
+    : null;
 
   return (
     <div className="page dashboard-page">
@@ -92,9 +90,10 @@ export default function DashboardPage() {
                 <Link to="/app/mapa">Abrir mapa</Link>
               </header>
               <div className="map-frame">
-                <MapView points={points} center={center} zoom={points.length ? 14 : 4} height={360} fitToPoints />
-                {points.length === 0 && (
-                  <div className="map-empty-label"><b>Nenhum ponto localizado</b><span>Registros sem local continuam preservados no caderno.</span></div>
+                {center ? (
+                  <MapView points={points} center={center} zoom={14} height={360} fitToPoints />
+                ) : (
+                  <EmptyState title="Nenhum ponto localizado" message="Registros sem local continuam preservados no caderno; o mapa só abre com coordenadas reais." />
                 )}
               </div>
             </section>

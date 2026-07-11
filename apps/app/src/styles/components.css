@@ -4,7 +4,7 @@
 .sync-dialog { width: min(820px, 100%); }
 .dialog-head, .capture-head { margin-bottom: 1.5rem; display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; }
 .dialog-head h2, .capture-head h2 { margin-bottom: .2rem; font-size: 1.8rem; }
-.dialog-head p { margin: .2rem 0 0; color: var(--muted); }
+.dialog-head p, .capture-head p { margin: .2rem 0 0; color: var(--muted); }
 .dialog-actions, .capture-actions { margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--line); display: flex; justify-content: flex-end; gap: .7rem; }
 
 .capture-steps { margin: 0 0 1.7rem; padding: 0 0 1rem; border-bottom: 1px solid var(--line); display: grid; grid-template-columns: repeat(3, 1fr); gap: .5rem; list-style: none; }

@@ -68,7 +68,7 @@ export default function WorkspaceSwitcher({ workspaces, activeSlug, onSwitch, on
       await onCreate(trimmed);
       close();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erro ao criar workspace');
+      setError(err instanceof Error ? err.message : 'Erro ao criar o espaço de trabalho');
     } finally {
       setBusy(false);
     }
@@ -81,7 +81,7 @@ export default function WorkspaceSwitcher({ workspaces, activeSlug, onSwitch, on
       await onDelete(slug);
       setConfirmingSlug(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erro ao remover workspace');
+      setError(err instanceof Error ? err.message : 'Erro ao remover o espaço de trabalho');
     } finally {
       setBusy(false);
     }
@@ -97,14 +97,14 @@ export default function WorkspaceSwitcher({ workspaces, activeSlug, onSwitch, on
         onClick={() => setOpen((v) => !v)}
       >
         <div className="workspace-trigger-label">
-          <span>Território</span>
+          <span>Espaço de trabalho</span>
           <strong>{activeName}</strong>
         </div>
         <b className={`workspace-chev ${open ? 'up' : ''}`} aria-hidden="true">⌄</b>
       </button>
 
       {open && (
-        <div className="workspace-menu" aria-label="Territórios disponíveis">
+        <div className="workspace-menu" aria-label="Espaços de trabalho disponíveis">
           <div className="workspace-options">
             {workspaces.map((w) => {
               const isActive = w.slug === activeSlug;
@@ -141,7 +141,7 @@ export default function WorkspaceSwitcher({ workspaces, activeSlug, onSwitch, on
                     <button
                       type="button"
                       className="workspace-remove"
-                      title="Remover workspace"
+                      title="Remover espaço de trabalho"
                       aria-label={`Remover ${w.nome}`}
                       onClick={() => { setConfirmingSlug(w.slug); setError(null); }}
                     >
@@ -160,7 +160,7 @@ export default function WorkspaceSwitcher({ workspaces, activeSlug, onSwitch, on
               <input
                 autoFocus
                 value={nome}
-                placeholder="Nome do território"
+                placeholder="Nome do espaço de trabalho"
                 maxLength={60}
                 onChange={(e) => setNome(e.target.value)}
                 disabled={busy}
@@ -185,7 +185,7 @@ export default function WorkspaceSwitcher({ workspaces, activeSlug, onSwitch, on
                 {icon('people')} Membros
               </button>
               <button type="button" className="workspace-new" onClick={() => { setCreating(true); setError(null); }}>
-                <span className="ws-plus" aria-hidden="true">＋</span> Novo território
+                <span className="ws-plus" aria-hidden="true">＋</span> Novo espaço
               </button>
             </>
           )}

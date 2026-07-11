@@ -68,7 +68,7 @@ export default function WorkspaceMembersModal({ slug, workspaceName, onClose }: 
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-card" onClick={(e) => e.stopPropagation()}>
         <h2 style={{ marginTop: 0 }}>Membros · {workspaceName}</h2>
-        <p className="muted" style={{ marginTop: -6 }}>Quem participa deste workspace e seu papel.</p>
+        <p className="muted" style={{ marginTop: -6 }}>Quem participa deste espaço de trabalho e seu papel.</p>
 
         <div className="member-list">
           {loading ? (

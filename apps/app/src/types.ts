@@ -74,6 +74,77 @@ export interface Observacao extends ObservacaoInput {
   createdAt: string;
 }
 
+export interface ProblemaInput {
+  workspaceId: string;
+  territorioId: string;
+  categoria: string;
+  titulo: string;
+  descricao?: string;
+  localizacao?: string;
+  latitude?: number;
+  longitude?: number;
+  severidade?: string;
+  origemObservacaoId?: string;
+}
+
+export interface Problema {
+  id: number;
+  workspaceId: string;
+  territorioId: string | null;
+  categoria: string;
+  titulo: string;
+  descricao: string | null;
+  localizacao: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  severidade: string | null;
+  origemObservacaoId: string | null;
+  status: string;
+  createdAt: string;
+  autorId?: string | null;
+}
+
+export interface MissaoInput {
+  workspaceId: string;
+  territorioId: string;
+  problemaId: string;
+  responsavelId: string;
+  titulo: string;
+  descricao?: string;
+}
+
+export interface MissaoRegistro {
+  id: number;
+  workspaceId: string;
+  territorioId: string | null;
+  problemaId: string | null;
+  responsavelId: string | null;
+  titulo: string;
+  descricao: string | null;
+  status: string;
+  progresso: number;
+  createdAt: string;
+}
+
+export interface AcaoInput {
+  workspaceId: string;
+  missaoId: string;
+  responsavelId: string;
+  titulo: string;
+  descricao?: string;
+}
+
+export interface Acao {
+  id: number;
+  workspaceId: string;
+  missaoId: string | null;
+  responsavelId: string | null;
+  titulo: string;
+  descricao: string | null;
+  status: string;
+  createdAt: string;
+}
+
 export interface MapPoint {
   type: 'observacao' | 'problema' | 'potencialidade';
   id: number;
@@ -173,9 +244,103 @@ export interface Territorio {
   id: number;
   workspaceId: string;
   nome: string;
+  tipo: string | null;
   cidade: string | null;
+  bairro: string | null;
   estado: string | null;
+  pais: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  boundingBox: number[];
   status: string | null;
+  updatedAt: string | null;
+}
+
+export interface TerritorioInput {
+  workspaceId: string;
+  nome: string;
+  tipo: string;
+  cidade: string | null;
+  bairro: string | null;
+  estado: string | null;
+  pais: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  boundingBox: number[] | null;
+}
+
+export type RastroRootType = 'TERRITORIO' | 'MISSAO' | 'ACAO';
+
+export interface RastroReference {
+  type: string;
+  id: string;
+  resource: string;
+}
+
+export interface RastroStage {
+  reference: RastroReference;
+  name: string;
+  status: string | null;
+  occurredAt: string | null;
+  recordedAt: string | null;
+  syncStatus: string | null;
+}
+
+export interface RastroRelation {
+  type: string;
+  origin: RastroReference;
+  destination: RastroReference;
+  actorId: string | null;
+  recordedAt: string | null;
+}
+
+export interface RastroEvent {
+  id: string;
+  type: string;
+  subject: RastroReference;
+  actorId: string | null;
+  occurredAt: string | null;
+  recordedAt: string | null;
+  syncStatus: string | null;
+}
+
+export interface RastroParticipant {
+  participant: RastroReference;
+  name: string;
+  status: string | null;
+  relationType: string;
+  at: RastroReference;
+}
+
+export interface RastroExpectedRelation {
+  originType: string;
+  relationType: string;
+  destinationType: string;
+}
+
+export interface RastroGap {
+  code: string;
+  subject: RastroReference;
+  reason: string;
+  nextAction: string;
+  expectedRelation: RastroExpectedRelation | null;
+}
+
+export interface RastroResponse {
+  workspaceId: string;
+  root: RastroStage;
+  stages: RastroStage[];
+  relations: RastroRelation[];
+  events: RastroEvent[];
+  participants: RastroParticipant[];
+  gaps: RastroGap[];
+  limits: {
+    maxNodes: number;
+    maxRelations: number;
+    maxEvents: number;
+    truncated: boolean;
+  };
+  asOf: string;
 }
 
 export interface Workspace {

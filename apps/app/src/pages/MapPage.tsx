@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useOutletContext } from 'react-router-dom';
+import { Link, useOutletContext } from 'react-router-dom';
 import type { AppContext } from '../components/AppShell';
 import MapView from '../components/MapView';
 import NewEntityModal from '../components/NewEntityModal';
@@ -8,7 +8,6 @@ import { EmptyState, ErrorState, LoadingState } from '../components/PageFeedback
 import { loadMapPoints, resolveCoords } from '../lib/api';
 import type { GeoResult, MapPoint } from '../types';
 
-const DEFAULT_CENTER: [number, number] = [-14.235, -51.925];
 const TYPES: Array<{ key: MapPoint['type']; label: string; color: string }> = [
   { key: 'observacao', label: 'Observações', color: '#0E7C86' },
   { key: 'problema', label: 'Problemas', color: '#C65D36' },
@@ -39,7 +38,7 @@ export default function MapPage() {
 
   useEffect(() => { void refresh(); }, [refresh]);
   const visible = useMemo(() => points.filter((point) => active.has(point.type)), [points, active]);
-  const center = flyTo ?? (points[0] ? [points[0].latitude, points[0].longitude] as [number, number] : DEFAULT_CENTER);
+  const center = flyTo ?? (points[0] ? [points[0].latitude, points[0].longitude] as [number, number] : null);
 
   function toggle(key: string) {
     setActive((current) => {
@@ -72,12 +71,17 @@ export default function MapPage() {
         <p>{visible.length} de {points.length} pontos visíveis</p>
       </div>
 
-      {loading ? <LoadingState label="Carregando pontos do território…" /> : error ? <ErrorState message={error} onRetry={() => void refresh()} /> : (
+      {loading ? <LoadingState label="Carregando pontos do território…" /> : error ? <ErrorState message={error} onRetry={() => void refresh()} /> : center ? (
         <section className="map-canvas">
           <MapView points={visible} center={center} zoom={flyTo ? 14 : points.length ? 15 : 4} height="min(72vh, 720px)" recenter={Boolean(flyTo)} fitToPoints={!flyTo} onMapClick={(lat, lng) => setPending({ lat, lng })} />
-          {points.length === 0 && <div className="map-overlay-empty"><EmptyState title="Nenhum registro localizado" message="Toque no mapa para iniciar um registro neste ponto." /></div>}
           <div className="map-instruction">Toque no mapa para registrar neste local</div>
         </section>
+      ) : (
+        <EmptyState
+          title="Nenhuma localização real disponível"
+          message="Busque um endereço acima ou registre uma observação com localização confirmada."
+          action={<Link className="secondary-button" to="/app/observacoes?create=1">Registrar observação</Link>}
+        />
       )}
 
       {pending && <NewEntityModal workspaceId={workspaceId} initialLat={pending.lat} initialLng={pending.lng} onClose={() => setPending(null)} onCreated={() => { setPending(null); setFlyTo(null); setQuery(''); void refresh(); }} />}

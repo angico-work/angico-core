@@ -1,16 +1,21 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
-import { useOutletContext } from 'react-router-dom';
+import { useOutletContext, useSearchParams } from 'react-router-dom';
 import type { AppContext } from '../components/AppShell';
 import { createEntity, getSession, listEntities } from '../lib/api';
 import { listLocalObservations } from '../lib/offlineStore';
 import AngicoIdField from '../components/AngicoIdField';
 import NewEntityModal, { type EntityType } from '../components/NewEntityModal';
+import RelationalEntityDialog, { type RelationalEntityType } from '../components/RelationalEntityDialog';
+import ModalDialog from '../components/ModalDialog';
 import { EmptyState, ErrorState, LoadingState } from '../components/PageFeedback';
 import { MODULE_CONFIGS, type ModuleConfig } from './moduleConfigs';
 
 type Item = Record<string, unknown>;
 const GEO_TYPES: Record<string, EntityType> = {
   observacoes: 'observacao', problemas: 'problema', potencialidades: 'potencialidade'
+};
+const RELATIONAL_TYPES: Record<string, RelationalEntityType> = {
+  missoes: 'missao', acoes: 'acao'
 };
 
 const SYNC_LABEL: Record<string, string> = {
@@ -43,11 +48,11 @@ function GenericCreateDialog({ config, workspaceId, onClose, onCreated }: {
   }
 
   return (
-    <div className="modal-overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-      <section className="modal-card" role="dialog" aria-modal="true" aria-labelledby="generic-create-title">
+    <ModalDialog titleId="generic-create-title" descriptionId="generic-create-description" busy={submitting} onClose={onClose}>
         <header className="dialog-head"><div><span className="overline">Novo registro</span><h2 id="generic-create-title">{config.newLabel}</h2></div><button className="icon-button" type="button" aria-label="Fechar" onClick={onClose}>×</button></header>
+        <p id="generic-create-description" className="muted">Preencha os campos conhecidos; não inclua identificadores técnicos.</p>
         <form onSubmit={submit}>
-          {config.fields.map((field) => (
+          {config.fields.map((field, index) => (
             <div className="field" key={field.name}>
               <label htmlFor={`field-${field.name}`}>{field.label}{field.required ? ' *' : ''}</label>
               {field.type === 'angico-search' ? (
@@ -55,26 +60,26 @@ function GenericCreateDialog({ config, workspaceId, onClose, onCreated }: {
                   id={`field-${field.name}`}
                   workspaceId={workspaceId}
                   value={values[field.name]}
+                  autoFocus={index === 0}
                   placeholder={field.placeholder}
                   onChange={(next) => setValues((current) => ({ ...current, [field.name]: next }))}
                   onPick={(person) => setValues((current) => ({ ...current, angicoId: person.angicoId ?? '', nome: person.nome, papel: person.papel ?? current.papel }))}
                 />
               ) : field.type === 'textarea' ? (
-                <textarea id={`field-${field.name}`} rows={4} value={values[field.name]} placeholder={field.placeholder} onChange={(event) => setValues((current) => ({ ...current, [field.name]: event.target.value }))} />
+                <textarea id={`field-${field.name}`} rows={4} autoFocus={index === 0} value={values[field.name]} placeholder={field.placeholder} onChange={(event) => setValues((current) => ({ ...current, [field.name]: event.target.value }))} />
               ) : field.type === 'select' ? (
-                <select id={`field-${field.name}`} value={values[field.name]} onChange={(event) => setValues((current) => ({ ...current, [field.name]: event.target.value }))}>
+                <select id={`field-${field.name}`} autoFocus={index === 0} value={values[field.name]} onChange={(event) => setValues((current) => ({ ...current, [field.name]: event.target.value }))}>
                   {field.options?.map((option) => <option key={option}>{option}</option>)}
                 </select>
               ) : (
-                <input id={`field-${field.name}`} value={values[field.name]} placeholder={field.placeholder} required={field.required} onChange={(event) => setValues((current) => ({ ...current, [field.name]: event.target.value }))} />
+                <input id={`field-${field.name}`} autoFocus={index === 0} value={values[field.name]} placeholder={field.placeholder} required={field.required} onChange={(event) => setValues((current) => ({ ...current, [field.name]: event.target.value }))} />
               )}
             </div>
           ))}
           {error && <div className="form-error" role="alert">{error}</div>}
           <footer className="dialog-actions"><button type="button" className="ghost-button" onClick={onClose}>Cancelar</button><button type="submit" className="primary-button" disabled={submitting}>{submitting ? 'Salvando…' : 'Salvar registro'}</button></footer>
         </form>
-      </section>
-    </div>
+    </ModalDialog>
   );
 }
 
@@ -86,11 +91,17 @@ function formatDate(item: Item): string | null {
 
 export default function ModulePage({ configKey }: { configKey: string }) {
   const { workspaceId } = useOutletContext<AppContext>();
+  const [searchParams, setSearchParams] = useSearchParams();
   const config = MODULE_CONFIGS[configKey];
   const [items, setItems] = useState<Item[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
+  const contextualCreate = searchParams.get('create') === '1';
+
+  useEffect(() => {
+    if (contextualCreate) setShowCreate(true);
+  }, [contextualCreate]);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -138,6 +149,21 @@ export default function ModulePage({ configKey }: { configKey: string }) {
     return () => window.removeEventListener('angico:sync-state', handleSync);
   }, [refresh]);
 
+  function closeCreate() {
+    setShowCreate(false);
+    if (!contextualCreate) return;
+    const next = new URLSearchParams(searchParams);
+    next.delete('create');
+    next.delete('territorioId');
+    next.delete('missaoId');
+    setSearchParams(next, { replace: true });
+  }
+
+  function created() {
+    closeCreate();
+    void refresh();
+  }
+
   return (
     <div className="page module-page">
       <header className="page-head">
@@ -170,9 +196,24 @@ export default function ModulePage({ configKey }: { configKey: string }) {
       )}
 
       {showCreate && (GEO_TYPES[configKey] ? (
-        <NewEntityModal workspaceId={workspaceId} initialType={GEO_TYPES[configKey]} lockType onClose={() => setShowCreate(false)} onCreated={() => { setShowCreate(false); void refresh(); }} />
+        <NewEntityModal
+          workspaceId={workspaceId}
+          initialType={GEO_TYPES[configKey]}
+          initialTerritorioId={searchParams.get('territorioId') ?? undefined}
+          lockType
+          onClose={closeCreate}
+          onCreated={created}
+        />
+      ) : RELATIONAL_TYPES[configKey] ? (
+        <RelationalEntityDialog
+          type={RELATIONAL_TYPES[configKey]}
+          workspaceId={workspaceId}
+          initialMissaoId={searchParams.get('missaoId') ?? undefined}
+          onClose={closeCreate}
+          onCreated={created}
+        />
       ) : (
-        <GenericCreateDialog config={config} workspaceId={workspaceId} onClose={() => setShowCreate(false)} onCreated={() => { setShowCreate(false); void refresh(); }} />
+        <GenericCreateDialog config={config} workspaceId={workspaceId} onClose={closeCreate} onCreated={created} />
       ))}
     </div>
   );

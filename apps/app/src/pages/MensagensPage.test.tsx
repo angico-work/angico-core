@@ -133,7 +133,21 @@ describe('MensagensPage', () => {
     Object.defineProperty(navigator, 'onLine', { configurable: true, value: true });
     vi.mocked(listConversas).mockResolvedValue([conversation]);
     vi.mocked(listEntities).mockResolvedValue([]);
-    vi.mocked(listTerritorios).mockResolvedValue([{ id: 4, workspaceId: 'territorio-a', nome: 'Nascente Sul', cidade: 'Recife', estado: 'PE', status: 'ATIVO' }]);
+    vi.mocked(listTerritorios).mockResolvedValue([{
+      id: 4,
+      workspaceId: 'territorio-a',
+      nome: 'Nascente Sul',
+      tipo: 'BAIRRO',
+      cidade: 'Recife',
+      bairro: null,
+      estado: 'PE',
+      pais: 'Brasil',
+      latitude: null,
+      longitude: null,
+      boundingBox: [],
+      status: 'ATIVO',
+      updatedAt: null
+    }]);
     vi.mocked(listMensagens).mockResolvedValue([remoteMessage]);
     vi.mocked(markConversaRead).mockRejectedValue(new Error('leitura indisponível'));
     vi.mocked(loadCachedConversations).mockResolvedValue([]);
