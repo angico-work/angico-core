@@ -177,6 +177,10 @@ form button:disabled { border-color: color-mix(in srgb, var(--mata) 68%, var(--f
   .footer-leaf { top: -80px; bottom: auto; animation: leaf-fall 9s ease-in-out infinite; }
 }
 
+@media (min-width: 721px) {
+  .territory-map__trace { transform: translateY(-160px); }
+}
+
 @media (max-width: 960px) {
   .territory-hero::after { background: linear-gradient(90deg, rgba(0,57,82,.94) 0%, rgba(0,57,82,.72) 58%, rgba(0,57,82,.25) 100%); }
   .why-angico__list { grid-template-columns: 1fr; }

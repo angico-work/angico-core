@@ -164,27 +164,57 @@ test('keeps the animated leaf below the footer before restarting', async ({ page
   expect(geometry.leafTop).toBeGreaterThanOrEqual(geometry.footerBottom);
 });
 
-test('keeps all four desktop map markers outside the hero copy', async ({ page }, testInfo) => {
-  test.skip(testInfo.project.name !== 'desktop');
+test('keeps all route markers clear of visible copy and trace', async ({ page }, testInfo) => {
+  test.skip(!['desktop-1024', 'desktop-1100', 'desktop'].includes(testInfo.project.name));
   await page.goto('/');
 
-  const heroCopy = await page.locator('.territory-hero__copy').evaluate((copy) => {
-    const { top, right, bottom, left } = copy.getBoundingClientRect();
-    return { top, right, bottom, left };
+  const obstacles = await page.locator('.territory-hero').evaluate((hero) => {
+    const toRectangle = (rect: DOMRect) => {
+      const { top, right, bottom, left } = rect;
+      return { top, right, bottom, left };
+    };
+    const copy = hero.querySelector<HTMLElement>('.territory-hero__copy');
+    const trace = hero.querySelector<HTMLElement>('.territory-trace');
+    if (!copy || !trace) throw new Error('Expected hero copy and trace.');
+
+    const copyRects = Array.from(copy.children).flatMap((element) => {
+      const styles = getComputedStyle(element);
+      if (styles.display === 'none' || styles.visibility === 'hidden') return [];
+      if (element.matches('a, button')) {
+        return [{ ...toRectangle(element.getBoundingClientRect()), label: element.tagName.toLowerCase() }];
+      }
+      const range = document.createRange();
+      range.selectNodeContents(element);
+      return Array.from(range.getClientRects())
+        .filter(({ width, height }) => width > 0 && height > 0)
+        .map((rect, index) => ({
+          ...toRectangle(rect),
+          label: element.tagName.toLowerCase() + '-line-' + String(index + 1)
+        }));
+    });
+    return {
+      copyRects,
+      traceRect: { ...toRectangle(trace.getBoundingClientRect()), label: 'trace' }
+    };
   });
   const markerRects = await page.locator('.territory-map__marker').evaluateAll((markers) =>
     markers.map((marker) => {
       const { top, right, bottom, left, width, height } = marker.getBoundingClientRect();
-      return { top, right, bottom, left, width, height };
+      return { top, right, bottom, left, width, height, label: marker.getAttribute('class') ?? 'marker' };
     })
   );
 
+  expect(obstacles.copyRects.length).toBeGreaterThan(0);
   expect(markerRects).toHaveLength(4);
   for (const markerRect of markerRects) {
     expect(markerRect.width).toBeGreaterThan(0);
     expect(markerRect.height).toBeGreaterThan(0);
-    expect(rectanglesIntersect(markerRect, heroCopy)).toBe(false);
-    expect(markerRect.left).toBeGreaterThanOrEqual(heroCopy.right);
+    for (const obstacle of [...obstacles.copyRects, obstacles.traceRect]) {
+      expect(
+        rectanglesIntersect(markerRect, obstacle),
+        markerRect.label + ' intersects ' + obstacle.label
+      ).toBe(false);
+    }
   }
 });
 
