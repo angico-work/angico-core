@@ -60,6 +60,8 @@ test('supports keyboard login and a responsive authenticated shell', async ({ pa
     await menuButton.focus();
     await page.keyboard.press('Enter');
     await expect(observationsLink).toBeVisible();
+    await expectNoVisibleOverflow(page);
+    await expectNoSeriousAccessibilityViolations(page);
     await page.getByRole('button', { name: 'Fechar menu' }).press('Enter');
   } else {
     await expect(observationsLink).toBeVisible();
