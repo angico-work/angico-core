@@ -105,6 +105,11 @@ export async function installApiFixtures(page: Page): Promise<string[]> {
       await route.fulfill({ status: 200, json: responses.people });
       return;
     }
+    if (key === 'GET /api/pessoas/me') {
+      if (!hasExactQuery(url, {})) return reject('query inesperada');
+      await route.fulfill({ status: 200, json: responses.people[0] });
+      return;
+    }
     if (key === 'GET /api/glimpse/dashboard') {
       if (!hasExactQuery(url, { workspaceId: WORKSPACE_ID })) return reject('query inesperada');
       await route.fulfill({ status: 200, json: responses.dashboard });
