@@ -92,7 +92,20 @@ function emptySummary(): SyncSummary {
   };
 }
 
+class SyncIdentityChangedError extends Error {}
+
+function hasActiveSyncIdentity(ownerId: string): boolean {
+  if (sessionOwnerId() !== ownerId) return false;
+  if (!isAuthenticated() || !hasFreshOfflineSession()) return false;
+  return sessionOwnerId() === ownerId;
+}
+
+function requireActiveSyncIdentity(ownerId: string): void {
+  if (!hasActiveSyncIdentity(ownerId)) throw new SyncIdentityChangedError();
+}
+
 async function sendObservation(entry: ObservationOutboxEntry): Promise<Response> {
+  requireActiveSyncIdentity(entry.ownerId);
   return apiFetch(apiUrl('/api/observacoes'), {
     method: 'POST',
     headers: {
@@ -106,6 +119,7 @@ async function sendObservation(entry: ObservationOutboxEntry): Promise<Response>
 class PermanentMessageOperationError extends Error {}
 
 async function sendMessage(entry: MessageOutboxEntry): Promise<Response> {
+  requireActiveSyncIdentity(entry.ownerId);
   if (!Number.isSafeInteger(entry.body.conversationId) || entry.body.conversationId <= 0) {
     throw new PermanentMessageOperationError('A conversa desta mensagem não é válida.');
   }
@@ -119,8 +133,10 @@ async function sendMessage(entry: MessageOutboxEntry): Promise<Response> {
     if (!file) {
       throw new PermanentMessageOperationError(`O anexo “${attachment.name}” não está mais neste aparelho.`);
     }
+    requireActiveSyncIdentity(entry.ownerId);
     form.append('attachments', file, file.name);
   }
+  requireActiveSyncIdentity(entry.ownerId);
   return apiFetch(apiUrl(`/api/mensagens/conversas/${entry.body.conversationId}/mensagens`), {
     method: 'POST',
     headers: { 'Idempotency-Key': entry.id },
@@ -129,6 +145,7 @@ async function sendMessage(entry: MessageOutboxEntry): Promise<Response> {
 }
 
 async function sendEvidence(entry: EvidenceOutboxEntry): Promise<Response> {
+  requireActiveSyncIdentity(entry.ownerId);
   const form = new FormData();
   form.append('workspaceId', entry.body.workspaceId);
   form.append('subjectType', entry.body.subjectType);
@@ -143,8 +160,10 @@ async function sendEvidence(entry: EvidenceOutboxEntry): Promise<Response> {
     if (!file) {
       throw new PermanentMessageOperationError(`O arquivo “${entry.body.file.name}” não está mais neste aparelho.`);
     }
+    requireActiveSyncIdentity(entry.ownerId);
     form.append('file', file, file.name);
   }
+  requireActiveSyncIdentity(entry.ownerId);
   return apiFetch(apiUrl('/api/evidencias'), {
     method: 'POST',
     headers: { 'Idempotency-Key': entry.id },
@@ -225,10 +244,22 @@ function maintainLease(entry: OutboxEntry, claim: OutboxClaim): () => void {
   return () => window.clearInterval(timer);
 }
 
+async function releaseClaim(entry: OutboxEntry, claim: OutboxClaim): Promise<void> {
+  await markOutboxStatus(entry.id, 'QUEUED', { expectedClaim: claim });
+}
+
+async function keepClaimForActiveOwner(entry: OutboxEntry, claim: OutboxClaim): Promise<boolean> {
+  if (hasActiveSyncIdentity(entry.ownerId)) return true;
+  await releaseClaim(entry, claim);
+  return false;
+}
+
 async function synchronizeEntry(entry: OutboxEntry, summary: SyncSummary): Promise<boolean> {
+  const claim = claimOf(entry);
+  if (!await keepClaimForActiveOwner(entry, claim)) return false;
   summary.attempted += 1;
   await recordSyncAttempt(entry.ownerId, entry.workspaceId, false);
-  const claim = claimOf(entry);
+  if (!await keepClaimForActiveOwner(entry, claim)) return false;
   const stopRenewal = maintainLease(entry, claim);
   try {
     const response = entry.operation === 'CREATE_OBSERVATION'
@@ -236,8 +267,11 @@ async function synchronizeEntry(entry: OutboxEntry, summary: SyncSummary): Promi
       : entry.operation === 'MESSAGE_SEND'
         ? await sendMessage(entry)
         : await sendEvidence(entry);
+    const signedOutByUnauthorized = response.status === 401 && !sessionOwnerId();
+    if (!signedOutByUnauthorized && !await keepClaimForActiveOwner(entry, claim)) return false;
     if (response.ok) {
       const remote = await parseRemote(entry, response);
+      if (!await keepClaimForActiveOwner(entry, claim)) return false;
       const applied = await markOutboxStatus(entry.id, 'SYNCED', { remote, expectedClaim: claim });
       if (applied) {
         await recordSyncAttempt(entry.ownerId, entry.workspaceId, true);
@@ -247,6 +281,8 @@ async function synchronizeEntry(entry: OutboxEntry, summary: SyncSummary): Promi
     }
 
     const message = await errorMessage(response, `Falha de sincronização (HTTP ${response.status}).`);
+    const remainsSignedOut = response.status === 401 && !sessionOwnerId();
+    if (!remainsSignedOut && !await keepClaimForActiveOwner(entry, claim)) return false;
     if (response.status === 401) {
       const applied = await markOutboxStatus(entry.id, 'BLOCKED', { message, expectedClaim: claim });
       if (applied) summary.blocked += 1;
@@ -271,6 +307,10 @@ async function synchronizeEntry(entry: OutboxEntry, summary: SyncSummary): Promi
     if (applied) summary.retryable += 1;
     return true;
   } catch (error) {
+    if (error instanceof SyncIdentityChangedError || !hasActiveSyncIdentity(entry.ownerId)) {
+      await releaseClaim(entry, claim);
+      return false;
+    }
     const message = error instanceof Error ? error.message : 'Sem conexão com o servidor.';
     if (error instanceof PermanentMessageOperationError) {
       const applied = await markOutboxStatus(entry.id, 'ACTION_REQUIRED', { message, expectedClaim: claim });
@@ -321,9 +361,14 @@ async function syncPendingByOperation(
     .filter((entry) => (!operation || entry.operation === operation)
       && (!filter.entryId || entry.id === filter.entryId));
   for (const entry of entries) {
+    if (!hasActiveSyncIdentity(ownerId)) break;
     if (activeEntries.has(entry.id)) continue;
     const claimed = await claimOutboxEntry(entry.id);
     if (!claimed) continue;
+    if (!hasActiveSyncIdentity(ownerId)) {
+      await releaseClaim(claimed, claimOf(claimed));
+      break;
+    }
     activeEntries.add(entry.id);
     let mayContinue: boolean;
     try {
@@ -448,9 +493,14 @@ export async function getSyncState(ownerId: string, workspaceId?: string): Promi
   }, { pending: 0, syncing: 0, conflicts: 0, blocked: 0, actionRequired: 0 });
 }
 
-export function startSyncEngine(): () => void {
+export function startSyncEngine(expectedOwnerId: string): () => void {
   const synchronize = () => {
-    if (navigator.onLine) void syncPendingOperations();
+    if (sessionOwnerId() === expectedOwnerId
+      && navigator.onLine
+      && isAuthenticated()
+      && hasFreshOfflineSession()) {
+      void syncPendingOperations({ ownerId: expectedOwnerId });
+    }
   };
   window.addEventListener('online', synchronize);
   const interval = window.setInterval(synchronize, 30_000);

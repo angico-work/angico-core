@@ -40,6 +40,16 @@ export function clearOfflineReadSource(identity: SnapshotIdentity): void {
   publish();
 }
 
+export function clearOfflineReadSourcesForOwner(ownerId: string): void {
+  let changed = false;
+  for (const [key, source] of sources) {
+    if (source.ownerId !== ownerId) continue;
+    sources.delete(key);
+    changed = true;
+  }
+  if (changed) publish();
+}
+
 export function getOfflineReadSources(): OfflineReadSource[] {
   return snapshot;
 }

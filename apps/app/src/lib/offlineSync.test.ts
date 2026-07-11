@@ -21,6 +21,7 @@ import {
   retryPendingEvidence,
   retryPendingMessages,
   retryPendingObservations,
+  startSyncEngine,
   syncPendingMessages,
   syncPendingEvidence,
   syncPendingObservations
@@ -586,6 +587,106 @@ describe('offline synchronization', () => {
     expect(summary.attempted).toBe(0);
     expect(fetchMock).not.toHaveBeenCalled();
     expect(await getLocalEvidence('ana.sp', 'territorio-a', queued.clientMutationId))
+      .toMatchObject({ syncStatus: 'QUEUED' });
+  });
+
+  it('keeps the background engine idle after the offline lease expires', async () => {
+    const queued = await enqueueObservation(observation, 'ana.sp');
+    localStorage.setItem('angico.session', JSON.stringify({
+      ...session, expiresAt: '2020-01-01T00:00:00.000Z'
+    }));
+    Object.defineProperty(navigator, 'onLine', { configurable: true, value: true });
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    vi.useFakeTimers();
+
+    const stop = startSyncEngine('ana.sp');
+    try {
+      window.dispatchEvent(new Event('online'));
+      await vi.advanceTimersByTimeAsync(30_000);
+    } finally {
+      stop();
+      vi.useRealTimers();
+    }
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(await getLocalObservation('ana.sp', 'territorio-a', queued.clientMutationId))
+      .toMatchObject({ syncStatus: 'QUEUED' });
+  });
+
+  it('keeps the background engine pinned to the owner that opened the shell', async () => {
+    const queued = await enqueueObservation(observation, 'bia.sp');
+    localStorage.setItem('angico.session', JSON.stringify({
+      ...session, pessoaId: 8, angicoId: 'bia.sp'
+    }));
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    Object.defineProperty(navigator, 'onLine', { configurable: true, value: true });
+    vi.useFakeTimers();
+
+    const stop = startSyncEngine('ana.sp');
+    try {
+      window.dispatchEvent(new Event('online'));
+      await vi.advanceTimersByTimeAsync(30_000);
+    } finally {
+      stop();
+      vi.useRealTimers();
+    }
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(await getLocalObservation('bia.sp', 'territorio-a', queued.clientMutationId))
+      .toMatchObject({ syncStatus: 'QUEUED' });
+  });
+
+  it('keeps the shell owner filter when the session changes after the engine guard', async () => {
+    const queued = await enqueueObservation(observation, 'bia.sp');
+    const activeSession = JSON.stringify(session);
+    const replacementSession = JSON.stringify({ ...session, pessoaId: 8, angicoId: 'bia.sp' });
+    const getItem = Storage.prototype.getItem;
+    let sessionReads = 0;
+    vi.spyOn(Storage.prototype, 'getItem').mockImplementation(function (this: Storage, key) {
+      if (key === 'angico.session') {
+        sessionReads += 1;
+        return sessionReads === 1 ? activeSession : replacementSession;
+      }
+      return getItem.call(this, key);
+    });
+    Object.defineProperty(navigator, 'onLine', { configurable: true, value: true });
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    const stop = startSyncEngine('ana.sp');
+    try {
+      await new Promise((resolve) => window.setTimeout(resolve, 25));
+    } finally {
+      stop();
+    }
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(await getLocalObservation('bia.sp', 'territorio-a', queued.clientMutationId))
+      .toMatchObject({ syncStatus: 'QUEUED' });
+  });
+
+  it('releases a claim without applying a response after the active owner changes', async () => {
+    const queued = await enqueueObservation(observation, 'ana.sp');
+    let resolveResponse!: (value: Response) => void;
+    const pendingResponse = new Promise<Response>((resolve) => { resolveResponse = resolve; });
+    const fetchMock = vi.fn().mockReturnValue(pendingResponse);
+    vi.stubGlobal('fetch', fetchMock);
+
+    const synchronization = syncPendingObservations({
+      ownerId: 'ana.sp', workspaceId: 'territorio-a'
+    });
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledOnce());
+    localStorage.setItem('angico.session', JSON.stringify({
+      ...session, pessoaId: 8, angicoId: 'bia.sp'
+    }));
+    resolveResponse(response(409, { detail: 'conflict' }));
+
+    const summary = await synchronization;
+
+    expect(summary.conflicts).toBe(0);
+    expect(await getLocalObservation('ana.sp', 'territorio-a', queued.clientMutationId))
       .toMatchObject({ syncStatus: 'QUEUED' });
   });
 

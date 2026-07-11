@@ -5,12 +5,13 @@ import Topbar from './Topbar';
 import ProfileModal from './ProfileModal';
 import OfflineReadNotice from './OfflineReadNotice';
 import {
-  DEFAULT_WORKSPACE, createWorkspace, deleteWorkspace, getProfile, getSession,
+  ApiNetworkError, DEFAULT_WORKSPACE, createWorkspace, deleteWorkspace, getProfile, getSession,
   hasFreshOfflineSession, isAuthenticated, listWorkspaces, logout, revalidateSession,
-  sessionOwnerId, setSessionWorkspace
+  offlineSessionExpiresAt, sessionOwnerId, setSessionWorkspace
 } from '../lib/api';
 import { startSyncEngine } from '../lib/offlineSync';
 import { clearOfflineOwner, getOfflineOwnerState } from '../lib/offlineStore';
+import { clearOfflineReadSourcesForOwner } from '../lib/offlineReadState';
 import type { PessoaHit, Workspace } from '../types';
 
 export interface AppContext {
@@ -33,17 +34,26 @@ export default function AppShell() {
   const [profileError, setProfileError] = useState<string | null>(null);
   const [showProfile, setShowProfile] = useState(false);
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
+  const [activeIdentity] = useState(() => {
+    const activeSession = getSession();
+    return { session: activeSession, ownerId: sessionOwnerId(activeSession) };
+  });
+  const activePessoaId = activeIdentity.session?.pessoaId;
+  const activeOwnerId = activeIdentity.ownerId;
+  const [session, setSession] = useState(activeIdentity.session);
   const [authStatus, setAuthStatus] = useState<'checking' | 'authenticated' | 'anonymous'>(
     isAuthenticated() || hasFreshOfflineSession() ? 'checking' : 'anonymous'
   );
-  const session = getSession();
   const [activeSlug, setActiveSlug] = useState(session?.workspaceId ?? DEFAULT_WORKSPACE);
 
   useEffect(() => {
     let active = true;
-    const unauthorized = () => setAuthStatus('anonymous');
+    const unauthorized = () => {
+      setSession(null);
+      setAuthStatus('anonymous');
+    };
     window.addEventListener('angico:unauthorized', unauthorized);
-    if (getSession()) {
+    if (activeIdentity.session) {
       if (!navigator.onLine && hasFreshOfflineSession()) {
         setAuthStatus('authenticated');
         return () => {
@@ -52,21 +62,75 @@ export default function AppShell() {
         };
       }
       revalidateSession().then((validated) => {
-        if (active) setAuthStatus(validated ? 'authenticated' : 'anonymous');
-      }).catch(() => {
-        if (active) setAuthStatus(hasFreshOfflineSession() ? 'authenticated' : 'anonymous');
+        if (!active) return;
+        const sameIdentity = validated
+          && validated.pessoaId === activePessoaId
+          && sessionOwnerId(validated) === activeOwnerId;
+        setSession(sameIdentity ? validated : null);
+        setAuthStatus(sameIdentity ? 'authenticated' : 'anonymous');
+      }).catch((caught) => {
+        if (!active) return;
+        if (caught instanceof ApiNetworkError && hasFreshOfflineSession()) {
+          setAuthStatus('authenticated');
+        } else {
+          setSession(null);
+          setAuthStatus('anonymous');
+        }
       });
     }
     return () => {
       active = false;
       window.removeEventListener('angico:unauthorized', unauthorized);
     };
-  }, []);
+  }, [activeIdentity.session, activeOwnerId, activePessoaId]);
+
+  useEffect(() => {
+    if (authStatus !== 'authenticated' || !activeOwnerId) return;
+    return startSyncEngine(activeOwnerId);
+  }, [activeOwnerId, authStatus]);
 
   useEffect(() => {
     if (authStatus !== 'authenticated') return;
-    return startSyncEngine();
-  }, [authStatus]);
+    let timer: number | undefined;
+    const reevaluate = () => {
+      if (timer !== undefined) window.clearTimeout(timer);
+      const currentSession = getSession();
+      if (!currentSession
+        || currentSession.pessoaId !== activePessoaId
+        || sessionOwnerId(currentSession) !== activeOwnerId) {
+        setSession(null);
+        setAuthStatus('anonymous');
+        return;
+      }
+      if (!hasFreshOfflineSession()) {
+        setSession(null);
+        setAuthStatus('anonymous');
+        return;
+      }
+      const expiresAt = offlineSessionExpiresAt();
+      if (expiresAt === undefined || expiresAt <= Date.now()) {
+        setSession(null);
+        setAuthStatus('anonymous');
+        return;
+      }
+      timer = window.setTimeout(
+        reevaluate,
+        Math.min(60_000, expiresAt - Date.now() + 1)
+      );
+    };
+    reevaluate();
+    window.addEventListener('focus', reevaluate);
+    window.addEventListener('online', reevaluate);
+    window.addEventListener('storage', reevaluate);
+    document.addEventListener('visibilitychange', reevaluate);
+    return () => {
+      if (timer !== undefined) window.clearTimeout(timer);
+      window.removeEventListener('focus', reevaluate);
+      window.removeEventListener('online', reevaluate);
+      window.removeEventListener('storage', reevaluate);
+      document.removeEventListener('visibilitychange', reevaluate);
+    };
+  }, [activeOwnerId, activePessoaId, authStatus]);
 
   useEffect(() => {
     if (authStatus !== 'authenticated') return;
@@ -84,8 +148,7 @@ export default function AppShell() {
       if (active) setAccountError(caught instanceof Error ? caught.message : 'Não foi possível carregar os espaços de trabalho.');
     });
     return () => { active = false; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [authStatus]);
+  }, [activeSlug, authStatus]);
 
   useEffect(() => {
     if (authStatus !== 'authenticated') return;
@@ -107,8 +170,7 @@ export default function AppShell() {
   }
 
   async function handleLogout() {
-    const current = getSession();
-    const ownerId = sessionOwnerId(current);
+    const ownerId = activeIdentity.ownerId;
     if (ownerId) {
       const offline = await getOfflineOwnerState(ownerId);
       if (offline.unsynced > 0) {
@@ -119,8 +181,10 @@ export default function AppShell() {
         if (!confirmed) return;
       }
       await clearOfflineOwner(ownerId, { discardPending: offline.unsynced > 0 });
+      clearOfflineReadSourcesForOwner(ownerId);
     }
     await logout();
+    setSession(null);
     setAuthStatus('anonymous');
     navigate('/login', { replace: true });
   }
@@ -181,7 +245,7 @@ export default function AppShell() {
       <Topbar
         workspaceLabel={activeName}
         workspaceId={activeSlug}
-        ownerId={sessionOwnerId(session)}
+        ownerId={activeIdentity.ownerId}
         onToggleSidebar={() => setSidebarOpen((v) => !v)}
         onWorkspaceClick={() => setShowProfile(true)}
       />
@@ -190,7 +254,7 @@ export default function AppShell() {
           <div className="form-error" role="alert">{accountError || profileError}</div>
         )}
         <OfflineReadNotice
-          ownerId={sessionOwnerId(session)}
+          ownerId={activeIdentity.ownerId}
           workspaceId={activeSlug}
           active={hasFreshOfflineSession()}
         />

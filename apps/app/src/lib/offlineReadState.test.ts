@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   clearOfflineReadSource,
+  clearOfflineReadSourcesForOwner,
   getOfflineReadSources,
   recordOfflineReadSource,
   resetOfflineReadSources,
@@ -39,5 +40,16 @@ describe('offline read source state', () => {
     expect(getOfflineReadSources()).toHaveLength(3);
     expect(listener).toHaveBeenCalledTimes(3);
     unsubscribe();
+  });
+
+  it('clears source state only for the owner whose local partition was removed', () => {
+    recordOfflineReadSource(base, '2026-07-10T12:00:00Z');
+    recordOfflineReadSource({ ...base, ownerId: 'bia.sp' }, '2026-07-10T12:01:00Z');
+
+    clearOfflineReadSourcesForOwner('ana.sp');
+
+    expect(getOfflineReadSources()).toEqual([
+      expect.objectContaining({ ownerId: 'bia.sp' })
+    ]);
   });
 });
