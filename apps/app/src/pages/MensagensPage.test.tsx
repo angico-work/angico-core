@@ -233,6 +233,21 @@ describe('MensagensPage', () => {
     }]);
   });
 
+  it('keeps the composer protected and retries when the local draft cannot be read', async () => {
+    vi.mocked(loadMessageDraft)
+      .mockRejectedValueOnce(new Error('armazenamento indisponível'))
+      .mockResolvedValueOnce(undefined);
+    renderPage();
+
+    const editor = await screen.findByLabelText('Mensagem');
+    expect(await screen.findByRole('alert')).toHaveTextContent('armazenamento indisponível');
+    expect(editor).toBeDisabled();
+    fireEvent.click(screen.getByRole('button', { name: 'Tentar carregar rascunho' }));
+
+    await waitFor(() => expect(loadMessageDraft).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(editor).toBeEnabled());
+  });
+
   it('queues the selected authorized context with the message', async () => {
     Object.defineProperty(navigator, 'onLine', { configurable: true, value: false });
     const draftLoad = deferred<Awaited<ReturnType<typeof loadMessageDraft>>>();
@@ -312,6 +327,19 @@ describe('MensagensPage', () => {
     fireEvent.click(screen.getByRole('button', { name: /Equipe de campo/ }));
 
     await waitFor(() => expect(link).toHaveValue(''));
+  });
+
+  it('clears the composer link when the workspace changes', async () => {
+    const view = renderPage('territorio-a');
+    const link = await screen.findByRole('combobox', { name: 'Vincular mensagem a' });
+    await waitFor(() => expect(link).toBeEnabled());
+    fireEvent.change(link, { target: { value: 'TERRITORIO:4' } });
+    expect(link).toHaveValue('TERRITORIO:4');
+
+    view.rerender(<PageUnderTest workspaceId="territorio-b" />);
+
+    await waitFor(() => expect(listConversas).toHaveBeenCalledWith('territorio-b'));
+    await waitFor(() => expect(screen.getByRole('combobox', { name: 'Vincular mensagem a' })).toHaveValue(''));
   });
 
   it('ignores completion of a draft save from the previous workspace', async () => {

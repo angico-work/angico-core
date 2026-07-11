@@ -60,6 +60,7 @@ export default function MensagensPage() {
     linkedEntityId: string;
   } | null>(null);
   const [draftKey, setDraftKey] = useState<string>();
+  const [draftLoadAttempt, setDraftLoadAttempt] = useState(0);
   const [draftState, setDraftState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [loading, setLoading] = useState(true);
   const [messageLoading, setMessageLoading] = useState(false);
@@ -264,20 +265,26 @@ export default function MensagensPage() {
     setDraftState('idle');
     savedFilesSignature.current = '';
     let activeEffect = true;
-    void loadMessageDraft(ownerId, workspaceId, activeId).then((saved) => {
-      if (!activeEffect) return;
-      setDraft(saved?.body ?? '');
-      setFiles(saved?.attachments ?? []);
-      setMessageLink(saved?.linkedEntityType && saved.linkedEntityId ? {
-        linkedEntityType: saved.linkedEntityType,
-        linkedEntityId: saved.linkedEntityId
-      } : null);
-      savedFilesSignature.current = fileSignature(saved?.attachments ?? []);
-      setDraftState(saved && (saved.body || saved.attachments.length || saved.linkedEntityId) ? 'saved' : 'idle');
-      setDraftKey(key);
-    });
+    void loadMessageDraft(ownerId, workspaceId, activeId)
+      .then((saved) => {
+        if (!activeEffect) return;
+        setDraft(saved?.body ?? '');
+        setFiles(saved?.attachments ?? []);
+        setMessageLink(saved?.linkedEntityType && saved.linkedEntityId ? {
+          linkedEntityType: saved.linkedEntityType,
+          linkedEntityId: saved.linkedEntityId
+        } : null);
+        savedFilesSignature.current = fileSignature(saved?.attachments ?? []);
+        setDraftState(saved && (saved.body || saved.attachments.length || saved.linkedEntityId) ? 'saved' : 'idle');
+        setDraftKey(key);
+      })
+      .catch((caught) => {
+        if (!activeEffect) return;
+        setDraftState('error');
+        setMessageError(caught instanceof Error ? caught.message : 'Não foi possível carregar o rascunho.');
+      });
     return () => { activeEffect = false; };
-  }, [activeId, ownerId, workspaceId]);
+  }, [activeId, draftLoadAttempt, ownerId, workspaceId]);
 
   useEffect(() => {
     if (activeId == null
@@ -542,12 +549,18 @@ export default function MensagensPage() {
                   ))}</div>}
                   {messageError && <div className="form-error" role="alert">{messageError}</div>}
                   <div className="draft-state" role="status">
-                    {!draftReady ? 'Carregando rascunho…' : (
+                    {!draftReady ? (draftState === 'error' ? 'Rascunho indisponível' : 'Carregando rascunho…') : (
                       draftState === 'saving' ? 'Salvando rascunho…'
                         : draftState === 'saved' ? 'Rascunho salvo neste aparelho'
                           : draftState === 'error' ? 'Rascunho não salvo' : ''
                     )}
                   </div>
+                  {!draftReady && draftState === 'error' && (
+                    <button type="button" className="message-retry" onClick={() => {
+                      setMessageError(null);
+                      setDraftLoadAttempt((attempt) => attempt + 1);
+                    }}>Tentar carregar rascunho</button>
+                  )}
                   <label htmlFor="message-draft">Mensagem</label>
                   <textarea id="message-draft" rows={3} value={draft} disabled={!draftReady || sending} onChange={(event) => setDraft(event.target.value)} placeholder="Escreva apenas o que precisa ficar registrado…" />
                   <div className="field message-link-field">
