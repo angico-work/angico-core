@@ -1,5 +1,5 @@
 import '@testing-library/jest-dom/vitest';
-import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Outlet, Route, Routes } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import MapPage from './MapPage';
@@ -18,7 +18,11 @@ vi.mock('../lib/api', () => ({
 }));
 
 vi.mock('../components/MapView', () => ({
-  default: ({ center }: { center: [number, number] }) => <div data-testid="map-view" data-center={center.join(',')} />
+  default: ({ center, onMapClick }: { center: [number, number]; onMapClick?: (lat: number, lng: number) => void }) => (
+    <button type="button" data-testid="map-view" data-center={center.join(',')} onClick={() => onMapClick?.(-8, -34)}>
+      Mapa
+    </button>
+  )
 }));
 
 function mapView(workspaceId = 'workspace-a') {
@@ -97,5 +101,19 @@ describe('MapPage real location boundaries', () => {
     });
 
     expect(screen.getByTestId('map-view')).toHaveAttribute('data-center', '-9,-35');
+  });
+
+  it('closes a location capture when the active workspace changes', async () => {
+    vi.mocked(loadMapPoints).mockResolvedValue([{
+      workspaceId: 'territorio-a', type: 'observacao', id: 7, titulo: 'Ponto A',
+      categoria: 'Água', status: 'ABERTA', latitude: -8, longitude: -34
+    }]);
+    const view = renderPage('territorio-a');
+    fireEvent.click(await screen.findByTestId('map-view'));
+    expect(await screen.findByRole('dialog')).toBeInTheDocument();
+
+    view.rerender(mapView('territorio-b'));
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
   });
 });

@@ -210,6 +210,7 @@ export default function TerritoriosPage() {
   }, [workspaceId]);
 
   useEffect(() => { void refresh(); }, [refresh]);
+  useEffect(() => { setCreating(false); }, [workspaceId]);
 
   return (
     <div className="page territories-page">

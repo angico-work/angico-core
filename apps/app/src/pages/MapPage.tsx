@@ -45,6 +45,11 @@ export default function MapPage() {
     void refresh();
     return () => { refreshRequest.current += 1; };
   }, [refresh]);
+  useEffect(() => {
+    setPending(null);
+    setQuery('');
+    setFlyTo(null);
+  }, [workspaceId]);
   const visible = useMemo(() => points.filter((point) => active.has(point.type)), [points, active]);
   const center = flyTo ?? (points[0] ? [points[0].latitude, points[0].longitude] as [number, number] : null);
 

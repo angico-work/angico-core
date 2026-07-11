@@ -1,6 +1,6 @@
 import 'fake-indexeddb/auto';
 import '@testing-library/jest-dom/vitest';
-import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Outlet, Route, Routes } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import ModulePage from './ModulePage';
@@ -189,5 +189,16 @@ describe('ModulePage offline observations', () => {
     expect(await screen.findByRole('dialog', { name: 'Nova observação' })).toBeInTheDocument();
     expect(await screen.findByLabelText('Território relacionado')).toHaveValue('4');
     expect(screen.getByRole('option', { name: 'Nascente Sul' })).toBeInTheDocument();
+  });
+
+  it('closes a field form when the active workspace changes', async () => {
+    vi.mocked(listEntities).mockResolvedValue([]);
+    const view = render(moduleView('territorio-a'));
+    fireEvent.click(await screen.findByRole('button', { name: 'Registrar problema' }));
+    expect(await screen.findByRole('dialog', { name: 'Novo problema' })).toBeInTheDocument();
+
+    view.rerender(moduleView('territorio-b'));
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
   });
 });

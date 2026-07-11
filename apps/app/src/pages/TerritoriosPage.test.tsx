@@ -30,15 +30,21 @@ const territory: Territorio = {
   updatedAt: '2026-07-10T14:00:00Z'
 };
 
-function renderPage() {
-  return render(
+function page(workspaceId = 'workspace-a') {
+  return (
     <MemoryRouter initialEntries={['/territorios']}>
       <Routes>
-        <Route element={<Outlet context={{ workspaceId: 'workspace-a' }} />}>
+        <Route element={<Outlet context={{ workspaceId }} />}>
           <Route path="/territorios" element={<TerritoriosPage />} />
         </Route>
       </Routes>
     </MemoryRouter>
+  );
+}
+
+function renderPage(workspaceId?: string) {
+  return render(
+    page(workspaceId)
   );
 }
 
@@ -95,5 +101,15 @@ describe('TerritoriosPage', () => {
 
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     expect(opener).toHaveFocus();
+  });
+
+  it('closes the territory form when the active workspace changes', async () => {
+    const view = renderPage('workspace-a');
+    fireEvent.click(await screen.findByRole('button', { name: 'Novo território' }));
+    expect(screen.getByRole('dialog', { name: 'Novo território' })).toBeInTheDocument();
+
+    view.rerender(page('workspace-b'));
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
   });
 });

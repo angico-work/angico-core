@@ -98,11 +98,23 @@ export default function ModulePage({ configKey }: { configKey: string }) {
   const [error, setError] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const refreshRequest = useRef(0);
+  const modalWorkspace = useRef(workspaceId);
   const contextualCreate = searchParams.get('create') === '1';
 
   useEffect(() => {
     if (contextualCreate) setShowCreate(true);
   }, [contextualCreate]);
+
+  useEffect(() => {
+    if (modalWorkspace.current === workspaceId) return;
+    modalWorkspace.current = workspaceId;
+    setShowCreate(false);
+    const next = new URLSearchParams(searchParams);
+    next.delete('create');
+    next.delete('territorioId');
+    next.delete('missaoId');
+    setSearchParams(next, { replace: true });
+  }, [searchParams, setSearchParams, workspaceId]);
 
   const refresh = useCallback(async () => {
     const request = ++refreshRequest.current;
