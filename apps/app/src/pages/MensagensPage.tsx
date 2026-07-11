@@ -76,7 +76,7 @@ export default function MensagensPage() {
   const streamRef = useRef<HTMLDivElement>(null);
   const savedFilesSignature = useRef('');
   const draftSaveTimer = useRef<number | undefined>(undefined);
-  const draftSaveInFlight = useRef<{ key: string; promise: Promise<void> } | undefined>(undefined);
+  const draftSaveQueue = useRef(new Map<string, Promise<void>>());
   const draftSaveGeneration = useRef(0);
   const activeConversationRef = useRef<number | null>(activeId);
   const activeWorkspaceRef = useRef(workspaceId);
@@ -306,14 +306,17 @@ export default function MensagensPage() {
       setDraftState('saving');
       const nextFilesSignature = fileSignature(files);
       const filesChanged = nextFilesSignature !== savedFilesSignature.current;
-      const save = messageLink
-        ? saveMessageDraft(ownerId, workspaceId, activeId, draft, filesChanged ? files : undefined, {
-            linkedEntityType: messageLink.linkedEntityType,
-            linkedEntityId: messageLink.linkedEntityId
-          })
-        : saveMessageDraft(ownerId, workspaceId, activeId, draft, filesChanged ? files : undefined);
-      const inFlight = { key: `${ownerId}:${workspaceId}:${activeId}`, promise: save };
-      draftSaveInFlight.current = inFlight;
+      const saveKey = `${ownerId}:${workspaceId}:${activeId}`;
+      const previous = draftSaveQueue.current.get(saveKey) ?? Promise.resolve();
+      const save = previous.catch(() => undefined).then(() => (
+        messageLink
+          ? saveMessageDraft(ownerId, workspaceId, activeId, draft, filesChanged ? files : undefined, {
+              linkedEntityType: messageLink.linkedEntityType,
+              linkedEntityId: messageLink.linkedEntityId
+            })
+          : saveMessageDraft(ownerId, workspaceId, activeId, draft, filesChanged ? files : undefined)
+      ));
+      draftSaveQueue.current.set(saveKey, save);
       void save
         .then(() => {
           if (!stillCurrent()) return;
@@ -326,7 +329,7 @@ export default function MensagensPage() {
           setMessageError(caught instanceof Error ? caught.message : 'Não foi possível salvar o rascunho.');
         })
         .finally(() => {
-          if (draftSaveInFlight.current === inFlight) draftSaveInFlight.current = undefined;
+          if (draftSaveQueue.current.get(saveKey) === save) draftSaveQueue.current.delete(saveKey);
         });
     }, 400);
     draftSaveTimer.current = timer;
@@ -361,10 +364,8 @@ export default function MensagensPage() {
     setSending(true);
     setMessageError(null);
     try {
-      const pendingSave = draftSaveInFlight.current;
-      if (pendingSave?.key === requestedDraftKey) {
-        await pendingSave.promise.catch(() => undefined);
-      }
+      const pendingSave = draftSaveQueue.current.get(requestedDraftKey);
+      if (pendingSave) await pendingSave.catch(() => undefined);
       await captureMessage({
         workspaceId,
         conversationId: activeId,

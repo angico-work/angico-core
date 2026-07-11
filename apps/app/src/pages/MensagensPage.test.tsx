@@ -1,5 +1,5 @@
 import '@testing-library/jest-dom/vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Outlet, Route, Routes } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import MensagensPage from './MensagensPage';
@@ -377,6 +377,37 @@ describe('MensagensPage', () => {
       workspaceId: 'territorio-a',
       conversationId: 12,
       body: 'Guardar sem ressuscitar o rascunho.',
+      attachments: []
+    }));
+  });
+
+  it('waits for every queued draft save before capturing the message', async () => {
+    Object.defineProperty(navigator, 'onLine', { configurable: true, value: false });
+    const firstSave = deferred<void>();
+    const secondSave = deferred<void>();
+    vi.mocked(saveMessageDraft)
+      .mockReturnValueOnce(firstSave.promise)
+      .mockReturnValueOnce(secondSave.promise);
+    vi.mocked(captureMessage).mockResolvedValue({ clientMessageId: 'msg-after-all-drafts', status: 'QUEUED' });
+    renderPage();
+
+    const editor = await screen.findByLabelText('Mensagem');
+    await waitFor(() => expect(editor).toBeEnabled());
+    fireEvent.change(editor, { target: { value: 'Primeira versão.' } });
+    await waitFor(() => expect(saveMessageDraft).toHaveBeenCalledTimes(1));
+    fireEvent.change(editor, { target: { value: 'Versão final.' } });
+    await act(async () => { await new Promise((resolve) => window.setTimeout(resolve, 450)); });
+    expect(saveMessageDraft).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar na fila' }));
+
+    await act(async () => { firstSave.resolve(); });
+    await waitFor(() => expect(saveMessageDraft).toHaveBeenCalledTimes(2));
+    expect(captureMessage).not.toHaveBeenCalled();
+    await act(async () => { secondSave.resolve(); });
+    await waitFor(() => expect(captureMessage).toHaveBeenCalledWith({
+      workspaceId: 'territorio-a',
+      conversationId: 12,
+      body: 'Versão final.',
       attachments: []
     }));
   });
