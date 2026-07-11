@@ -136,6 +136,21 @@ describe('SyncCenter', () => {
     expect(retryPendingOperations).not.toHaveBeenCalled();
   });
 
+  it('restores local discard when writing is revoked during a review', async () => {
+    const view = render(
+      <SyncCenter canWrite ownerId="ana.sp" workspaceId="territorio-a" online onClose={vi.fn()} />
+    );
+    fireEvent.click(await screen.findByRole('button', { name: 'Revisar Nascente sem proteção' }));
+    expect(screen.getByRole('button', { name: 'Descartar registro' })).toBeInTheDocument();
+
+    view.rerender(
+      <SyncCenter canWrite={false} ownerId="ana.sp" workspaceId="territorio-a" online onClose={vi.fn()} />
+    );
+
+    expect(await screen.findByRole('button', { name: 'Descartar registro: Nascente sem proteção' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Descartar registro' })).not.toBeInTheDocument();
+  });
+
   it('moves focus into the dialog, closes with Escape and restores the trigger', async () => {
     const trigger = document.createElement('button');
     trigger.textContent = 'Abrir sincronização';

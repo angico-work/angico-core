@@ -171,6 +171,12 @@ export default function SyncCenter({ ownerId, workspaceId, online, canWrite, onC
     };
   }, [refresh]);
 
+  useEffect(() => {
+    if (canWrite) return;
+    setReviewingId(undefined);
+    setRevision(undefined);
+  }, [canWrite]);
+
   async function synchronize() {
     if (!ownerId || !online || !canWrite) return;
     setSyncing(true);
