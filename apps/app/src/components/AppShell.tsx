@@ -26,6 +26,15 @@ function workspaceLabel(workspaceId: string): string {
     .join(' ') || 'Workspace';
 }
 
+const DRAWER_FOCUSABLE = [
+  'button:not([disabled])',
+  'input:not([disabled])',
+  'select:not([disabled])',
+  'textarea:not([disabled])',
+  'a[href]',
+  '[tabindex]:not([tabindex="-1"])'
+].join(',');
+
 export default function AppShell() {
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -88,6 +97,45 @@ export default function AppShell() {
     if (authStatus !== 'authenticated' || !activeOwnerId) return;
     return startSyncEngine(activeOwnerId);
   }, [activeOwnerId, authStatus]);
+
+  useEffect(() => {
+    if (!sidebarOpen) return;
+    if (window.innerWidth > 1040) {
+      setSidebarOpen(false);
+      return;
+    }
+    const sidebar = document.getElementById('app-sidebar');
+    const toggle = document.querySelector<HTMLElement>('[aria-controls="app-sidebar"]');
+    sidebar?.querySelector<HTMLElement>(DRAWER_FOCUSABLE)?.focus();
+    const handleResize = () => {
+      if (window.innerWidth > 1040) setSidebarOpen(false);
+    };
+    const handleKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        setSidebarOpen(false);
+        return;
+      }
+      if (event.key !== 'Tab' || !sidebar) return;
+      const focusable = Array.from(sidebar.querySelectorAll<HTMLElement>(DRAWER_FOCUSABLE));
+      const first = focusable[0];
+      const last = focusable.at(-1);
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last?.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first?.focus();
+      }
+    };
+    window.addEventListener('resize', handleResize);
+    document.addEventListener('keydown', handleKey);
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      document.removeEventListener('keydown', handleKey);
+      if (toggle?.isConnected) toggle.focus();
+    };
+  }, [sidebarOpen]);
 
   useEffect(() => {
     if (authStatus !== 'authenticated') return;

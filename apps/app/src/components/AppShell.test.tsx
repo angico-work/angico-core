@@ -47,14 +47,30 @@ const { otherSession, session, stopSyncEngine } = vi.hoisted(() => ({
 }));
 
 vi.mock('./Sidebar', () => ({
-  default: ({ onLogout, onEditProfile }: { onLogout: () => void; onEditProfile: () => void }) => (
-    <>
+  default: ({ onLogout, onEditProfile, open }: {
+    onLogout: () => void;
+    onEditProfile: () => void;
+    open: boolean;
+  }) => (
+    <aside id="app-sidebar" data-open={open}>
       <button type="button" onClick={onEditProfile}>Editar perfil</button>
       <button type="button" onClick={onLogout}>Sair agora</button>
-    </>
+    </aside>
   )
 }));
-vi.mock('./Topbar', () => ({ default: () => null }));
+vi.mock('./Topbar', () => ({
+  default: ({ sidebarOpen, onToggleSidebar }: {
+    sidebarOpen: boolean;
+    onToggleSidebar: () => void;
+  }) => (
+    <button
+      type="button"
+      aria-controls="app-sidebar"
+      aria-label={sidebarOpen ? 'Fechar menu' : 'Abrir menu'}
+      onClick={onToggleSidebar}
+    >Menu</button>
+  )
+}));
 vi.mock('./ProfileModal', () => ({
   default: ({ profile }: { profile: { telefone?: string | null } }) => (
     <div role="dialog" aria-label="Editar perfil">{profile.telefone}</div>
@@ -102,6 +118,7 @@ function renderShell() {
 
 describe('AppShell local partition', () => {
   beforeEach(() => {
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1024 });
     vi.useRealTimers();
     vi.clearAllMocks();
     resetOfflineReadSources();
@@ -291,5 +308,30 @@ describe('AppShell local partition', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Editar perfil' }));
 
     expect(screen.getByRole('dialog', { name: 'Editar perfil' })).toHaveTextContent('(81) 99999-0000');
+  });
+
+  it('moves focus into the mobile drawer and restores it after Escape', async () => {
+    renderShell();
+    await screen.findByText('Conteúdo');
+    const toggle = screen.getByRole('button', { name: 'Abrir menu' });
+    toggle.focus();
+
+    fireEvent.click(toggle);
+
+    expect(await screen.findByRole('button', { name: 'Editar perfil' })).toHaveFocus();
+    fireEvent.keyDown(document, { key: 'Escape' });
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Abrir menu' })).toHaveFocus());
+  });
+
+  it('closes the drawer when the viewport changes to desktop mode', async () => {
+    renderShell();
+    await screen.findByText('Conteúdo');
+    fireEvent.click(screen.getByRole('button', { name: 'Abrir menu' }));
+    expect(screen.getByRole('button', { name: 'Fechar menu' })).toBeInTheDocument();
+
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1280 });
+    fireEvent(window, new Event('resize'));
+
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Abrir menu' })).toBeInTheDocument());
   });
 });
