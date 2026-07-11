@@ -22,13 +22,15 @@ const NAV_GROUPS = [
       { to: '/app/missoes', label: 'Missões', icon: 'mission' },
       { to: '/app/acoes', label: 'Ações', icon: 'action' },
       { to: '/app/resultados', label: 'Resultados', icon: 'check' },
-      { to: '/app/evidencias', label: 'Evidências', icon: 'report' }
+      { to: '/app/evidencias', label: 'Evidências', icon: 'report' },
+      { to: '/app/recursos', label: 'Recursos', icon: 'sprout' }
     ]
   },
   {
     label: 'Rede e memória',
     items: [
       { to: '/app/pessoas', label: 'Pessoas e grupos', icon: 'people' },
+      { to: '/app/organizacoes', label: 'Organizações', icon: 'people' },
       { to: '/app/mensagens', label: 'Conversas', icon: 'message' },
       { to: '/app/indicadores', label: 'Indicadores', icon: 'indicator' },
       { to: '/app/memoria', label: 'Memória', icon: 'memory' },

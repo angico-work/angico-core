@@ -15,6 +15,8 @@ const TerritoriosPage = lazy(() => import('./pages/TerritoriosPage'));
 const EvidenciasPage = lazy(() => import('./pages/EvidenciasPage'));
 const ResultadosPage = lazy(() => import('./pages/ResultadosPage'));
 const ImpactoPage = lazy(() => import('./pages/ImpactoPage'));
+const RecursosPage = lazy(() => import('./pages/RecursosPage'));
+const OrganizacoesPage = lazy(() => import('./pages/OrganizacoesPage'));
 
 function RouteFallback({ label }: { label: string }) {
   return <div className="loading-state" role="status"><span aria-hidden="true" />{label}</div>;
@@ -44,6 +46,8 @@ export default function App() {
         <Route path="acoes" element={<ModulePage configKey="acoes" />} />
         <Route path="evidencias" element={<LazyRoute label="Abrindo evidências…"><EvidenciasPage /></LazyRoute>} />
         <Route path="resultados" element={<LazyRoute label="Abrindo resultados…"><ResultadosPage /></LazyRoute>} />
+        <Route path="recursos" element={<LazyRoute label="Abrindo recursos…"><RecursosPage /></LazyRoute>} />
+        <Route path="organizacoes" element={<LazyRoute label="Abrindo organizações…"><OrganizacoesPage /></LazyRoute>} />
         <Route path="potencialidades" element={<ModulePage configKey="potencialidades" />} />
         <Route path="pessoas" element={<ModulePage configKey="pessoas" />} />
         <Route path="mensagens" element={<MensagensPage />} />
