@@ -28,6 +28,7 @@ import com.angico.workspaces.WorkspaceMemberRepository;
 import com.angico.workspaces.WorkspaceRepository;
 import jakarta.servlet.http.Cookie;
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.BeforeEach;
@@ -78,6 +79,63 @@ class RastroIntegrationTest {
         actor = createPerson(workspaceA, "trace.actor." + id, "trace-" + id + "@example.test");
         createPerson(workspaceB, "trace.other." + id, "trace-other-" + id + "@example.test");
         session = login(actor);
+    }
+
+    @Test
+    void acceptsEveryTraceObjectTypeAsARoot() throws Exception {
+        List<String> rootTypes = List.of(
+                "TERRITORIO",
+                "OBSERVACAO",
+                "PROBLEMA",
+                "POTENCIALIDADE",
+                "MISSAO",
+                "ACAO",
+                "PESSOA",
+                "ORGANIZACAO",
+                "RECURSO",
+                "EVIDENCIA",
+                "RESULTADO",
+                "INDICADOR",
+                "MEDICAO"
+        );
+
+        for (String rootType : rootTypes) {
+            String rootId = "root-" + rootType.toLowerCase();
+            object(workspaceA, rootType, rootId, "Raiz " + rootType);
+            event(workspaceA, rootType, rootId, rootType.toLowerCase() + ".registrado",
+                    Instant.parse("2026-07-01T12:00:00Z"), Instant.parse("2026-07-01T12:01:00Z"));
+
+            mvc.perform(trace(workspaceA, rootType, rootId)
+                            .param("maxNodes", "1")
+                            .param("maxRelations", "1")
+                            .param("maxEvents", "1"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.root.reference.type").value(rootType))
+                    .andExpect(jsonPath("$.root.reference.id").value(rootId))
+                    .andExpect(jsonPath("$.stages", hasSize(1)))
+                    .andExpect(jsonPath("$.limits.maxNodes").value(1))
+                    .andExpect(jsonPath("$.limits.maxRelations").value(1))
+                    .andExpect(jsonPath("$.limits.maxEvents").value(1));
+        }
+    }
+
+    @Test
+    void participantRootKeepsItsMissingEventGapDeterministic() throws Exception {
+        object(workspaceA, "PESSOA", "person-without-event", "Pessoa sem evento");
+
+        MvcResult first = mvc.perform(trace(workspaceA, "PESSOA", "person-without-event"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.root.reference.type").value("PESSOA"))
+                .andExpect(jsonPath("$.stages", hasSize(1)))
+                .andExpect(jsonPath("$.gaps", hasSize(1)))
+                .andExpect(jsonPath("$.gaps[0].code").value("REGISTRO_SEM_EVENTO"))
+                .andReturn();
+
+        MvcResult second = mvc.perform(trace(workspaceA, "PESSOA", "person-without-event"))
+                .andExpect(status().isOk())
+                .andReturn();
+
+        assertEquals(first.getResponse().getContentAsString(), second.getResponse().getContentAsString());
     }
 
     @Test

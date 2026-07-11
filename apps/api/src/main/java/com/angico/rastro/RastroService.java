@@ -40,7 +40,19 @@ public class RastroService {
     private static final int MAX_EVENTS = 600;
     private static final Pattern SAFE_ID = Pattern.compile("[A-Za-z0-9._:-]{1,160}");
     private static final Set<String> ROOT_TYPES = Set.of(
-            OntologyService.TERRITORIO, OntologyService.MISSAO, OntologyService.ACAO);
+            OntologyService.TERRITORIO,
+            OntologyService.OBSERVACAO,
+            OntologyService.PROBLEMA,
+            OntologyService.POTENCIALIDADE,
+            OntologyService.MISSAO,
+            OntologyService.ACAO,
+            OntologyService.PESSOA,
+            OntologyService.ORGANIZACAO,
+            OntologyService.RECURSO,
+            OntologyService.EVIDENCIA,
+            OntologyService.RESULTADO,
+            OntologyService.INDICADOR,
+            OntologyService.MEDICAO);
     private static final Set<String> PARTICIPANT_TYPES = Set.of(
             OntologyService.PESSOA, OntologyService.ORGANIZACAO);
     private static final Set<String> TRACE_RELATIONS = Set.of(
@@ -159,17 +171,18 @@ public class RastroService {
         requireLimit(maxRelations, 1, MAX_RELATIONS, "maxRelations");
         requireLimit(maxEvents, 1, MAX_EVENTS, "maxEvents");
 
-        StoredMemoryObject rootObject = findObject(workspaceId, new NodeKey(rootType, rootId));
+        NodeKey rootKey = new NodeKey(rootType, rootId);
+        StoredMemoryObject rootObject = findObject(workspaceId, rootKey);
         Graph graph = expand(workspaceId, rootObject, maxNodes, maxRelations);
         EventSet eventSet = loadEvents(workspaceId, graph.nodes, maxEvents);
-        List<Stage> stages = stages(graph.nodes, eventSet.byNode);
+        List<Stage> stages = stages(graph.nodes, eventSet.byNode, rootKey);
         Stage root = stages.stream()
                 .filter(stage -> stage.reference().type().equals(rootType)
                         && stage.reference().id().equals(rootId))
                 .findFirst()
                 .orElseThrow();
         List<Relation> relationViews = relationViews(graph.relations);
-        List<Gap> gaps = gaps(workspaceId, graph.nodes);
+        List<Gap> gaps = gaps(workspaceId, graph.nodes, rootKey);
         boolean truncated = graph.truncated || eventSet.truncated;
 
         return new RastroResponse(
@@ -301,10 +314,12 @@ public class RastroService {
 
     private List<Stage> stages(
             Map<NodeKey, StoredMemoryObject> nodes,
-            Map<NodeKey, List<StoredMemoryEvent>> eventMap
+            Map<NodeKey, List<StoredMemoryEvent>> eventMap,
+            NodeKey root
     ) {
         return nodes.entrySet().stream()
-                .filter(entry -> !PARTICIPANT_TYPES.contains(entry.getKey().type))
+                .filter(entry -> entry.getKey().equals(root)
+                        || !PARTICIPANT_TYPES.contains(entry.getKey().type))
                 .sorted(Map.Entry.comparingByKey(nodeComparator()))
                 .map(entry -> stage(entry.getValue(), eventMap.getOrDefault(entry.getKey(), List.of())))
                 .toList();
@@ -388,10 +403,14 @@ public class RastroService {
         ));
     }
 
-    private List<Gap> gaps(String workspaceId, Map<NodeKey, StoredMemoryObject> nodes) {
+    private List<Gap> gaps(
+            String workspaceId,
+            Map<NodeKey, StoredMemoryObject> nodes,
+            NodeKey root
+    ) {
         List<Gap> result = new ArrayList<>();
         for (NodeKey subject : orderedKeys(nodes.keySet())) {
-            if (PARTICIPANT_TYPES.contains(subject.type)) {
+            if (PARTICIPANT_TYPES.contains(subject.type) && !subject.equals(root)) {
                 continue;
             }
             if (!events.existsByWorkspaceIdAndEntityTypeIgnoreCaseAndEntityId(
@@ -645,7 +664,7 @@ public class RastroService {
     private String requireRootType(String value) {
         String type = ontology.canonicalObjectType(value);
         if (!ROOT_TYPES.contains(type)) {
-            throw new IllegalArgumentException("A raiz do Rastro deve ser TERRITORIO, MISSAO ou ACAO.");
+            throw new IllegalArgumentException("O tipo informado não pode iniciar um Rastro.");
         }
         return type;
     }
