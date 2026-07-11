@@ -81,7 +81,7 @@ O modo offline permite abrir dados locais somente dentro de uma autorização pr
 | Revogação enquanto offline | A revogação só pode ser conhecida na reconexão. Operações permanecem bloqueadas até nova autenticação. |
 | Arquivos maliciosos | Assinatura e MIME são validados, mas não há antivírus ou sandbox. Adicionar varredura antes de ampliar tipos e limites. |
 | Storage | O deployment atual usa volume persistente, sem URL assinada nem replicação. Produção com múltiplas instâncias exige object storage privado. |
-| Banco existente | `ddl-auto=update` ainda participa do bootstrap de produção. Gerar baseline completa e migrar para `validate`. |
+| Banco existente | Produção usa Flyway antes de `ddl-auto=validate`, mas qualquer upgrade persistente ainda exige backup, restauração testada e ensaio em cópia anonimizada. |
 | Observabilidade | Não há SIEM, alerta de autenticação, drain central ou retenção formal de auditoria. Configurar antes da produção pública. |
 | Disponibilidade | O retry offline protege o cliente, mas não substitui backup, réplica, teste de restauração e SLO da API. |
 | Concorrência | Restrições e recuperação transacional existem; teste de carga concorrente ainda deve ser executado. |

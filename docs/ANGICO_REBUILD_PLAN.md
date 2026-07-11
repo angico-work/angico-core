@@ -131,7 +131,7 @@ O read model é calculado pela API com limites de expansão e isolamento por wor
 
 ## Riscos e limites conhecidos
 
-- O bootstrap de banco ainda usa `ddl-auto=update` antes das migrations; uma baseline integral é necessária antes de uma operação pública.
+- A baseline integral e o boot com `ddl-auto=validate` foram provados localmente; uma cópia anonimizada e um ensaio de restauração ainda são necessários antes de uma operação pública.
 - Não há rate limiting distribuído, recuperação de conta, SIEM, antivírus de uploads ou object storage privado.
 - IndexedDB depende da proteção do dispositivo e não fornece criptografia própria.
 - Revogação ocorrida durante ausência de rede só é conhecida na próxima autenticação ou sincronização.
@@ -155,4 +155,3 @@ Esses limites estão detalhados em `SECURITY.md` e `OFFLINE_ARCHITECTURE.md`; ne
 - [x] estados vazios, falhas e sincronização são visíveis;
 - [x] documentação de arquitetura, segurança, ontologia e separação está atualizada;
 - [ ] publicação externa, provisionamento de banco oficial e DNS, deliberadamente fora desta execução;
-

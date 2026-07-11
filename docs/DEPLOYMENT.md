@@ -94,16 +94,15 @@ Sem uma variável, o canal correspondente permanece indisponível de forma expl�
 
 ## Banco e migrations
 
-Flyway aplica a baseline `0` e migrations aditivas específicas para H2 e PostgreSQL. O perfil de produção ainda usa `hibernate.ddl-auto=update` antes do Flyway enquanto a baseline completa não existe. Essa ordem é transicional e precisa ser tratada como risco de lançamento.
+Flyway aplica migrations específicas para H2 e PostgreSQL antes da criação do `EntityManagerFactory`. `V0` contém o schema integral para banco vazio; `V1` a `V6` permanecem aditivas e idempotentes. O perfil de produção usa `hibernate.ddl-auto=validate` e falha se o schema final divergir do modelo JPA.
 
-Antes de trocar para `validate`:
+Compatibilidade esperada:
 
-1. gerar o DDL completo a partir de banco vazio;
-2. comparar H2 e PostgreSQL;
-3. testar upgrade de uma cópia anonimizada do banco real;
-4. criar baseline completa imutável;
-5. alterar `ddl-auto` para `validate`;
-6. provar boot vazio e upgrade no smoke local.
+1. banco vazio executa `V0` até `V6`;
+2. banco não vazio sem histórico recebe baseline `0` e executa `V1` até `V6`;
+3. banco com histórico `0` a `6` mantém o histórico e aceita `V0` como migration resolvida abaixo da versão atual.
+
+Os três caminhos têm cobertura local em H2; o smoke PostgreSQL prova banco vazio e upgrade a partir de um ref anterior em container efêmero. Isso não substitui um ensaio de restauração e upgrade em uma cópia anonimizada antes de usar um banco persistente.
 
 Não execute `repair`, `baseline` manual ou edição da tabela `flyway_schema_history` sem um plano de recuperação testado em cópia.
 

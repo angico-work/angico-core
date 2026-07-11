@@ -32,10 +32,11 @@ Nenhum desses comandos usa banco remoto ou publica a aplicação.
 
 ## Banco e migrations
 
-O perfil `prod` usa temporariamente `hibernate.ddl-auto=update` para materializar o modelo JPA e, ainda durante a inicialização, aplica migrations Flyway aditivas. O bootstrap cria a baseline `0` e executa as migrations específicas do banco antes de a aplicação ficar pronta. Qualquer incompatibilidade encerra o startup.
+No perfil `prod`, o inicializador Flyway do Spring Boot executa antes do JPA. Depois das migrations, Hibernate usa `ddl-auto=validate` e encerra o startup se o schema não corresponder ao modelo.
 
 | Versão | Conteúdo |
 | --- | --- |
+| `V0` | schema integral para banco vazio |
 | `V1` | sessões autenticadas |
 | `V2` | unicidade de identidade e e-mail |
 | `V3` | idempotência de mutações offline |
@@ -63,7 +64,9 @@ GROUP BY lower(regexp_replace(btrim(angico_id), '^@', ''))
 HAVING count(*) > 1;
 ```
 
-Esse regime é transicional: depois de gerar e revisar uma baseline completa do schema, a meta é usar `ddl-auto=validate`. Não execute migrations contra `apps/api/data` durante testes. A suíte usa bancos H2 isolados em memória e o smoke usa PostgreSQL efêmero.
+Em banco vazio, Flyway executa `V0` até `V6`. Em banco não vazio sem histórico, `baselineOnMigrate` registra a versão `0` e aplica `V1` até `V6`, sem executar `V0` sobre tabelas existentes. Bancos já versionados continuam na própria versão e validam o histórico sem reescrever checksums.
+
+Não execute migrations contra `apps/api/data` durante testes. A suíte usa H2 em memória e o smoke usa PostgreSQL efêmero. Antes de qualquer migração futura em um banco persistente, teste o upgrade em uma cópia anonimizada e verifique backup e restauração.
 
 ## Uploads
 
