@@ -153,6 +153,7 @@ public class WorkspaceService {
     @Transactional
     public WorkspaceMemberResponse atualizarMembro(String slug, Long memberId, WorkspaceMemberRequest request) {
         accessService.requireManage(slug);
+        lockWorkspace(slug);
         WorkspaceMember member = memberRepository.findByIdAndWorkspaceId(memberId, slug)
                 .orElseThrow(() -> new IllegalArgumentException("Membro não pertence ao workspace informado."));
         String nextRole = request.role() == null || request.role().isBlank()
@@ -175,6 +176,7 @@ public class WorkspaceService {
     @Transactional
     public void removerMembro(String slug, Long memberId) {
         accessService.requireManage(slug);
+        lockWorkspace(slug);
         memberRepository.findByIdAndWorkspaceId(memberId, slug).ifPresent(member -> {
             assertActiveOwnerRemains(slug, member, null, null);
             memberRepository.delete(member);
@@ -186,6 +188,11 @@ public class WorkspaceService {
         if (workspaceRepository.findBySlug(slug).isEmpty()) {
             throw new IllegalArgumentException("Workspace não encontrado: " + slug);
         }
+    }
+
+    private void lockWorkspace(String slug) {
+        workspaceRepository.findBySlugForUpdate(slug)
+                .orElseThrow(() -> new IllegalArgumentException("Workspace não encontrado: " + slug));
     }
 
     private String uniqueSlug(String base) {

@@ -28,6 +28,7 @@ class WorkspaceServiceTest {
     private List<Workspace> workspaceStore;
     private List<WorkspaceMember> memberStore;
     private List<Pessoa> pessoaStore;
+    private WorkspaceRepository workspaceRepository;
     private WorkspaceMemoryPublisher memoryPublisher;
     private WorkspaceService service;
 
@@ -40,7 +41,7 @@ class WorkspaceServiceTest {
         pessoaStore.add(person("ana.sp", "Ana", "ATIVA"));
         pessoaStore.add(person("bia.sp", "Bia", "INATIVA"));
 
-        WorkspaceRepository workspaceRepository = mock(WorkspaceRepository.class);
+        workspaceRepository = mock(WorkspaceRepository.class);
         when(workspaceRepository.save(any(Workspace.class))).thenAnswer(call -> {
             Workspace workspace = call.getArgument(0);
             workspaceStore.add(workspace);
@@ -50,6 +51,8 @@ class WorkspaceServiceTest {
                 workspaceStore.stream().anyMatch(w -> w.getSlug().equals(call.getArgument(0))));
         when(workspaceRepository.findAllByOrderByCreatedAtAsc()).thenReturn(workspaceStore);
         when(workspaceRepository.findBySlug(anyString())).thenAnswer(call ->
+                workspaceStore.stream().filter(w -> w.getSlug().equals(call.getArgument(0))).findFirst());
+        when(workspaceRepository.findBySlugForUpdate(anyString())).thenAnswer(call ->
                 workspaceStore.stream().filter(w -> w.getSlug().equals(call.getArgument(0))).findFirst());
         doAnswer(call -> {
             workspaceStore.remove(call.getArgument(0));
@@ -307,5 +310,18 @@ class WorkspaceServiceTest {
         verify(memoryPublisher).publicarMembroAtualizado(member, "test.actor");
         verify(memoryPublisher).publicarMembroRemovido(member, "test.actor");
         assertFalse(memberStore.contains(member));
+    }
+
+    @Test
+    void changingMembershipAcquiresTheWorkspaceLock() {
+        String slug = create("Equipe", null).slug();
+        WorkspaceMemberResponse added = service.adicionarMembro(
+                slug,
+                new WorkspaceMemberRequest("maria.sp", "Maria", "MEMBER", "ACTIVE"));
+
+        service.atualizarMembro(slug, added.id(),
+                new WorkspaceMemberRequest(added.actorId(), "Maria Silva", null, null));
+
+        verify(workspaceRepository).findBySlugForUpdate(slug);
     }
 }
