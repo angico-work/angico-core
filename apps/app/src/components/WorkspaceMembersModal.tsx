@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent, type RefObject } from 'react';
 import { createPortal } from 'react-dom';
 import AngicoIdField from './AngicoIdField';
 import { icon } from '../lib/icons';
@@ -15,10 +15,11 @@ const ROLE_LABELS: Record<string, string> = {
 interface Props {
   slug: string;
   workspaceName: string;
+  returnFocusRef?: RefObject<HTMLElement | null>;
   onClose: () => void;
 }
 
-export default function WorkspaceMembersModal({ slug, workspaceName, onClose }: Props) {
+export default function WorkspaceMembersModal({ slug, workspaceName, returnFocusRef, onClose }: Props) {
   const [members, setMembers] = useState<WorkspaceMember[]>([]);
   const [loading, setLoading] = useState(true);
   const [actorId, setActorId] = useState('');
@@ -75,6 +76,7 @@ export default function WorkspaceMembersModal({ slug, workspaceName, onClose }: 
       titleId="workspace-members-title"
       descriptionId="workspace-members-description"
       busy={busy}
+      returnFocusRef={returnFocusRef}
       onClose={onClose}
     >
         <header className="dialog-head">

@@ -21,6 +21,7 @@ export default function WorkspaceSwitcher({ workspaces, activeSlug, onSwitch, on
   const [confirmingSlug, setConfirmingSlug] = useState<string | null>(null);
   const [showMembers, setShowMembers] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
 
   const active = workspaces.find((w) => w.slug === activeSlug);
   const activeName = active?.nome ?? activeSlug
@@ -90,6 +91,7 @@ export default function WorkspaceSwitcher({ workspaces, activeSlug, onSwitch, on
   return (
     <div className="workspace-switcher" ref={rootRef}>
       <button
+        ref={triggerRef}
         type="button"
         className="workspace-trigger"
         aria-haspopup="menu"
@@ -192,7 +194,12 @@ export default function WorkspaceSwitcher({ workspaces, activeSlug, onSwitch, on
         </div>
       )}
       {showMembers && (
-        <WorkspaceMembersModal slug={activeSlug} workspaceName={activeName} onClose={() => setShowMembers(false)} />
+        <WorkspaceMembersModal
+          slug={activeSlug}
+          workspaceName={activeName}
+          returnFocusRef={triggerRef}
+          onClose={() => setShowMembers(false)}
+        />
       )}
     </div>
   );

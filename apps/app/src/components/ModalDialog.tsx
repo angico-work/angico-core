@@ -1,10 +1,11 @@
-import { useEffect, useRef, type KeyboardEvent, type ReactNode } from 'react';
+import { useEffect, useRef, type KeyboardEvent, type ReactNode, type RefObject } from 'react';
 
 interface Props {
   titleId: string;
   descriptionId?: string;
   className?: string;
   busy?: boolean;
+  returnFocusRef?: RefObject<HTMLElement | null>;
   onClose: () => void;
   children: ReactNode;
 }
@@ -23,6 +24,7 @@ export default function ModalDialog({
   descriptionId,
   className = 'modal-card',
   busy = false,
+  returnFocusRef,
   onClose,
   children
 }: Props) {
@@ -36,11 +38,12 @@ export default function ModalDialog({
   useEffect(() => {
     const dialog = dialogRef.current;
     const focusBeforeOpen = previousFocus.current;
+    const focusAfterClose = returnFocusRef?.current ?? focusBeforeOpen;
     const target = dialog?.querySelector<HTMLElement>('[data-autofocus], [autofocus]')
       ?? dialog?.querySelector<HTMLElement>(FOCUSABLE);
     target?.focus();
-    return () => focusBeforeOpen?.focus();
-  }, []);
+    return () => focusAfterClose?.focus();
+  }, [returnFocusRef]);
 
   function handleKeyDown(event: KeyboardEvent<HTMLElement>) {
     if (event.key === 'Escape') {
