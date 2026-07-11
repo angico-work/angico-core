@@ -232,6 +232,19 @@ describe('cookie session API', () => {
     expect(getSession()?.nome).toBe('Ana Atualizada');
   });
 
+  it('preserves the selected workspace while revalidating the same account', async () => {
+    const selected = { ...session, workspaceId: 'territorio-b' };
+    localStorage.setItem('angico.session', JSON.stringify(selected));
+    const serverSession = { ...session, workspaceId: 'workspace-a', csrfToken: 'csrf-refreshed' };
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response(200, serverSession)));
+
+    await expect(revalidateSession()).resolves.toEqual({
+      ...serverSession,
+      workspaceId: 'territorio-b'
+    });
+    expect(getSession()?.workspaceId).toBe('territorio-b');
+  });
+
   it('classifies a failed session revalidation as a network error', async () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('offline')));
 

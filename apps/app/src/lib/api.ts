@@ -138,14 +138,18 @@ export async function logout(): Promise<void> {
 }
 
 export async function revalidateSession(): Promise<AuthSession | null> {
-  if (!getSession()) return null;
+  const current = getSession();
+  if (!current) return null;
   try {
     const session = await requestJson<AuthSession>(
       apiUrl('/api/auth/me'),
       {},
       'Não foi possível validar a sessão.'
     );
-    return saveSession(session, true);
+    const validated = session.pessoaId === current.pessoaId
+      ? { ...session, workspaceId: current.workspaceId }
+      : session;
+    return saveSession(validated, true);
   } catch (error) {
     if (error instanceof ApiHttpError) return null;
     throw error;
