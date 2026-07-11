@@ -143,4 +143,28 @@ describe('SyncCenter', () => {
       'message-conflict-1', 'ana.sp', 'territorio-a'
     ));
   });
+
+  it('identifies queued evidence without offering message recovery', async () => {
+    vi.mocked(listOutbox).mockResolvedValue([{
+      ...conflict,
+      id: 'evidence-1',
+      operation: 'EVIDENCE_CREATE' as const,
+      body: {
+        workspaceId: 'territorio-a',
+        subjectType: 'OBSERVACAO' as const,
+        subjectId: 42,
+        title: 'Foto da nascente',
+        capturedAt: '2026-07-10T12:00:00Z',
+        clientMutationId: 'evidence-1',
+        deviceId: 'device-1'
+      },
+      status: 'QUEUED' as const
+    }]);
+
+    render(<SyncCenter ownerId="ana.sp" workspaceId="territorio-a" online onClose={vi.fn()} />);
+
+    expect(await screen.findByText('Foto da nascente')).toBeInTheDocument();
+    expect(screen.getByText('Evidência · Observação')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Retomar como rascunho/ })).not.toBeInTheDocument();
+  });
 });

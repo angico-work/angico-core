@@ -1,15 +1,19 @@
 import 'fake-indexeddb/auto';
 import { openDB } from 'idb';
 import { beforeEach, describe, expect, it } from 'vitest';
-import type { ObservacaoInput } from '../types';
+import type { EvidenciaInput, ObservacaoInput } from '../types';
 import {
   clearOfflineOwner,
+  closeOfflineDatabase,
   discardOutboxEntry,
   clearMessageDraft,
   cacheConversations,
   cacheRemoteMessages,
   enqueueMessage,
   enqueueObservation,
+  enqueueEvidence,
+  getEvidenceFile,
+  getLocalEvidence,
   getLocalMessage,
   getLocalObservation,
   getMessageAttachmentFile,
@@ -18,12 +22,14 @@ import {
   listLocalMessages,
   loadCachedConversations,
   loadMessageDraft,
+  loadSnapshot,
   listOutbox,
   markOutboxStatus,
   recordSyncAttempt,
   recoverMessageAsDraft,
   reviseObservation,
   saveMessageDraft,
+  saveSnapshot,
   resetOfflineDatabase
 } from './offlineStore';
 
@@ -32,6 +38,16 @@ const observation: ObservacaoInput = {
   categoria: 'Água e Saneamento',
   titulo: 'Nascente sem proteção',
   descricao: 'Registro feito durante a caminhada.'
+};
+
+const evidence: EvidenciaInput = {
+  workspaceId: 'territorio-a',
+  subjectType: 'OBSERVACAO',
+  subjectId: 42,
+  title: 'Foto da nascente',
+  description: 'Registro feito na visita de campo.',
+  capturedAt: '2026-07-10T12:00:00.000Z',
+  file: new File(['evidencia'], 'nascente.txt', { type: 'text/plain' })
 };
 
 describe('offline observation store', () => {
@@ -532,5 +548,157 @@ describe('offline observation store', () => {
       workspaceId: 'territorio-a', conversationId: 12, body: 'Depois da migração.', attachments: []
     }, 'ana.sp');
     expect(await listLocalMessages('ana.sp', 'territorio-a', 12)).toHaveLength(1);
+  });
+
+  it('persists evidence metadata, outbox entry and blob in one owner partition', async () => {
+    const queued = await enqueueEvidence(evidence, 'ana.sp');
+
+    expect(await listOutbox('ana.sp', 'territorio-a')).toEqual([
+      expect.objectContaining({
+        id: queued.clientMutationId,
+        operation: 'EVIDENCE_CREATE',
+        ownerId: 'ana.sp',
+        workspaceId: 'territorio-a',
+        body: expect.objectContaining({
+          subjectType: 'OBSERVACAO',
+          subjectId: 42,
+          clientMutationId: queued.clientMutationId,
+          deviceId: queued.deviceId
+        })
+      })
+    ]);
+    const local = await getLocalEvidence('ana.sp', 'territorio-a', queued.clientMutationId);
+    expect(local).toMatchObject({
+      clientMutationId: queued.clientMutationId,
+      syncStatus: 'QUEUED',
+      data: { title: 'Foto da nascente' }
+    });
+    expect(local?.data.file?.blobKey).toBeTruthy();
+    const stored = await getEvidenceFile(local!.data.file!.blobKey, 'ana.sp', 'territorio-a');
+    expect(stored).toMatchObject({ name: 'nascente.txt', type: 'text/plain', size: 9 });
+    expect(await stored?.text()).toBe('evidencia');
+    expect(await getEvidenceFile(local!.data.file!.blobKey, 'bia.sp', 'territorio-a')).toBeUndefined();
+  });
+
+  it('rejects evidence without a confirmed remote subject before writing locally', async () => {
+    await expect(enqueueEvidence({ ...evidence, subjectId: 0 }, 'ana.sp'))
+      .rejects.toThrow('confirmado');
+
+    expect(await listOutbox('ana.sp', 'territorio-a')).toEqual([]);
+  });
+
+  it('keeps evidence and its blob across a database connection reload', async () => {
+    const queued = await enqueueEvidence(evidence, 'ana.sp');
+    const blobKey = (await getLocalEvidence(
+      'ana.sp', 'territorio-a', queued.clientMutationId
+    ))!.data.file!.blobKey;
+
+    await closeOfflineDatabase();
+
+    expect(await getLocalEvidence('ana.sp', 'territorio-a', queued.clientMutationId))
+      .toMatchObject({ syncStatus: 'QUEUED' });
+    expect(await getEvidenceFile(blobKey, 'ana.sp', 'territorio-a'))
+      .toMatchObject({ name: 'nascente.txt', size: 9 });
+  });
+
+  it('partitions snapshots by owner, workspace, resource, query and root', async () => {
+    const identity = {
+      ownerId: 'ana.sp',
+      workspaceId: 'territorio-a',
+      resource: 'evidencias',
+      query: { subjectId: 42, subjectType: 'OBSERVACAO' },
+      root: 'OBSERVACAO:42',
+      contractVersion: 1
+    } as const;
+    await saveSnapshot(identity, [{ id: 7 }], new Date('2026-07-10T12:05:00.000Z'));
+
+    expect(await loadSnapshot(identity)).toMatchObject({
+      ownerId: 'ana.sp',
+      workspaceId: 'territorio-a',
+      resource: 'evidencias',
+      queryKey: 'subjectId=42&subjectType=OBSERVACAO',
+      rootKey: 'OBSERVACAO:42',
+      contractVersion: 1,
+      savedAt: '2026-07-10T12:05:00.000Z',
+      payload: [{ id: 7 }]
+    });
+    expect(await loadSnapshot({ ...identity, ownerId: 'bia.sp' })).toBeUndefined();
+    expect(await loadSnapshot({ ...identity, workspaceId: 'territorio-b' })).toBeUndefined();
+    expect(await loadSnapshot({ ...identity, resource: 'resultados' })).toBeUndefined();
+    expect(await loadSnapshot({ ...identity, query: { subjectId: 43 } })).toBeUndefined();
+    expect(await loadSnapshot({ ...identity, root: 'OBSERVACAO:43' })).toBeUndefined();
+    expect(await loadSnapshot({ ...identity, contractVersion: 2 })).toBeUndefined();
+  });
+
+  it('uses a canonical snapshot key regardless of query property order', async () => {
+    const base = {
+      ownerId: 'ana.sp', workspaceId: 'territorio-a', resource: 'evidencias', contractVersion: 1
+    };
+    await saveSnapshot({ ...base, query: { subjectType: 'OBSERVACAO', subjectId: 42 } }, ['confirmado']);
+
+    expect(await loadSnapshot({ ...base, query: { subjectId: 42, subjectType: 'OBSERVACAO' } }))
+      .toMatchObject({ payload: ['confirmado'] });
+  });
+
+  it('clears evidence and snapshots only for the explicitly confirmed owner', async () => {
+    const ana = await enqueueEvidence(evidence, 'ana.sp');
+    const bia = await enqueueEvidence(evidence, 'bia.sp');
+    await saveSnapshot({
+      ownerId: 'ana.sp', workspaceId: 'territorio-a', resource: 'evidencias', contractVersion: 1
+    }, [{ id: 1 }]);
+    await saveSnapshot({
+      ownerId: 'bia.sp', workspaceId: 'territorio-a', resource: 'evidencias', contractVersion: 1
+    }, [{ id: 2 }]);
+
+    await clearOfflineOwner('ana.sp', { discardPending: true });
+
+    expect(await getLocalEvidence('ana.sp', 'territorio-a', ana.clientMutationId)).toBeUndefined();
+    expect(await getLocalEvidence('bia.sp', 'territorio-a', bia.clientMutationId)).toBeDefined();
+    expect(await loadSnapshot({
+      ownerId: 'ana.sp', workspaceId: 'territorio-a', resource: 'evidencias', contractVersion: 1
+    })).toBeUndefined();
+    expect(await loadSnapshot({
+      ownerId: 'bia.sp', workspaceId: 'territorio-a', resource: 'evidencias', contractVersion: 1
+    })).toMatchObject({ payload: [{ id: 2 }] });
+  });
+
+  it('upgrades a version 3 database without losing pending data', async () => {
+    const legacy = await openDB('angico-operational-data', 3, {
+      upgrade(db) {
+        const outbox = db.createObjectStore('outbox', { keyPath: 'id' });
+        outbox.createIndex('by-owner-workspace', ['ownerId', 'workspaceId']);
+        outbox.createIndex('by-status', 'status');
+        const entities = db.createObjectStore('entities', { keyPath: 'key' });
+        entities.createIndex('by-owner-workspace', ['ownerId', 'workspaceId']);
+        const messages = db.createObjectStore('messages', { keyPath: 'key' });
+        messages.createIndex('by-owner-workspace', ['ownerId', 'workspaceId']);
+        messages.createIndex('by-owner-workspace-conversation', ['ownerId', 'workspaceId', 'conversationId']);
+        const conversations = db.createObjectStore('conversations', { keyPath: 'key' });
+        conversations.createIndex('by-owner-workspace', ['ownerId', 'workspaceId']);
+        const drafts = db.createObjectStore('drafts', { keyPath: 'key' });
+        drafts.createIndex('by-owner-workspace', ['ownerId', 'workspaceId']);
+        const blobs = db.createObjectStore('blobs', { keyPath: 'key' });
+        blobs.createIndex('by-owner-workspace', ['ownerId', 'workspaceId']);
+        const syncMeta = db.createObjectStore('syncMeta', { keyPath: 'key' });
+        syncMeta.createIndex('by-owner-workspace', ['ownerId', 'workspaceId']);
+      }
+    });
+    const now = '2026-07-10T12:00:00.000Z';
+    await legacy.add('outbox', {
+      id: 'v3-observation', operation: 'CREATE_OBSERVATION', ownerId: 'ana.sp',
+      workspaceId: 'territorio-a', localEntityKey: 'v3-local',
+      body: { ...observation, clientMutationId: 'v3-observation', occurredAt: now, deviceId: 'v3-device' },
+      status: 'QUEUED', attemptCount: 0, createdAt: now, updatedAt: now, nextAttemptAt: now
+    });
+    legacy.close();
+
+    expect(await listOutbox('ana.sp', 'territorio-a')).toEqual([
+      expect.objectContaining({ id: 'v3-observation' })
+    ]);
+    await closeOfflineDatabase();
+    const upgraded = await openDB('angico-operational-data');
+    expect(upgraded.version).toBe(4);
+    expect(Array.from(upgraded.objectStoreNames)).toEqual(expect.arrayContaining(['evidences', 'snapshots']));
+    upgraded.close();
   });
 });

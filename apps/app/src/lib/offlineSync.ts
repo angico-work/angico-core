@@ -1,9 +1,12 @@
-import type { Mensagem, Observacao, ObservacaoInput } from '../types';
+import type { Evidencia, EvidenciaInput, Mensagem, Observacao, ObservacaoInput } from '../types';
 import { apiFetch, apiUrl, getSession, hasFreshOfflineSession, isAuthenticated } from './api';
 import {
   claimOutboxEntry,
   enqueueMessage,
   enqueueObservation,
+  enqueueEvidence,
+  getEvidenceFile,
+  getLocalEvidence,
   getLocalMessage,
   getLocalObservation,
   getMessageAttachmentFile,
@@ -12,6 +15,7 @@ import {
   recordSyncAttempt,
   requeueManualOutbox,
   type MessageOutboxEntry,
+  type EvidenceOutboxEntry,
   type ObservationOutboxEntry,
   type OutboxEntry,
   type OutboxStatus
@@ -44,6 +48,12 @@ export interface CaptureMessageResult {
   clientMessageId: string;
   status: OutboxStatus;
   remote?: Mensagem;
+}
+
+export interface CaptureEvidenceResult {
+  clientMutationId: string;
+  status: OutboxStatus;
+  remote?: Evidencia;
 }
 
 interface SyncFilter {
@@ -119,15 +129,62 @@ async function sendMessage(entry: MessageOutboxEntry): Promise<Response> {
   });
 }
 
+async function sendEvidence(entry: EvidenceOutboxEntry): Promise<Response> {
+  const form = new FormData();
+  form.append('workspaceId', entry.body.workspaceId);
+  form.append('subjectType', entry.body.subjectType);
+  form.append('subjectId', String(entry.body.subjectId));
+  form.append('title', entry.body.title);
+  if (entry.body.description) form.append('description', entry.body.description);
+  form.append('capturedAt', entry.body.capturedAt);
+  form.append('deviceId', entry.body.deviceId);
+  form.append('clientMutationId', entry.body.clientMutationId);
+  if (entry.body.file) {
+    const file = await getEvidenceFile(entry.body.file.blobKey, entry.ownerId, entry.workspaceId);
+    if (!file) {
+      throw new PermanentMessageOperationError(`O arquivo “${entry.body.file.name}” não está mais neste aparelho.`);
+    }
+    form.append('file', file, file.name);
+  }
+  return apiFetch(apiUrl('/api/evidencias'), {
+    method: 'POST',
+    headers: { 'Idempotency-Key': entry.id },
+    body: form
+  });
+}
+
+function isConfirmedEvidence(value: unknown, entry: EvidenceOutboxEntry): value is Evidencia {
+  if (!value || typeof value !== 'object') return false;
+  const record = value as Partial<Evidencia>;
+  return Number.isSafeInteger(record.id)
+    && Number(record.id) > 0
+    && record.workspaceId === entry.workspaceId
+    && record.subjectType === entry.body.subjectType
+    && record.subjectId === entry.body.subjectId
+    && record.clientMutationId === entry.id;
+}
+
+async function parseRemote(entry: OutboxEntry, response: Response): Promise<Observacao | Mensagem | Evidencia> {
+  const remote = await response.json() as unknown;
+  if (entry.operation === 'EVIDENCE_CREATE') {
+    if (response.status !== 201 || !isConfirmedEvidence(remote, entry)) {
+      throw new Error('A confirmação da evidência é inválida.');
+    }
+  }
+  return remote as Observacao | Mensagem | Evidencia;
+}
+
 async function synchronizeEntry(entry: OutboxEntry, summary: SyncSummary): Promise<boolean> {
   summary.attempted += 1;
   await recordSyncAttempt(entry.ownerId, entry.workspaceId, false);
   try {
     const response = entry.operation === 'CREATE_OBSERVATION'
       ? await sendObservation(entry)
-      : await sendMessage(entry);
+      : entry.operation === 'MESSAGE_SEND'
+        ? await sendMessage(entry)
+        : await sendEvidence(entry);
     if (response.ok) {
-      const remote = await response.json() as Observacao | Mensagem;
+      const remote = await parseRemote(entry, response);
       await markOutboxStatus(entry.id, 'SYNCED', { remote });
       await recordSyncAttempt(entry.ownerId, entry.workspaceId, true);
       summary.synced += 1;
@@ -181,6 +238,10 @@ export async function syncPendingMessages(filter: SyncFilter = {}): Promise<Sync
   return syncPendingByOperation('MESSAGE_SEND', filter);
 }
 
+export async function syncPendingEvidence(filter: SyncFilter = {}): Promise<SyncSummary> {
+  return syncPendingByOperation('EVIDENCE_CREATE', filter);
+}
+
 export async function syncPendingOperations(filter: SyncFilter = {}): Promise<SyncSummary> {
   return syncPendingByOperation(undefined, filter);
 }
@@ -191,7 +252,11 @@ async function syncPendingByOperation(
 ): Promise<SyncSummary> {
   const ownerId = filter.ownerId ?? ownerFromSession();
   const summary = emptySummary();
-  if (!ownerId) return summary;
+  const activeOwner = ownerFromSession();
+  if (!ownerId || !activeOwner || ownerId !== activeOwner
+    || !isAuthenticated() || !hasFreshOfflineSession()) {
+    return summary;
+  }
 
   const entries = (await listOutbox(ownerId, filter.workspaceId))
     .filter((entry) => (!operation || entry.operation === operation)
@@ -215,6 +280,12 @@ export async function retryPendingMessages(ownerId: string, workspaceId: string)
   requireManualRetry(ownerId);
   await requeueManualOutbox(ownerId, workspaceId, 'MESSAGE_SEND');
   return syncPendingMessages({ ownerId, workspaceId });
+}
+
+export async function retryPendingEvidence(ownerId: string, workspaceId: string): Promise<SyncSummary> {
+  requireManualRetry(ownerId);
+  await requeueManualOutbox(ownerId, workspaceId, 'EVIDENCE_CREATE');
+  return syncPendingEvidence({ ownerId, workspaceId });
 }
 
 export async function retryPendingOperations(ownerId: string, workspaceId: string): Promise<SyncSummary> {
@@ -270,6 +341,27 @@ export async function captureMessage(input: {
   const local = await getLocalMessage(ownerId, input.workspaceId, queued.clientMessageId);
   return {
     clientMessageId: queued.clientMessageId,
+    status: local?.syncStatus ?? 'QUEUED',
+    remote: local?.remote
+  };
+}
+
+export async function captureEvidence(input: EvidenciaInput): Promise<CaptureEvidenceResult> {
+  const ownerId = ownerFromSession();
+  if (!ownerId || !isAuthenticated() || !hasFreshOfflineSession()) {
+    throw new Error('Entre novamente para registrar a evidência neste aparelho.');
+  }
+  const queued = await enqueueEvidence(input, ownerId);
+  if (typeof navigator === 'undefined' || navigator.onLine !== false) {
+    await syncPendingEvidence({
+      ownerId,
+      workspaceId: input.workspaceId,
+      entryId: queued.clientMutationId
+    });
+  }
+  const local = await getLocalEvidence(ownerId, input.workspaceId, queued.clientMutationId);
+  return {
+    clientMutationId: queued.clientMutationId,
     status: local?.syncStatus ?? 'QUEUED',
     remote: local?.remote
   };

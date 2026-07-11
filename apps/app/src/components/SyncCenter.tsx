@@ -5,6 +5,7 @@ import {
   listOutbox,
   recoverMessageAsDraft,
   reviseObservation,
+  type EvidenceOutboxEntry,
   type MessageOutboxEntry,
   type ObservationOutboxEntry,
   type OutboxEntry,
@@ -43,15 +44,30 @@ function isObservationEntry(entry: OutboxEntry): entry is ObservationOutboxEntry
   return entry.operation === 'CREATE_OBSERVATION';
 }
 
+function isMessageEntry(entry: OutboxEntry): entry is MessageOutboxEntry {
+  return entry.operation === 'MESSAGE_SEND';
+}
+
 function entryTitle(entry: OutboxEntry): string {
   if (isObservationEntry(entry)) return entry.body.titulo;
-  return entry.body.body || `Mensagem com ${entry.body.attachments.length} anexo(s)`;
+  if (isMessageEntry(entry)) {
+    return entry.body.body || `Mensagem com ${entry.body.attachments.length} anexo(s)`;
+  }
+  return entry.body.title;
 }
 
 function entryContext(entry: OutboxEntry): string {
   if (isObservationEntry(entry)) return entry.body.localizacao || entry.body.categoria;
-  const count = entry.body.attachments.length;
-  return count > 0 ? `Conversa · ${count} anexo${count === 1 ? '' : 's'}` : 'Conversa';
+  if (isMessageEntry(entry)) {
+    const count = entry.body.attachments.length;
+    return count > 0 ? `Conversa · ${count} anexo${count === 1 ? '' : 's'}` : 'Conversa';
+  }
+  const labels: Record<EvidenceOutboxEntry['body']['subjectType'], string> = {
+    OBSERVACAO: 'Observação',
+    ACAO: 'Ação',
+    RESULTADO: 'Resultado'
+  };
+  return `Evidência · ${labels[entry.body.subjectType]}`;
 }
 
 interface RevisionDraft {
@@ -252,7 +268,7 @@ export default function SyncCenter({ ownerId, workspaceId, online, onClose }: Pr
                         Revisar
                       </button>
                     )}
-                    {!isObservationEntry(entry) && REVIEWABLE.includes(entry.status) && (
+                    {isMessageEntry(entry) && REVIEWABLE.includes(entry.status) && (
                       <div className="sync-message-actions">
                         <button
                           type="button"

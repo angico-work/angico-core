@@ -1,9 +1,11 @@
 import { deleteDB, openDB, type DBSchema, type IDBPDatabase } from 'idb';
-import type { Conversa, Mensagem, Observacao, ObservacaoInput } from '../types';
+import type {
+  Conversa, Evidencia, EvidenciaInput, EvidenceSubjectType, Mensagem, Observacao, ObservacaoInput
+} from '../types';
 import { validateMessageFiles } from './messageFiles';
 
 const DATABASE_NAME = 'angico-operational-data';
-const DATABASE_VERSION = 3;
+const DATABASE_VERSION = 4;
 const DEVICE_KEY = 'angico.deviceId';
 
 export type OutboxStatus =
@@ -64,7 +66,31 @@ export interface MessageOutboxEntry extends OutboxBase {
   body: OfflineMessageInput;
 }
 
-export type OutboxEntry = ObservationOutboxEntry | MessageOutboxEntry;
+export interface LocalEvidenceFile {
+  blobKey: string;
+  name: string;
+  type: string;
+  size: number;
+}
+
+export interface OfflineEvidenceInput {
+  workspaceId: string;
+  subjectType: EvidenceSubjectType;
+  subjectId: number;
+  title: string;
+  description?: string;
+  capturedAt: string;
+  deviceId: string;
+  clientMutationId: string;
+  file?: LocalEvidenceFile;
+}
+
+export interface EvidenceOutboxEntry extends OutboxBase {
+  operation: 'EVIDENCE_CREATE';
+  body: OfflineEvidenceInput;
+}
+
+export type OutboxEntry = ObservationOutboxEntry | MessageOutboxEntry | EvidenceOutboxEntry;
 
 export interface LocalObservation {
   key: string;
@@ -99,6 +125,20 @@ interface BlobRecord {
   bytes: ArrayBuffer;
   name: string;
   type: string;
+  operationId?: string;
+  purpose?: 'EVIDENCE_FILE';
+  updatedAt: string;
+}
+
+export interface LocalEvidence {
+  key: string;
+  ownerId: string;
+  workspaceId: string;
+  clientMutationId: string;
+  data: OfflineEvidenceInput;
+  syncStatus: OutboxStatus;
+  lastError?: string;
+  remote?: Evidencia;
   updatedAt: string;
 }
 
@@ -140,6 +180,29 @@ export interface SyncMetadata {
   lastSuccessAt?: string;
 }
 
+type SnapshotQueryValue = string | number | boolean | null | undefined;
+
+export interface SnapshotIdentity {
+  ownerId: string;
+  workspaceId: string;
+  resource: string;
+  query?: Readonly<Record<string, SnapshotQueryValue>>;
+  root?: string;
+  contractVersion: number;
+}
+
+export interface SnapshotRecord<T = unknown> {
+  key: string;
+  ownerId: string;
+  workspaceId: string;
+  resource: string;
+  queryKey: string;
+  rootKey: string;
+  contractVersion: number;
+  savedAt: string;
+  payload: T;
+}
+
 interface OfflineSchema extends DBSchema {
   outbox: {
     key: string;
@@ -162,6 +225,13 @@ interface OfflineSchema extends DBSchema {
     indexes: {
       'by-owner-workspace': [string, string];
       'by-owner-workspace-conversation': [string, string, number];
+    };
+  };
+  evidences: {
+    key: string;
+    value: LocalEvidence;
+    indexes: {
+      'by-owner-workspace': [string, string];
     };
   };
   conversations: {
@@ -190,6 +260,14 @@ interface OfflineSchema extends DBSchema {
     value: SyncMetadata;
     indexes: {
       'by-owner-workspace': [string, string];
+    };
+  };
+  snapshots: {
+    key: string;
+    value: SnapshotRecord;
+    indexes: {
+      'by-owner-workspace': [string, string];
+      'by-owner-workspace-resource': [string, string, string];
     };
   };
 }
@@ -230,6 +308,15 @@ function database(): Promise<IDBPDatabase<OfflineSchema>> {
           const conversations = db.createObjectStore('conversations', { keyPath: 'key' });
           conversations.createIndex('by-owner-workspace', ['ownerId', 'workspaceId']);
         }
+        if (!db.objectStoreNames.contains('evidences')) {
+          const evidences = db.createObjectStore('evidences', { keyPath: 'key' });
+          evidences.createIndex('by-owner-workspace', ['ownerId', 'workspaceId']);
+        }
+        if (!db.objectStoreNames.contains('snapshots')) {
+          const snapshots = db.createObjectStore('snapshots', { keyPath: 'key' });
+          snapshots.createIndex('by-owner-workspace', ['ownerId', 'workspaceId']);
+          snapshots.createIndex('by-owner-workspace-resource', ['ownerId', 'workspaceId', 'resource']);
+        }
       }
     });
   }
@@ -267,6 +354,14 @@ function messageBlobKey(ownerId: string, workspaceId: string, id = randomId()): 
   return JSON.stringify(['message-blob', ownerId, workspaceId, id]);
 }
 
+function localEvidenceKey(ownerId: string, workspaceId: string, clientMutationId: string): string {
+  return JSON.stringify(['evidence', ownerId, workspaceId, clientMutationId]);
+}
+
+function evidenceBlobKey(ownerId: string, workspaceId: string, operationId: string): string {
+  return JSON.stringify(['evidence-blob', ownerId, workspaceId, operationId]);
+}
+
 function conversationCacheKey(ownerId: string, workspaceId: string): string {
   return JSON.stringify(['message-conversations', ownerId, workspaceId]);
 }
@@ -279,9 +374,36 @@ function syncMetadataKey(ownerId: string, workspaceId: string): string {
   return JSON.stringify([ownerId, workspaceId]);
 }
 
+function canonicalQuery(query: SnapshotIdentity['query']): string {
+  return Object.entries(query ?? {})
+    .filter((entry): entry is [string, Exclude<SnapshotQueryValue, undefined>] => entry[1] !== undefined)
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(String(value))}`)
+    .join('&');
+}
+
+function snapshotKey(identity: SnapshotIdentity): string {
+  return JSON.stringify([
+    'snapshot',
+    identity.ownerId,
+    identity.workspaceId,
+    identity.resource,
+    canonicalQuery(identity.query),
+    identity.root?.trim() ?? ''
+  ]);
+}
+
 function requirePartition(ownerId: string, workspaceId: string): void {
   if (!ownerId.trim() || !workspaceId.trim()) {
     throw new Error('Pessoa e workspace são obrigatórios para o registro offline.');
+  }
+}
+
+function requireSnapshotIdentity(identity: SnapshotIdentity): void {
+  requirePartition(identity.ownerId, identity.workspaceId);
+  if (!identity.resource.trim()) throw new Error('Recurso obrigatório para o snapshot.');
+  if (!Number.isSafeInteger(identity.contractVersion) || identity.contractVersion < 1) {
+    throw new Error('Versão de contrato inválida para o snapshot.');
   }
 }
 
@@ -335,6 +457,84 @@ export async function enqueueObservation(
     tx.objectStore('outbox').add(operation),
     tx.done
   ]);
+  announceChange();
+  return body;
+}
+
+export async function enqueueEvidence(
+  input: EvidenciaInput,
+  ownerId: string
+): Promise<OfflineEvidenceInput> {
+  requirePartition(ownerId, input.workspaceId);
+  if (!Number.isSafeInteger(input.subjectId) || input.subjectId < 1) {
+    throw new Error('A evidência precisa de um registro remoto confirmado.');
+  }
+  const title = input.title.trim();
+  if (!title) throw new Error('Título da evidência é obrigatório.');
+  if (input.file) validateMessageFiles([input.file]);
+
+  const clientMutationId = randomId();
+  const now = new Date().toISOString();
+  const fileKey = input.file
+    ? evidenceBlobKey(ownerId, input.workspaceId, clientMutationId)
+    : undefined;
+  const body: OfflineEvidenceInput = {
+    workspaceId: input.workspaceId,
+    subjectType: input.subjectType,
+    subjectId: input.subjectId,
+    title,
+    description: input.description?.trim() || undefined,
+    capturedAt: input.capturedAt ?? now,
+    deviceId: input.deviceId?.trim() || getDeviceId(),
+    clientMutationId,
+    file: input.file && fileKey ? {
+      blobKey: fileKey,
+      name: input.file.name,
+      type: input.file.type,
+      size: input.file.size
+    } : undefined
+  };
+  const key = localEvidenceKey(ownerId, input.workspaceId, clientMutationId);
+  const local: LocalEvidence = {
+    key,
+    ownerId,
+    workspaceId: input.workspaceId,
+    clientMutationId,
+    data: body,
+    syncStatus: 'QUEUED',
+    updatedAt: now
+  };
+  const operation: EvidenceOutboxEntry = {
+    id: clientMutationId,
+    operation: 'EVIDENCE_CREATE',
+    ownerId,
+    workspaceId: input.workspaceId,
+    localEntityKey: key,
+    body,
+    status: 'QUEUED',
+    attemptCount: 0,
+    createdAt: now,
+    updatedAt: now,
+    nextAttemptAt: now
+  };
+  const blob = input.file && fileKey ? {
+    key: fileKey,
+    ownerId,
+    workspaceId: input.workspaceId,
+    bytes: await input.file.arrayBuffer(),
+    name: input.file.name,
+    type: input.file.type,
+    operationId: clientMutationId,
+    purpose: 'EVIDENCE_FILE' as const,
+    updatedAt: now
+  } : undefined;
+
+  const db = await database();
+  const tx = db.transaction(['evidences', 'outbox', 'blobs'], 'readwrite');
+  await tx.objectStore('evidences').add(local);
+  await tx.objectStore('outbox').add(operation);
+  if (blob) await tx.objectStore('blobs').add(blob);
+  await tx.done;
   announceChange();
   return body;
 }
@@ -525,6 +725,25 @@ export async function getLocalMessage(
   return db.get('messages', localMessageKey(ownerId, workspaceId, clientMessageId));
 }
 
+export async function getLocalEvidence(
+  ownerId: string,
+  workspaceId: string,
+  clientMutationId: string
+): Promise<LocalEvidence | undefined> {
+  requirePartition(ownerId, workspaceId);
+  const db = await database();
+  return db.get('evidences', localEvidenceKey(ownerId, workspaceId, clientMutationId));
+}
+
+export async function listLocalEvidences(
+  ownerId: string,
+  workspaceId: string
+): Promise<LocalEvidence[]> {
+  requirePartition(ownerId, workspaceId);
+  const db = await database();
+  return db.getAllFromIndex('evidences', 'by-owner-workspace', [ownerId, workspaceId]);
+}
+
 export async function listLocalMessages(
   ownerId: string,
   workspaceId: string,
@@ -553,6 +772,24 @@ export async function getMessageAttachmentFile(
   return stored
     ? new File([stored.bytes], stored.name, { type: stored.type, lastModified: Date.parse(stored.updatedAt) })
     : undefined;
+}
+
+export async function getEvidenceFile(
+  blobKey: string,
+  ownerId: string,
+  workspaceId: string
+): Promise<File | undefined> {
+  requirePartition(ownerId, workspaceId);
+  const db = await database();
+  const stored = await db.get('blobs', blobKey);
+  if (!stored || stored.ownerId !== ownerId || stored.workspaceId !== workspaceId
+    || stored.purpose !== 'EVIDENCE_FILE') {
+    return undefined;
+  }
+  return new File([stored.bytes], stored.name, {
+    type: stored.type,
+    lastModified: Date.parse(stored.updatedAt)
+  });
 }
 
 export async function cacheConversations(
@@ -731,24 +968,30 @@ export async function clearOfflineOwner(
   }
 
   const db = await database();
-  const tx = db.transaction(['outbox', 'entities', 'messages', 'conversations', 'drafts', 'blobs', 'syncMeta'], 'readwrite');
-  const [outbox, entities, messages, conversations, drafts, blobs, syncMeta] = await Promise.all([
+  const tx = db.transaction([
+    'outbox', 'entities', 'messages', 'evidences', 'conversations', 'drafts', 'blobs', 'syncMeta', 'snapshots'
+  ], 'readwrite');
+  const [outbox, entities, messages, evidences, conversations, drafts, blobs, syncMeta, snapshots] = await Promise.all([
     tx.objectStore('outbox').getAll(),
     tx.objectStore('entities').getAll(),
     tx.objectStore('messages').getAll(),
+    tx.objectStore('evidences').getAll(),
     tx.objectStore('conversations').getAll(),
     tx.objectStore('drafts').getAll(),
     tx.objectStore('blobs').getAll(),
-    tx.objectStore('syncMeta').getAll()
+    tx.objectStore('syncMeta').getAll(),
+    tx.objectStore('snapshots').getAll()
   ]);
   await Promise.all([
     ...outbox.filter((entry) => entry.ownerId === ownerId).map((entry) => tx.objectStore('outbox').delete(entry.id)),
     ...entities.filter((entry) => entry.ownerId === ownerId).map((entry) => tx.objectStore('entities').delete(entry.key)),
     ...messages.filter((entry) => entry.ownerId === ownerId).map((entry) => tx.objectStore('messages').delete(entry.key)),
+    ...evidences.filter((entry) => entry.ownerId === ownerId).map((entry) => tx.objectStore('evidences').delete(entry.key)),
     ...conversations.filter((entry) => entry.ownerId === ownerId).map((entry) => tx.objectStore('conversations').delete(entry.key)),
     ...drafts.filter((entry) => entry.ownerId === ownerId).map((entry) => tx.objectStore('drafts').delete(entry.key)),
     ...blobs.filter((entry) => entry.ownerId === ownerId).map((entry) => tx.objectStore('blobs').delete(entry.key)),
-    ...syncMeta.filter((entry) => entry.ownerId === ownerId).map((entry) => tx.objectStore('syncMeta').delete(entry.key))
+    ...syncMeta.filter((entry) => entry.ownerId === ownerId).map((entry) => tx.objectStore('syncMeta').delete(entry.key)),
+    ...snapshots.filter((entry) => entry.ownerId === ownerId).map((entry) => tx.objectStore('snapshots').delete(entry.key))
   ]);
   await tx.done;
   announceChange();
@@ -786,10 +1029,10 @@ export async function claimOutboxEntry(id: string, now = new Date()): Promise<Ou
 export async function markOutboxStatus(
   id: string,
   status: OutboxStatus,
-  options: { message?: string; nextAttemptAt?: string; remote?: Observacao | Mensagem } = {}
+  options: { message?: string; nextAttemptAt?: string; remote?: Observacao | Mensagem | Evidencia } = {}
 ): Promise<void> {
   const db = await database();
-  const tx = db.transaction(['outbox', 'entities', 'messages', 'blobs'], 'readwrite');
+  const tx = db.transaction(['outbox', 'entities', 'messages', 'evidences', 'blobs'], 'readwrite');
   const outboxStore = tx.objectStore('outbox');
   const entry = await outboxStore.get(id);
   if (!entry) {
@@ -816,7 +1059,7 @@ export async function markOutboxStatus(
         updatedAt: now
       });
     }
-  } else {
+  } else if (entry.operation === 'MESSAGE_SEND') {
     const messageStore = tx.objectStore('messages');
     const local = await messageStore.get(entry.localEntityKey);
     if (local) {
@@ -832,6 +1075,22 @@ export async function markOutboxStatus(
         await Promise.all(local.attachments.map((attachment) => (
           tx.objectStore('blobs').delete(attachment.blobKey)
         )));
+      }
+    }
+  } else {
+    const evidenceStore = tx.objectStore('evidences');
+    const local = await evidenceStore.get(entry.localEntityKey);
+    if (local) {
+      const remote = options.remote as Evidencia | undefined;
+      await evidenceStore.put({
+        ...local,
+        syncStatus: status,
+        lastError: options.message,
+        remote: remote ?? local.remote,
+        updatedAt: now
+      });
+      if ((status === 'SYNCED' && remote) || status === 'DISCARDED') {
+        if (local.data.file) await tx.objectStore('blobs').delete(local.data.file.blobKey);
       }
     }
   }
@@ -1046,11 +1305,46 @@ export async function getSyncMetadata(
   return db.get('syncMeta', syncMetadataKey(ownerId, workspaceId));
 }
 
+export async function saveSnapshot<T>(
+  identity: SnapshotIdentity,
+  payload: T,
+  savedAt = new Date()
+): Promise<SnapshotRecord<T>> {
+  requireSnapshotIdentity(identity);
+  const record: SnapshotRecord<T> = {
+    key: snapshotKey(identity),
+    ownerId: identity.ownerId,
+    workspaceId: identity.workspaceId,
+    resource: identity.resource.trim(),
+    queryKey: canonicalQuery(identity.query),
+    rootKey: identity.root?.trim() ?? '',
+    contractVersion: identity.contractVersion,
+    savedAt: savedAt.toISOString(),
+    payload
+  };
+  const db = await database();
+  await db.put('snapshots', record as SnapshotRecord);
+  return record;
+}
+
+export async function loadSnapshot<T>(
+  identity: SnapshotIdentity
+): Promise<SnapshotRecord<T> | undefined> {
+  requireSnapshotIdentity(identity);
+  const db = await database();
+  const record = await db.get('snapshots', snapshotKey(identity));
+  if (!record || record.contractVersion !== identity.contractVersion) return undefined;
+  return record as SnapshotRecord<T>;
+}
+
+export async function closeOfflineDatabase(): Promise<void> {
+  if (!databasePromise) return;
+  const db = await databasePromise;
+  db.close();
+  databasePromise = undefined;
+}
+
 export async function resetOfflineDatabase(): Promise<void> {
-  if (databasePromise) {
-    const db = await databasePromise;
-    db.close();
-    databasePromise = undefined;
-  }
+  await closeOfflineDatabase();
   await deleteDB(DATABASE_NAME);
 }

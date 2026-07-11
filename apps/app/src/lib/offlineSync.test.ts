@@ -1,10 +1,13 @@
 import 'fake-indexeddb/auto';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { ObservacaoInput } from '../types';
+import type { EvidenciaInput, ObservacaoInput } from '../types';
 import { getSession } from './api';
 import {
   enqueueObservation,
   enqueueMessage,
+  enqueueEvidence,
+  getEvidenceFile,
+  getLocalEvidence,
   getLocalMessage,
   getMessageAttachmentFile,
   getLocalObservation,
@@ -13,9 +16,11 @@ import {
 } from './offlineStore';
 import {
   captureMessage,
+  retryPendingEvidence,
   retryPendingMessages,
   retryPendingObservations,
   syncPendingMessages,
+  syncPendingEvidence,
   syncPendingObservations
 } from './offlineSync';
 
@@ -36,6 +41,16 @@ const observation: ObservacaoInput = {
   titulo: 'Nascente sem proteção'
 };
 
+const evidence: EvidenciaInput = {
+  workspaceId: 'territorio-a',
+  subjectType: 'OBSERVACAO',
+  subjectId: 42,
+  title: 'Foto da nascente',
+  description: 'Registro feito na visita.',
+  capturedAt: '2026-07-10T12:00:00.000Z',
+  file: new File(['evidencia'], 'nascente.txt', { type: 'text/plain' })
+};
+
 function response(status: number, body: unknown): Response {
   return {
     ok: status >= 200 && status < 300,
@@ -49,6 +64,7 @@ describe('offline synchronization', () => {
     await resetOfflineDatabase();
     localStorage.clear();
     localStorage.setItem('angico.session', JSON.stringify(session));
+    localStorage.setItem('angico.session.validatedAt', new Date().toISOString());
     vi.restoreAllMocks();
   });
 
@@ -339,5 +355,136 @@ describe('offline synchronization', () => {
     });
     expect((await listOutbox('ana.sp', 'territorio-a')).find((entry) => entry.operation === 'CREATE_OBSERVATION'))
       .toMatchObject({ status: 'RETRYABLE_ERROR' });
+  });
+
+  it('uploads queued evidence with stable idempotency metadata and releases the confirmed blob', async () => {
+    const queued = await enqueueEvidence(evidence, 'ana.sp');
+    const blobKey = (await getLocalEvidence(
+      'ana.sp', 'territorio-a', queued.clientMutationId
+    ))!.data.file!.blobKey;
+    const remote = {
+      id: 71,
+      workspaceId: 'territorio-a',
+      subjectType: 'OBSERVACAO',
+      subjectId: 42,
+      title: queued.title,
+      description: queued.description ?? null,
+      originalFilename: 'nascente.txt',
+      contentType: 'text/plain',
+      sizeBytes: 9,
+      sha256: 'hash',
+      capturedAt: queued.capturedAt,
+      recordedAt: '2026-07-10T12:01:00.000Z',
+      actorId: 'ana.sp',
+      deviceId: queued.deviceId,
+      clientMutationId: queued.clientMutationId,
+      hasFile: true
+    };
+    const fetchMock = vi.fn().mockResolvedValue(response(201, remote));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const summary = await syncPendingEvidence({ ownerId: 'ana.sp', workspaceId: 'territorio-a' });
+
+    expect(summary).toMatchObject({ attempted: 1, synced: 1 });
+    expect(fetchMock).toHaveBeenCalledWith('/api/evidencias', expect.objectContaining({
+      method: 'POST',
+      credentials: 'include',
+      headers: expect.objectContaining({
+        'Idempotency-Key': queued.clientMutationId,
+        'X-CSRF-Token': 'csrf-secret'
+      })
+    }));
+    const form = fetchMock.mock.calls[0][1].body as FormData;
+    expect(form.get('workspaceId')).toBe('territorio-a');
+    expect(form.get('subjectType')).toBe('OBSERVACAO');
+    expect(form.get('subjectId')).toBe('42');
+    expect(form.get('clientMutationId')).toBe(queued.clientMutationId);
+    expect(form.get('deviceId')).toBe(queued.deviceId);
+    expect((form.get('file') as File).name).toBe('nascente.txt');
+    expect(await (form.get('file') as File).text()).toBe('evidencia');
+    expect(await getLocalEvidence('ana.sp', 'territorio-a', queued.clientMutationId))
+      .toMatchObject({ syncStatus: 'SYNCED', remote: { id: 71 } });
+    expect(await getEvidenceFile(blobKey, 'ana.sp', 'territorio-a')).toBeUndefined();
+  });
+
+  it('retains the evidence blob and fixed mutation identity across a transient retry', async () => {
+    const queued = await enqueueEvidence(evidence, 'ana.sp');
+    const blobKey = (await getLocalEvidence(
+      'ana.sp', 'territorio-a', queued.clientMutationId
+    ))!.data.file!.blobKey;
+    const remote = {
+      id: 72, workspaceId: 'territorio-a', subjectType: 'OBSERVACAO', subjectId: 42,
+      title: queued.title, description: queued.description ?? null, originalFilename: 'nascente.txt',
+      contentType: 'text/plain', sizeBytes: 9, sha256: 'hash', capturedAt: queued.capturedAt,
+      recordedAt: '2026-07-10T12:02:00.000Z', actorId: 'ana.sp', deviceId: queued.deviceId,
+      clientMutationId: queued.clientMutationId, hasFile: true
+    };
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(response(503, { detail: 'indisponível' }))
+      .mockResolvedValueOnce(response(201, remote));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await syncPendingEvidence({ ownerId: 'ana.sp', workspaceId: 'territorio-a' });
+    expect(await getEvidenceFile(blobKey, 'ana.sp', 'territorio-a'))
+      .toMatchObject({ name: 'nascente.txt', size: 9 });
+    await retryPendingEvidence('ana.sp', 'territorio-a');
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const first = fetchMock.mock.calls[0][1];
+    const second = fetchMock.mock.calls[1][1];
+    expect(first.headers['Idempotency-Key']).toBe(queued.clientMutationId);
+    expect(second.headers['Idempotency-Key']).toBe(queued.clientMutationId);
+    expect((first.body as FormData).get('clientMutationId')).toBe(queued.clientMutationId);
+    expect((second.body as FormData).get('clientMutationId')).toBe(queued.clientMutationId);
+    expect(await getEvidenceFile(blobKey, 'ana.sp', 'territorio-a')).toBeUndefined();
+  });
+
+  it('does not confirm evidence or remove its blob when a 201 response is malformed', async () => {
+    const queued = await enqueueEvidence(evidence, 'ana.sp');
+    const blobKey = (await getLocalEvidence(
+      'ana.sp', 'territorio-a', queued.clientMutationId
+    ))!.data.file!.blobKey;
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      status: 201,
+      json: vi.fn().mockRejectedValue(new SyntaxError('invalid json'))
+    } as unknown as Response));
+
+    const summary = await syncPendingEvidence({ ownerId: 'ana.sp', workspaceId: 'territorio-a' });
+
+    expect(summary.retryable).toBe(1);
+    expect(await getLocalEvidence('ana.sp', 'territorio-a', queued.clientMutationId))
+      .toMatchObject({ syncStatus: 'RETRYABLE_ERROR' });
+    expect(await getEvidenceFile(blobKey, 'ana.sp', 'territorio-a')).toBeDefined();
+  });
+
+  it('blocks synchronization for an expired session without deleting pending evidence', async () => {
+    const queued = await enqueueEvidence(evidence, 'ana.sp');
+    localStorage.setItem('angico.session', JSON.stringify({
+      ...session, expiresAt: '2020-01-01T00:00:00.000Z'
+    }));
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    const summary = await syncPendingEvidence({ ownerId: 'ana.sp', workspaceId: 'territorio-a' });
+
+    expect(summary.attempted).toBe(0);
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(await getLocalEvidence('ana.sp', 'territorio-a', queued.clientMutationId))
+      .toMatchObject({ syncStatus: 'QUEUED' });
+  });
+
+  it('blocks synchronization when the requested owner differs from the active session', async () => {
+    const queued = await enqueueEvidence(evidence, 'ana.sp');
+    localStorage.setItem('angico.session', JSON.stringify({ ...session, pessoaId: 8, angicoId: 'bia.sp' }));
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    const summary = await syncPendingEvidence({ ownerId: 'ana.sp', workspaceId: 'territorio-a' });
+
+    expect(summary.attempted).toBe(0);
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(await getLocalEvidence('ana.sp', 'territorio-a', queued.clientMutationId))
+      .toMatchObject({ syncStatus: 'QUEUED' });
   });
 });
