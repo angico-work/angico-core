@@ -1,14 +1,6 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test } from '@playwright/test';
 
-type Rectangle = { top: number; right: number; bottom: number; left: number };
-
-const rectanglesIntersect = (first: Rectangle, second: Rectangle) =>
-  first.left < second.right &&
-  first.right > second.left &&
-  first.top < second.bottom &&
-  first.bottom > second.top;
-
 test('keeps the public journey responsive, keyboard-accessible and quiet', async ({ page, baseURL }) => {
   const errors: string[] = [];
   const unexpectedRequestUrls: string[] = [];
@@ -42,7 +34,7 @@ test('keeps the public journey responsive, keyboard-accessible and quiet', async
   await expect(
     page.getByRole('link', { name: 'Quero levar o Angico ao meu território' })
   ).toHaveAttribute('href', '#contato');
-  await expect(page.getByText('Demonstração visual — sem dados operacionais')).toBeVisible();
+  await expect(page.getByText('Atlas demonstrativo — sem dados operacionais')).toBeVisible();
 
   const overflowingElements = await page.locator('body *').evaluateAll((elements) => elements.flatMap((element) => {
     const rect = element.getBoundingClientRect();
@@ -55,7 +47,7 @@ test('keeps the public journey responsive, keyboard-accessible and quiet', async
   );
 
   expect(await page.evaluate(() => matchMedia('(prefers-reduced-motion: reduce)').matches)).toBe(true);
-  await expect(page.locator('.territory-map__layer--base')).toHaveCSS('animation-name', 'none');
+  await expect(page.locator('.map-base')).toHaveCSS('animation-name', 'none');
   await expect(page.locator('.footer-leaf')).toHaveCSS('animation-name', 'none');
   expect(await page.evaluate(() => getComputedStyle(document.documentElement).scrollBehavior)).toBe('auto');
 
@@ -108,37 +100,37 @@ test('plays the map once and loops only the leaf when motion is allowed', async 
   await page.emulateMedia({ reducedMotion: 'no-preference' });
   await page.goto('/');
 
-  await expect(page.locator('.territory-map__layer--base')).toHaveCSS(
+  await expect(page.locator('.map-base')).toHaveCSS(
     'animation-name',
-    'map-base-reveal'
+    'atlas-in'
   );
-  await expect(page.locator('.territory-map__layer--base')).toHaveCSS(
+  await expect(page.locator('.map-base')).toHaveCSS(
     'animation-iteration-count',
     '1'
   );
-  await expect(page.locator('.territory-map__layer--details')).toHaveCSS(
+  await expect(page.locator('.map-details')).toHaveCSS(
     'animation-delay',
     '0.8s'
   );
-  await expect(page.locator('.territory-map__marker--observation')).toHaveCSS(
+  await expect(page.locator('.a-marker--observation')).toHaveCSS(
     'animation-delay',
     '1.8s'
   );
-  await expect(page.locator('.territory-map__marker--action')).toHaveCSS(
+  await expect(page.locator('.a-marker--action')).toHaveCSS(
     'animation-delay',
     '2.6s'
   );
-  await expect(page.locator('.territory-map__marker--evidence')).toHaveCSS(
+  await expect(page.locator('.a-marker--evidence')).toHaveCSS(
     'animation-delay',
     '3.4s'
   );
-  await expect(page.locator('.territory-map__marker--result')).toHaveCSS(
+  await expect(page.locator('.a-marker--result')).toHaveCSS(
     'animation-delay',
     '4.2s'
   );
-  await expect(page.locator('.territory-map__route--one')).toHaveCSS(
+  await expect(page.locator('.a-route--one')).toHaveCSS(
     'animation-name',
-    'trace-route-draw'
+    'route-in'
   );
   await expect(page.locator('.footer-leaf')).toHaveCSS('animation-name', 'leaf-fall');
   await expect(page.locator('.footer-leaf')).toHaveCSS('animation-duration', '9s');
@@ -165,93 +157,39 @@ test('keeps the animated leaf below the footer before restarting', async ({ page
   expect(geometry.leafTop).toBeGreaterThanOrEqual(geometry.footerBottom);
 });
 
-test('keeps all route markers clear of visible copy and trace', async ({ page }, testInfo) => {
+test('fully frames the atlas in the short desktop viewport', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'desktop-short');
   await page.goto('/');
 
-  const markers = page.locator('.territory-map__marker');
-  await expect(markers).toHaveCount(4);
-  for (let index = 0; index < 4; index += 1) await expect(markers.nth(index)).toBeVisible();
-
-  const obstacles = await page.locator('.territory-hero').evaluate((hero) => {
-    const toRectangle = (rect: DOMRect) => {
-      const { top, right, bottom, left } = rect;
-      return { top, right, bottom, left };
+  const geometry = await page.locator('.hero').evaluate((hero) => {
+    const rect = (selector: string) => {
+      const element = hero.querySelector<HTMLElement>(selector);
+      if (!element) throw new Error(`Missing ${selector}`);
+      const { top, right, bottom, left, width, height } = element.getBoundingClientRect();
+      return { top, right, bottom, left, width, height };
     };
-    const copy = hero.querySelector<HTMLElement>('.territory-hero__copy');
-    const trace = hero.querySelector<HTMLElement>('.territory-trace');
-    const demoLabel = hero.querySelector<HTMLElement>('.territory-map__demo-label');
-    const map = hero.querySelector<SVGElement>('.territory-map__svg');
-    if (!copy || !trace || !demoLabel || !map) {
-      throw new Error('Expected hero copy, trace, demonstration label, and map.');
-    }
 
-    const copyRects = Array.from(copy.children).flatMap((element) => {
-      const styles = getComputedStyle(element);
-      if (styles.display === 'none' || styles.visibility === 'hidden') return [];
-      if (element.matches('a, button')) {
-        return [{ ...toRectangle(element.getBoundingClientRect()), label: element.tagName.toLowerCase() }];
-      }
-      const range = document.createRange();
-      range.selectNodeContents(element);
-      return Array.from(range.getClientRects())
-        .filter(({ width, height }) => width > 0 && height > 0)
-        .map((rect, index) => ({
-          ...toRectangle(rect),
-          label: element.tagName.toLowerCase() + '-line-' + String(index + 1)
-        }));
-    });
     return {
-      copyRects,
-      traceRect: { ...toRectangle(trace.getBoundingClientRect()), label: 'trace' },
-      demoLabelRect: { ...toRectangle(demoLabel.getBoundingClientRect()), label: 'demo-label' },
-      mapRect: toRectangle(map.getBoundingClientRect()),
-      viewport: { width: window.innerWidth, height: window.innerHeight }
+      hero: rect('.h-layout'),
+      copy: rect('.h-copy'),
+      atlas: rect('.atlas'),
+      plate: rect('.a-plate'),
+      svg: rect('.a-svg'),
+      legend: rect('.a-legend'),
+      trace: rect('.trace'),
+      cta: rect('.primary-action'),
+      viewportHeight: window.innerHeight
     };
   });
-  const markerRects = await markers.evaluateAll((markerElements) =>
-    markerElements.map((marker) => {
-      const { top, right, bottom, left, width, height } = marker.getBoundingClientRect();
-      return { top, right, bottom, left, width, height, label: marker.getAttribute('class') ?? 'marker' };
-    })
-  );
 
-  expect(obstacles.copyRects.length).toBeGreaterThan(0);
-  expect(markerRects).toHaveLength(4);
-  for (const markerRect of markerRects) {
-    expect(markerRect.width).toBeGreaterThan(0);
-    expect(markerRect.height).toBeGreaterThan(0);
-    expect(markerRect.left).toBeGreaterThanOrEqual(0);
-    expect(markerRect.right).toBeLessThanOrEqual(obstacles.viewport.width);
-    expect(markerRect.top).toBeGreaterThanOrEqual(0);
-    expect(markerRect.bottom).toBeLessThanOrEqual(obstacles.viewport.height);
-    for (const obstacle of [
-      ...obstacles.copyRects,
-      obstacles.traceRect,
-      obstacles.demoLabelRect
-    ]) {
-      expect(
-        rectanglesIntersect(markerRect, obstacle),
-        markerRect.label + ' intersects ' + obstacle.label
-      ).toBe(false);
-    }
-  }
-  if (testInfo.project.name.startsWith('mobile-') || testInfo.project.name === 'boundary-720') {
-    expect(obstacles.traceRect.top).toBeGreaterThanOrEqual(obstacles.mapRect.bottom);
-  }
-});
-
-test('keeps mid-width hero copy and trace in separate regions', async ({ page }, testInfo) => {
-  test.skip(!['tablet-768', 'tablet-834', 'desktop-1024'].includes(testInfo.project.name));
-  await page.goto('/');
-
-  const heroCopy = await page.locator('.territory-hero__copy').evaluate((copy) => {
-    const { top, right, bottom, left } = copy.getBoundingClientRect();
-    return { top, right, bottom, left };
-  });
-  const trace = await page.locator('.territory-trace').evaluate((element) => {
-    const { top, right, bottom, left } = element.getBoundingClientRect();
-    return { top, right, bottom, left };
-  });
-  expect(rectanglesIntersect(heroCopy, trace)).toBe(false);
-  expect(heroCopy.right).toBeLessThanOrEqual(trace.left);
+  await expect(page.locator('.a-svg')).toHaveAttribute('preserveAspectRatio', 'xMidYMid meet');
+  expect(geometry.copy.right).toBeLessThanOrEqual(geometry.atlas.left);
+  expect(geometry.svg.left).toBeGreaterThanOrEqual(geometry.plate.left);
+  expect(geometry.svg.right).toBeLessThanOrEqual(geometry.plate.right);
+  expect(geometry.svg.top).toBeGreaterThanOrEqual(geometry.plate.top);
+  expect(geometry.svg.bottom).toBeLessThanOrEqual(geometry.plate.bottom);
+  expect(geometry.plate.bottom).toBeLessThanOrEqual(geometry.legend.top);
+  expect(geometry.legend.bottom).toBeLessThanOrEqual(geometry.trace.top);
+  expect(geometry.cta.bottom).toBeLessThanOrEqual(geometry.viewportHeight);
+  expect(geometry.trace.bottom).toBeLessThanOrEqual(geometry.viewportHeight);
 });

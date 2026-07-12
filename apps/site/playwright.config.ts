@@ -9,7 +9,8 @@ const viewports = [
   { name: 'tablet-834', width: 834, height: 1112 },
   { name: 'desktop-1024', width: 1024, height: 1024 },
   { name: 'desktop-1100', width: 1100, height: 1000 },
-  { name: 'desktop', width: 1440, height: 1000 }
+  { name: 'desktop', width: 1440, height: 1000 },
+  { name: 'desktop-short', width: 1538, height: 789 }
 ];
 
 export default defineConfig({

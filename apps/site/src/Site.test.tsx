@@ -30,7 +30,7 @@ describe('Site', () => {
       'href',
       urls.appUrl
     );
-    expect(screen.getByText('Demonstração visual — sem dados operacionais')).toBeInTheDocument();
+    expect(screen.getByText('Atlas demonstrativo — sem dados operacionais')).toBeInTheDocument();
   });
 
   it('renders the versioned Angico identity assets', () => {
