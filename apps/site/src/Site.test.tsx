@@ -57,6 +57,23 @@ describe('Site', () => {
     expect(screen.queryByText('Observação ou potencialidade')).not.toBeInTheDocument();
   });
 
+  it('places public climate context after the demonstrative atlas and before product explanation', () => {
+    render(<Site {...urls} />);
+
+    const hero = document.querySelector('#inicio');
+    const context = document.querySelector('#contexto-climatico');
+    const why = document.querySelector('#unico');
+    expect(hero).not.toBeNull();
+    expect(context).not.toBeNull();
+    expect(why).not.toBeNull();
+    if (!hero || !context || !why) {
+      throw new Error('Expected hero, climate context and product explanation.');
+    }
+    expect(hero.compareDocumentPosition(context) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(context.compareDocumentPosition(why) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getByText(/não representam resultados produzidos pelo Angico/i)).toBeInTheDocument();
+  });
+
   it('does not render implicit destinations when public URLs are absent', () => {
     render(<Site appUrl="" contactApiUrl="" />);
 

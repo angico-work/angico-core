@@ -1,5 +1,6 @@
 import AnimatedLeafFooter from './components/AnimatedLeafFooter';
 import ContactSection from './components/ContactSection';
+import EnvironmentalContext from './components/EnvironmentalContext';
 import TerritoryHero from './components/TerritoryHero';
 import WhyAngico from './components/WhyAngico';
 
@@ -39,6 +40,7 @@ export default function Site({ appUrl, contactApiUrl }: SiteProps) {
 
       <main id="conteudo">
         <TerritoryHero />
+        <EnvironmentalContext />
         <WhyAngico />
         <ContactSection contactApiUrl={contactApiUrl} />
       </main>
