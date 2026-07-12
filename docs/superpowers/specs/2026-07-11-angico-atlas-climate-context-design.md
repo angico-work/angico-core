@@ -2,7 +2,7 @@
 
 **Data:** 2026-07-11
 
-**Status:** design aprovado; aguardando revisão do documento
+**Status:** design aprovado
 
 **Escopo:** `apps/site`
 
@@ -156,13 +156,19 @@ Entre 721 e 1099 px:
 Até 720 px, a mesma ordem permanece e todos os elementos usam fluxo normal. O SVG não será
 reposicionado por valores absolutos dependentes da largura da tela.
 
+Como rótulos internos de um `viewBox` de 1200 unidades ficariam ilegíveis em uma prancha de
+288 px, até 720 px eles dão lugar a uma linha externa legível de sinais locais. O resumo
+acessível continua completo; geometria, padrões e marcadores permanecem visíveis no SVG.
+
 ## TerritoryAtlas
 
 ### Enquadramento
 
 - `viewBox="0 0 1200 760"` pode ser preservado.
 - `preserveAspectRatio="xMidYMid meet"` será explícito.
-- A prancha usará `aspect-ratio: 1200 / 760`.
+- A prancha usará `aspect-ratio: 1200 / 760` como base. Até 480 px, poderá ganhar altura
+  mínima para formar bandas de marginalia legíveis; o SVG conserva sua proporção integral
+  com `meet`, sem esticar ou cortar o mapa.
 - Todo conteúdo cartográfico terá uma margem segura interna.
 - O SVG não usará `object-fit: cover`, `slice` ou transformações para compensar cortes.
 - A moldura pode esconder apenas ornamentação externa; nenhum rótulo, marcador, rota ou
@@ -236,6 +242,7 @@ A seção recupera a hierarquia do slide “O problema em números”, sem copia
 
 ### Indicador 1 — deslocamento climático
 
+- Título editorial: **Exílio climático**.
 - Código: `DESLOCAMENTO / RS / 2024`.
 - Valor visual: **775 mil**.
 - Unidade: **deslocamentos internos**.
@@ -245,12 +252,13 @@ A seção recupera a hierarquia do slide “O problema em números”, sem copia
 - Fonte: **IDMC — Global Report on Internal Displacement 2025**.
 - URL:
   `https://www.internal-displacement.org/spotlights/brazil-floods-in-rio-grande-do-sul-trigger-record-displacement/`
-- Ressalva: “deslocamentos” contabiliza movimentos, não necessariamente pessoas únicas.
+- Ressalva: **“Deslocamentos” contabiliza movimentos, não necessariamente pessoas únicas.**
 - A expressão editorial “exílio climático” pode introduzir o tema, mas a unidade técnica
-  visível será “deslocamentos internos por desastre”.
+  visível será “deslocamentos internos”.
 
 ### Indicador 2 — El Niño e seca
 
+- Título editorial: **El Niño e seca**.
 - Código: `SECA / BRASIL / 2023–2024`.
 - Valor visual: **60%**.
 - Unidade: **do território brasileiro**.
@@ -259,13 +267,16 @@ A seção recupera a hierarquia do slide “O problema em números”, sem copia
   do Atlântico Tropical Norte.**
 - No território: **falta de água, solo seco, calor e áreas produtivas sob pressão.**
 - Fontes:
-  - `https://www.gov.br/cemaden/pt-br/assuntos/noticias-cemaden/entre-2023-e-2024-cerca-de-60-do-territorio-brasileiro-foi-afetado-seca-extensa-e-intensa-aponta-nota-tecnica-do-cemaden`
-  - `https://www.gov.br/cemaden/pt-br/assuntos/noticias-cemaden/cemaden-analisa-secas-recentes-no-brasil-e-apresenta-diagnostico-e-projecoes-como-subsidio-para-a-cop-16`
-- Ressalva: não atribuir os 60% exclusivamente ao El Niño; o texto preserva a combinação de
-  condicionantes descrita pelo Cemaden.
+  - **Cemaden/MCTI — extensão da seca em 2023–2024**:
+    `https://www.gov.br/cemaden/pt-br/assuntos/noticias-cemaden/entre-2023-e-2024-cerca-de-60-do-territorio-brasileiro-foi-afetado-seca-extensa-e-intensa-aponta-nota-tecnica-do-cemaden`
+  - **Cemaden/MCTI — diagnóstico das secas e condicionantes climáticos**:
+    `https://www.gov.br/cemaden/pt-br/assuntos/noticias-cemaden/cemaden-analisa-secas-recentes-no-brasil-e-apresenta-diagnostico-e-projecoes-como-subsidio-para-a-cop-16`
+- Ressalva: **Os 60% não são atribuídos exclusivamente ao El Niño; o Cemaden também aponta
+  o aquecimento do Atlântico Tropical Norte.**
 
 ### Indicador 3 — calor sem sombra
 
+- Título editorial: **Calor sem sombra**.
 - Código: `ARBORIZAÇÃO / BRASIL URBANO / CENSO 2022`.
 - Valor visual: **58,7 mi**.
 - Unidade: **pessoas em vias sem arborização**.
@@ -274,9 +285,12 @@ A seção recupera a hierarquia do slide “O problema em números”, sem copia
 - No território: **pontos de calor, falta de sombra e caminhos hostis para caminhar.**
 - Fonte: **IBGE — Características Urbanísticas do Entorno dos Domicílios**.
 - URL: `https://educa.ibge.gov.br/criancas/voce-sabia/22715-entorno-dos-domicilios.html`
+- Ressalva: **O indicador descreve o entorno da via do domicílio; não mede temperatura,
+  cobertura de copa ou qualidade da arborização.**
 
 ### Indicador 4 — risco municipal
 
+- Título editorial: **O risco já é local**.
 - Código: `DESASTRES HÍDRICOS / BRASIL / 1991–2024`.
 - Valor visual: **5.097**.
 - Unidade: **municípios com ao menos um registro**.
@@ -286,9 +300,8 @@ A seção recupera a hierarquia do slide “O problema em números”, sem copia
 - Fonte: **Cemaden/MCTI — desastres relacionados à água no Brasil**.
 - URL:
   `https://www.gov.br/cemaden/pt-br/assuntos/noticias-cemaden/desastres-relacionados-a-agua-no-brasil-aumentam-nas-ultimas-tres-decadas-e-ja-afetaram-quase-130-milhoes-de-pessoas`
-- Ressalva: o estudo também registra mudança na capacidade de notificação ao longo do
-  período; a página não apresentará o crescimento dos registros como crescimento climático
-  puro.
+- Ressalva: **Parte do crescimento dos registros reflete a ampliação da capacidade de
+  notificação; o período não deve ser lido como crescimento climático puro.**
 
 ### Snapshot local
 
@@ -299,6 +312,7 @@ Interface prevista:
 ```ts
 export interface EnvironmentalIndicator {
   id: 'displacement' | 'drought' | 'shade' | 'water-disasters';
+  title: string;
   code: string;
   value: string;
   unit: string;
@@ -306,10 +320,11 @@ export interface EnvironmentalIndicator {
   localSignal: string;
   geography: string;
   period: string;
-  sourceLabel: string;
-  sourceUrl: string;
-  secondarySourceUrl?: string;
-  caveat?: string;
+  caveat: string;
+  sources: readonly [
+    { readonly label: string; readonly url: `https://${string}` },
+    ...{ readonly label: string; readonly url: `https://${string}` }[]
+  ];
 }
 ```
 
