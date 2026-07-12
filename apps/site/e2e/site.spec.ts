@@ -48,7 +48,7 @@ test('keeps the public journey responsive, keyboard-accessible and quiet', async
 
   expect(await page.evaluate(() => matchMedia('(prefers-reduced-motion: reduce)').matches)).toBe(true);
   await expect(page.locator('.map-base')).toHaveCSS('animation-name', 'none');
-  await expect(page.locator('.footer-leaf')).toHaveCSS('animation-name', 'none');
+  await expect(page.locator('.leaf').first()).toHaveCSS('animation-name', 'none');
   expect(await page.evaluate(() => getComputedStyle(document.documentElement).scrollBehavior)).toBe('auto');
 
   await page.keyboard.press('Tab');
@@ -96,7 +96,7 @@ test('keeps the public journey responsive, keyboard-accessible and quiet', async
   expect(errors).toEqual([]);
 });
 
-test('plays the map once and loops only the leaf when motion is allowed', async ({ page }) => {
+test('plays the atlas once and loops the leaf field when motion is allowed', async ({ page }) => {
   await page.emulateMedia({ reducedMotion: 'no-preference' });
   await page.goto('/');
 
@@ -132,29 +132,98 @@ test('plays the map once and loops only the leaf when motion is allowed', async 
     'animation-name',
     'route-in'
   );
-  await expect(page.locator('.footer-leaf')).toHaveCSS('animation-name', 'leaf-fall');
-  await expect(page.locator('.footer-leaf')).toHaveCSS('animation-duration', '9s');
-  await expect(page.locator('.footer-leaf')).toHaveCSS('animation-iteration-count', 'infinite');
+  const firstLeaf = page.locator('.leaf').first();
+  await expect(firstLeaf).toHaveCSS('animation-name', 'leaf-field-fall');
+  await expect(firstLeaf).toHaveCSS('animation-duration', '8.6s');
+  await expect(firstLeaf).toHaveCSS('animation-iteration-count', 'infinite');
 });
 
-test('keeps the animated leaf below the footer before restarting', async ({ page }) => {
+test('runs a continuous deterministic field of twelve leaves', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'desktop');
   await page.emulateMedia({ reducedMotion: 'no-preference' });
   await page.goto('/');
 
-  const geometry = await page.locator('.footer-leaf').evaluate(async (leaf) => {
-    const animation = leaf.getAnimations()[0];
-    if (!animation) throw new Error('Expected the footer leaf animation to exist.');
-    animation.pause();
-    animation.currentTime = 8_990;
-    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+  const leaves = page.locator('.leaf');
+  await expect(leaves).toHaveCount(12);
 
-    const leafRect = leaf.getBoundingClientRect();
-    const footerRect = leaf.closest('footer')?.getBoundingClientRect();
-    if (!footerRect) throw new Error('Expected the footer leaf to be inside a footer.');
-    return { leafTop: leafRect.top, footerBottom: footerRect.bottom };
+  const state = await leaves.evaluateAll((elements) =>
+    elements.map((leaf) => {
+      const styles = getComputedStyle(leaf);
+      const rect = leaf.getBoundingClientRect();
+      const footer = leaf.closest('footer')?.getBoundingClientRect();
+      if (!footer) throw new Error('Expected leaf inside footer.');
+      return {
+        animationName: styles.animationName,
+        duration: Number.parseFloat(styles.animationDuration) * 1000,
+        delay: Number.parseFloat(styles.animationDelay) * 1000,
+        opacity: Number.parseFloat(styles.opacity),
+        display: styles.display,
+        intersectsFooter:
+          rect.right > footer.left &&
+          rect.left < footer.right &&
+          rect.bottom > footer.top &&
+          rect.top < footer.bottom
+      };
+    })
+  );
+
+  expect(state.every(({ animationName }) => animationName === 'leaf-field-fall')).toBe(true);
+  expect(state.every(({ duration }) => duration >= 7_800 && duration <= 12_400)).toBe(true);
+  expect(state.every(({ delay }) => delay < 0)).toBe(true);
+  expect(
+    state.filter(
+      ({ display, opacity, intersectsFooter }) =>
+        display !== 'none' && opacity > 0 && intersectsFooter
+    ).length
+  ).toBeGreaterThanOrEqual(3);
+});
+
+test('moves every animated leaf below the footer before its first restart', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'desktop');
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+  await page.goto('/');
+
+  const results = await page.locator('.leaf').evaluateAll(async (leaves) => {
+    const result: Array<{ leafTop: number; footerBottom: number }> = [];
+    for (const leaf of leaves) {
+      const animation = leaf.getAnimations()[0];
+      const effect = animation?.effect;
+      if (!animation || !effect) throw new Error('Expected a leaf animation.');
+      const timing = effect.getTiming();
+      const duration = Number(timing.duration);
+      const delay = Number(timing.delay);
+      animation.pause();
+      animation.currentTime = duration + delay - 1;
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+      const footer = leaf.closest('footer');
+      if (!footer) throw new Error('Expected leaf inside footer.');
+      result.push({
+        leafTop: leaf.getBoundingClientRect().top,
+        footerBottom: footer.getBoundingClientRect().bottom
+      });
+    }
+    return result;
   });
 
-  expect(geometry.leafTop).toBeGreaterThanOrEqual(geometry.footerBottom);
+  expect(results).toHaveLength(12);
+  expect(results.every(({ leafTop, footerBottom }) => leafTop >= footerBottom)).toBe(true);
+});
+
+test('rests four leaves and hides eight when motion is reduced', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'desktop');
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.goto('/');
+
+  const states = await page.locator('.leaf').evaluateAll((leaves) =>
+    leaves.map((leaf) => {
+      const styles = getComputedStyle(leaf);
+      return { display: styles.display, animationName: styles.animationName };
+    })
+  );
+  expect(states).toHaveLength(12);
+  expect(states.filter(({ display }) => display !== 'none')).toHaveLength(4);
+  expect(states.filter(({ display }) => display === 'none')).toHaveLength(8);
+  expect(states.every(({ animationName }) => animationName === 'none')).toBe(true);
 });
 
 test('fully frames the atlas in the short desktop viewport', async ({ page }, testInfo) => {
