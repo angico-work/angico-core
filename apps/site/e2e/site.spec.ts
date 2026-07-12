@@ -9,10 +9,11 @@ const rectanglesIntersect = (first: Rectangle, second: Rectangle) =>
   first.top < second.bottom &&
   first.bottom > second.top;
 
-test('keeps the public journey responsive, keyboard-accessible and quiet', async ({ page }) => {
+test('keeps the public journey responsive, keyboard-accessible and quiet', async ({ page, baseURL }) => {
   const errors: string[] = [];
   const unexpectedRequestUrls: string[] = [];
-  const allowedRequestOrigins = new Set(['http://127.0.0.1:4175']);
+  if (!baseURL) throw new Error('Expected the Playwright base URL.');
+  const allowedRequestOrigins = new Set([new URL(baseURL).origin]);
 
   page.on('console', (message) => {
     if (message.type() === 'error') errors.push(message.text());
