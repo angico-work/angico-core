@@ -1,0 +1,177 @@
+package com.angico.common;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.util.HexFormat;
+import java.util.List;
+import org.junit.jupiter.api.Test;
+import org.springframework.boot.env.YamlPropertySourceLoader;
+import org.springframework.core.env.PropertySource;
+import org.springframework.core.io.ClassPathResource;
+
+class SecurityDefaultsTest {
+
+    @Test
+    void authenticationAndDemoSeedFailClosedByDefault() throws IOException {
+        List<PropertySource<?>> sources = new YamlPropertySourceLoader()
+                .load("application", new ClassPathResource("application.yml"));
+
+        assertEquals("${ANGICO_AUTH_REQUIRED:true}", property(sources, "angico.auth.required"));
+        assertEquals("${ANGICO_PUBLIC_REGISTRATION:false}",
+                property(sources, "angico.auth.public-registration"));
+        assertEquals("${ANGICO_COOKIE_SECURE:true}", property(sources, "angico.auth.cookie-secure"));
+        assertEquals("${ANGICO_SEED_DEMO_LEADER:false}", property(sources, "angico.seed-demo-leader"));
+        assertEquals("${ANGICO_SEED_DEMO_LEADER_PASSWORD:}",
+                property(sources, "angico.seed-demo-leader-password"));
+        assertEquals("dev", property(sources, "spring.profiles.default"));
+        assertEquals(false, property(sources, "spring.flyway.enabled"));
+    }
+
+    @Test
+    void developmentAndProductionProfilesMakeCookieAndDatabasePolicyExplicit() throws IOException {
+        ClassPathResource dev = new ClassPathResource("application-dev.yml");
+        ClassPathResource prod = new ClassPathResource("application-prod.yml");
+        assertTrue(dev.exists(), "application-dev.yml must exist");
+        assertTrue(prod.exists(), "application-prod.yml must exist");
+
+        List<PropertySource<?>> devSources = new YamlPropertySourceLoader().load("dev", dev);
+        List<PropertySource<?>> prodSources = new YamlPropertySourceLoader().load("prod", prod);
+        assertEquals(false, property(devSources, "angico.auth.cookie-secure"));
+        assertEquals(true, property(prodSources, "angico.auth.cookie-secure"));
+        assertEquals("update", property(devSources, "spring.jpa.hibernate.ddl-auto"));
+        assertEquals("validate", property(prodSources, "spring.jpa.hibernate.ddl-auto"));
+        assertEquals("${ANGICO_UPLOAD_MAX_REQUEST_SIZE:4MB}",
+                property(prodSources, "spring.servlet.multipart.max-request-size"));
+        assertEquals("${ANGICO_FLYWAY_ENABLED:true}",
+                property(prodSources, "spring.flyway.enabled"));
+        assertEquals("classpath:db/migration/{vendor}",
+                property(prodSources, "spring.flyway.locations"));
+        assertEquals("${ANGICO_ALLOWED_ORIGINS}", property(prodSources, "angico.allowed-origins"));
+    }
+
+    @Test
+    void productionMigrationsAreAdditiveAndVendorSpecific() throws IOException {
+        List<ClassPathResource> migrations = List.of(
+                new ClassPathResource("db/migration/postgresql/V0__complete_schema.sql"),
+                new ClassPathResource("db/migration/postgresql/V1__session_table.sql"),
+                new ClassPathResource("db/migration/postgresql/V2__identity_constraints.sql"),
+                new ClassPathResource("db/migration/postgresql/V6__mission_territory.sql"),
+                new ClassPathResource("db/migration/h2/V0__complete_schema.sql"),
+                new ClassPathResource("db/migration/h2/V1__session_table.sql"),
+                new ClassPathResource("db/migration/h2/V2__identity_constraints.sql"),
+                new ClassPathResource("db/migration/h2/V6__mission_territory.sql")
+        );
+        assertTrue(migrations.stream().allMatch(ClassPathResource::exists));
+        String sql = migrations.stream()
+                .map(resource -> {
+                    try {
+                        return resource.getContentAsString(StandardCharsets.UTF_8).toLowerCase();
+                    } catch (IOException exception) {
+                        throw new IllegalStateException(exception);
+                    }
+                })
+                .reduce("", String::concat);
+        assertTrue(sql.contains("create table if not exists auth_session"));
+        assertTrue(sql.contains("create table acao"));
+        assertTrue(sql.contains("create table workspace_member"));
+        assertTrue(sql.contains("create unique index"));
+        assertTrue(sql.contains("lower("));
+        assertTrue(sql.contains("regexp_replace"));
+        assertTrue(sql.contains("alter table if exists missao"));
+        assertTrue(sql.contains("add column if not exists territorio_id"));
+        assertFalse(sql.contains("delete from"));
+        assertFalse(sql.contains("drop table"));
+    }
+
+    @Test
+    void enabledPostgresqlMigrationLineageRemainsImmutable() throws IOException {
+        assertEquals(
+                "65e6dfcb83279dd54a91abd46ebcc01a57be84ea8fd7002dd2bbd64094a4f3bc",
+                sha256(new ClassPathResource("db/migration/postgresql/V1__session_table.sql"))
+        );
+        assertEquals(
+                "c6a714499ca6cc9e727e1f600a67891e39d2f1c6a375fa58e636e5084aaee6a4",
+                sha256(new ClassPathResource("db/migration/postgresql/V2__identity_constraints.sql"))
+        );
+    }
+
+    @Test
+    void pomDoesNotReintroduceLegacyJacksonDatabind() throws IOException {
+        Path pomPath = Files.exists(Path.of("pom.xml"))
+                ? Path.of("pom.xml")
+                : Path.of("apps/api/pom.xml");
+        String pom = Files.readString(pomPath);
+        assertEquals(0, occurrences(pom, "<groupId>com.fasterxml.jackson"));
+        assertEquals(0, occurrences(pom, "<artifactId>jackson-databind</artifactId>"));
+    }
+
+    @Test
+    void productionDeploymentActivatesTheFailClosedProfile() throws IOException {
+        Path renderPath = Files.exists(Path.of("render.yaml"))
+                ? Path.of("render.yaml")
+                : Path.of("../..", "render.yaml");
+        String render = Files.readString(renderPath);
+        assertTrue(render.contains("key: SPRING_PROFILES_ACTIVE"));
+        assertTrue(render.contains("value: prod"));
+        assertTrue(render.contains("key: ANGICO_PUBLIC_REGISTRATION"));
+        assertTrue(render.contains("key: ANGICO_FLYWAY_ENABLED\n        value: \"true\""));
+        assertTrue(render.contains("mountPath: /app/uploads"));
+        assertTrue(render.contains("key: ANGICO_UPLOAD_DIR\n        value: /app/uploads"));
+        assertTrue(render.contains("key: ANGICO_UPLOAD_MAX_REQUEST_SIZE\n        value: 4MB"));
+    }
+
+    @Test
+    void postgresqlProductionSmokeTestIsReproducible() throws IOException {
+        Path script = Files.exists(Path.of("scripts/smoke-prod-postgres.sh"))
+                ? Path.of("scripts/smoke-prod-postgres.sh")
+                : Path.of("apps/api/scripts/smoke-prod-postgres.sh");
+        assertTrue(Files.isExecutable(script));
+        String contents = Files.readString(script);
+        assertTrue(contents.contains("ANGICO_SMOKE_UPGRADE_FROM_REF"));
+        assertTrue(contents.contains("archive \"$UPGRADE_FROM_REF\""));
+    }
+
+    @Test
+    void runtimeContainerDoesNotRunAsRoot() throws IOException {
+        Path dockerfile = Files.exists(Path.of("Dockerfile"))
+                ? Path.of("Dockerfile")
+                : Path.of("apps/api/Dockerfile");
+
+        assertTrue(Files.readString(dockerfile).contains("USER 10001:10001"));
+    }
+
+    private int occurrences(String value, String needle) {
+        int count = 0;
+        int offset = 0;
+        while ((offset = value.indexOf(needle, offset)) >= 0) {
+            count++;
+            offset += needle.length();
+        }
+        return count;
+    }
+
+    private String sha256(ClassPathResource resource) throws IOException {
+        try {
+            return HexFormat.of().formatHex(
+                    MessageDigest.getInstance("SHA-256").digest(resource.getContentAsByteArray()));
+        } catch (NoSuchAlgorithmException exception) {
+            throw new IllegalStateException(exception);
+        }
+    }
+
+    private Object property(List<PropertySource<?>> sources, String name) {
+        return sources.stream()
+                .map(source -> source.getProperty(name))
+                .filter(value -> value != null)
+                .findFirst()
+                .orElse(null);
+    }
+}

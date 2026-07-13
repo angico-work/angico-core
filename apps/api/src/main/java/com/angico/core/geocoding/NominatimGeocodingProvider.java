@@ -12,8 +12,9 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Stream;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -47,12 +48,12 @@ public class NominatimGeocodingProvider implements GeocodingProvider {
         try {
             List<GeocodingResult> photonResults = photonSearch(query, countryParam);
             if (!photonResults.isEmpty()) {
-                LOG.debug("Photon answered '{}' with {} result(s)", query, photonResults.size());
+                LOG.debug("Photon answered with {} result(s)", photonResults.size());
                 return photonResults;
             }
-            LOG.warn("Photon returned 0 results for '{}'; falling back to Nominatim", query);
+            LOG.debug("Photon returned no results; falling back to Nominatim");
         } catch (RuntimeException ex) {
-            LOG.warn("Photon search failed for '{}' ({}); falling back to Nominatim", query, ex.toString());
+            LOG.warn("Photon search failed ({}); falling back to Nominatim", ex.getClass().getSimpleName());
         }
 
         String encodedQuery = encode(query);
@@ -64,7 +65,7 @@ public class NominatimGeocodingProvider implements GeocodingProvider {
         JsonNode root = request(uri);
         List<GeocodingResult> results = new ArrayList<>();
         root.forEach(node -> results.add(toResult(node)));
-        LOG.debug("Nominatim answered '{}' with {} result(s)", query, results.size());
+        LOG.debug("Nominatim answered with {} result(s)", results.size());
         return results;
     }
 
@@ -97,7 +98,7 @@ public class NominatimGeocodingProvider implements GeocodingProvider {
                 throw new IllegalStateException("Geocoder retornou HTTP " + response.statusCode());
             }
             return objectMapper.readTree(response.body());
-        } catch (IOException ex) {
+        } catch (IOException | JacksonException ex) {
             throw new IllegalStateException("Falha ao consultar geocoder.", ex);
         } catch (InterruptedException ex) {
             Thread.currentThread().interrupt();
@@ -157,7 +158,7 @@ public class NominatimGeocodingProvider implements GeocodingProvider {
                 throw new IllegalStateException("Geocoder secundario retornou HTTP " + response.statusCode());
             }
             return objectMapper.readTree(response.body());
-        } catch (IOException ex) {
+        } catch (IOException | JacksonException ex) {
             throw new IllegalStateException("Falha ao consultar geocoder secundario.", ex);
         } catch (InterruptedException ex) {
             Thread.currentThread().interrupt();
@@ -174,8 +175,6 @@ public class NominatimGeocodingProvider implements GeocodingProvider {
         String neighborhood = firstText(properties, "district", "locality", "name");
         String state = text(properties.path("state"));
         String country = text(properties.path("country"));
-        // Stream.of tolerates null elements (List.of would throw NPE); a
-        // municipality result, for instance, has no "city" property.
         String displayName = Stream.of(
                         text(properties.path("name")),
                         neighborhood,

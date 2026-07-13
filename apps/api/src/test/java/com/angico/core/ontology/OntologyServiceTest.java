@@ -1,9 +1,11 @@
 package com.angico.core.ontology;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.util.List;
 import org.junit.jupiter.api.Test;
 
 class OntologyServiceTest {
@@ -18,9 +20,15 @@ class OntologyServiceTest {
         assertTrue(response.objectTypes().contains("OBSERVACAO"));
         assertTrue(response.objectTypes().contains("MENSAGEM"));
         assertTrue(response.validatedPaths().stream()
-                .anyMatch(path -> path.contains("OBSERVACAO -> EVIDENCIA -> PROBLEMA")));
+                .anyMatch(path -> path.equals("OBSERVACAO IDENTIFICA PROBLEMA")));
         assertTrue(response.validatedPaths().stream()
-                .anyMatch(path -> path.contains("CONVERSA -> MENSAGEM -> LOCALIZACAO")));
+                .anyMatch(path -> path.equals("MENSAGEM COMPARTILHA LOCALIZACAO")));
+        assertTrue(response.validatedPaths().stream()
+                .anyMatch(path -> path.equals("EVIDENCIA SUSTENTA RESULTADO")));
+        assertTrue(response.validatedPaths().stream()
+                .anyMatch(path -> path.equals("PESSOA PARTICIPA_DE ORGANIZACAO")));
+        assertTrue(response.validatedPaths().stream()
+                .anyMatch(path -> path.equals("ACAO UTILIZA RECURSO")));
     }
 
     @Test
@@ -31,6 +39,9 @@ class OntologyServiceTest {
         assertDoesNotThrow(() ->
                 ontologyService.requireValidRelation("MENSAGEM", "COMPARTILHA", "LOCALIZACAO")
         );
+        assertDoesNotThrow(() ->
+                ontologyService.requireValidRelation("pessoa", "responsavel_por", "missao")
+        );
     }
 
     @Test
@@ -38,5 +49,20 @@ class OntologyServiceTest {
         assertThrows(IllegalArgumentException.class, () ->
                 ontologyService.requireValidRelation("ACAO", "OCORRE_EM", "PESSOA")
         );
+    }
+
+    @Test
+    void reportsInvalidDefinitionInsteadOfHardcodingSuccess() {
+        OntologyService invalid = new OntologyService(
+                List.of("PESSOA", "pessoa"),
+                List.of(new RelationRule("PESSOA", "participa_de", "ORGANIZACAO"))
+        );
+
+        OntologyValidationResponse response = invalid.validate();
+
+        assertFalse(response.valid());
+        assertTrue(response.errors().stream().anyMatch(error -> error.contains("duplicado")));
+        assertTrue(response.errors().stream().anyMatch(error -> error.contains("Destino desconhecido")));
+        assertTrue(response.errors().stream().anyMatch(error -> error.contains("nao canonica")));
     }
 }

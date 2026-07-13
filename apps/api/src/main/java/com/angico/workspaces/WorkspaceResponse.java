@@ -11,12 +11,13 @@ public record WorkspaceResponse(
         Double centerLatitude,
         Double centerLongitude,
         String status,
+        String role,
         String createdBy,
         Instant createdAt,
         Instant updatedAt
 ) {
 
-    public static WorkspaceResponse from(Workspace workspace) {
+    public static WorkspaceResponse from(Workspace workspace, String role) {
         return new WorkspaceResponse(
                 workspace.getSlug(),
                 workspace.getNome(),
@@ -25,8 +26,8 @@ public record WorkspaceResponse(
                 workspace.getEstado(),
                 workspace.getCenterLatitude(),
                 workspace.getCenterLongitude(),
-                // older rows predate these columns — default rather than emit null
                 workspace.getStatus() == null ? "ACTIVE" : workspace.getStatus(),
+                role,
                 workspace.getCreatedBy(),
                 workspace.getCreatedAt(),
                 workspace.getUpdatedAt() == null ? workspace.getCreatedAt() : workspace.getUpdatedAt()

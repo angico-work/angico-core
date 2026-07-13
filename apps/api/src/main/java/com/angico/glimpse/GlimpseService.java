@@ -5,35 +5,48 @@ import com.angico.common.ClockProvider;
 import com.angico.core.memory.MemoryEventRepository;
 import com.angico.core.memory.MemoryObjectRepository;
 import com.angico.core.memory.StoredMemoryEvent;
+import com.angico.impacto.Indicador;
+import com.angico.impacto.IndicadorRepository;
+import com.angico.impacto.Medicao;
+import com.angico.impacto.MedicaoRepository;
+import com.angico.impacto.ResultadoRepository;
 import com.angico.missoes.Missao;
 import com.angico.missoes.MissaoRepository;
+import com.angico.mensagens.ConversationAccessPolicy;
 import com.angico.observacoes.ObservacaoRepository;
+import com.angico.observacoes.ObservacaoCategoryCount;
 import com.angico.observacoes.ObservacaoTerritorial;
 import com.angico.potencialidades.PotencialidadeRepository;
 import com.angico.potencialidades.PotencialidadeTerritorial;
 import com.angico.problemas.ProblemaRepository;
 import com.angico.problemas.ProblemaSocioambiental;
+import com.angico.workspaces.WorkspaceAuthorizationService;
+import com.angico.workspaces.WorkspaceRepository;
+import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-/**
- * Builds the território read-models from real data: stat counts come straight
- * from the memory graph (memory_object by entityType), the map from geolocated
- * objetos, and the memória timeline from the event log. Nothing is mocked.
- */
 @Service
 public class GlimpseService {
 
     private static final String MEMORY_CLAIM =
-            "Cada dado do painel possui caminho para objeto, relação e evento no core do Angico.";
+            "Contagens operacionais e medições registradas permanecem separadas e rastreáveis.";
     private static final int MAX_ACTIVITIES = 8;
-    private static final int MAX_MISSIONS = 6;
+    private static final int MAX_MEASUREMENTS = 8;
+    private static final DateTimeFormatter MEASUREMENT_DATE =
+            DateTimeFormatter.ofPattern("dd/MM/uuuu").withZone(ZoneOffset.UTC);
 
     private final MemoryObjectRepository objects;
     private final MemoryEventRepository events;
@@ -42,7 +55,13 @@ public class GlimpseService {
     private final PotencialidadeRepository potencialidades;
     private final MissaoRepository missoes;
     private final AcaoRepository acoes;
+    private final ResultadoRepository resultados;
+    private final IndicadorRepository indicadores;
+    private final MedicaoRepository medicoes;
+    private final WorkspaceRepository workspaces;
     private final ClockProvider clock;
+    private final WorkspaceAuthorizationService authorizationService;
+    private final ConversationAccessPolicy conversationAccess;
 
     public GlimpseService(
             MemoryObjectRepository objects,
@@ -52,7 +71,13 @@ public class GlimpseService {
             PotencialidadeRepository potencialidades,
             MissaoRepository missoes,
             AcaoRepository acoes,
-            ClockProvider clock
+            ResultadoRepository resultados,
+            IndicadorRepository indicadores,
+            MedicaoRepository medicoes,
+            WorkspaceRepository workspaces,
+            ClockProvider clock,
+            WorkspaceAuthorizationService authorizationService,
+            ConversationAccessPolicy conversationAccess
     ) {
         this.objects = objects;
         this.events = events;
@@ -61,20 +86,27 @@ public class GlimpseService {
         this.potencialidades = potencialidades;
         this.missoes = missoes;
         this.acoes = acoes;
+        this.resultados = resultados;
+        this.indicadores = indicadores;
+        this.medicoes = medicoes;
+        this.workspaces = workspaces;
         this.clock = clock;
+        this.authorizationService = authorizationService;
+        this.conversationAccess = conversationAccess;
     }
 
     @Transactional(readOnly = true)
     public DashboardResponse dashboard(String workspaceId) {
-        List<ObservacaoTerritorial> recent = observacoes.findByWorkspaceIdOrderByCreatedAtDesc(workspaceId);
+        workspaceId = authorizationService.requireAuthorizedWorkspace(workspaceId);
+        List<ObservacaoTerritorial> recent = observacoes.findTop8ByWorkspaceIdOrderByCreatedAtDesc(workspaceId);
         Instant now = clock.now();
 
         List<DashboardResponse.Stat> stats = List.of(
                 new DashboardResponse.Stat("Observações", count(workspaceId, "observacao"), "", "leaf"),
-                new DashboardResponse.Stat("Problemas Ativos", count(workspaceId, "problema"), "", "warning"),
-                new DashboardResponse.Stat("Missões em Andamento", count(workspaceId, "missao"), "", "target"),
-                new DashboardResponse.Stat("Jovens Engajados", count(workspaceId, "pessoa"), "", "people"),
-                new DashboardResponse.Stat("Potencialidades", count(workspaceId, "potencialidade"), "", "sprout")
+                new DashboardResponse.Stat("Problemas registrados", count(workspaceId, "problema"), "", "warning"),
+                new DashboardResponse.Stat("Missões registradas", count(workspaceId, "missao"), "", "target"),
+                new DashboardResponse.Stat("Ações registradas", acoes.countByWorkspaceId(workspaceId), "", "check"),
+                new DashboardResponse.Stat("Resultados registrados", resultados.countByWorkspaceId(workspaceId), "", "sprout")
         );
 
         List<DashboardResponse.Activity> activities = recent.stream()
@@ -94,56 +126,59 @@ public class GlimpseService {
                 activities,
                 missions(workspaceId),
                 impact(workspaceId),
-                categoryDistribution(recent),
+                categoryDistribution(observacoes.countByCategory(workspaceId)),
                 MEMORY_CLAIM
         );
     }
 
-    /** Geolocated objetos for the territory map. */
     @Transactional(readOnly = true)
     public List<MapPoint> mapPoints(String workspaceId) {
+        workspaceId = authorizationService.requireAuthorizedWorkspace(workspaceId);
         List<MapPoint> points = new ArrayList<>();
         for (ObservacaoTerritorial o : observacoes.findByWorkspaceIdOrderByCreatedAtDesc(workspaceId)) {
             if (o.getLatitude() != null && o.getLongitude() != null) {
-                points.add(new MapPoint("observacao", o.getId(), o.getTitulo(), o.getCategoria(),
+                points.add(new MapPoint(workspaceId, "observacao", o.getId(), o.getTitulo(), o.getCategoria(),
                         o.getUrgencia(), o.getLatitude(), o.getLongitude()));
             }
         }
         for (ProblemaSocioambiental p : problemas.findByWorkspaceIdOrderByCreatedAtDesc(workspaceId)) {
             if (p.getLatitude() != null && p.getLongitude() != null) {
-                points.add(new MapPoint("problema", p.getId(), p.getTitulo(), p.getCategoria(),
+                points.add(new MapPoint(workspaceId, "problema", p.getId(), p.getTitulo(), p.getCategoria(),
                         p.getStatus(), p.getLatitude(), p.getLongitude()));
             }
         }
         for (PotencialidadeTerritorial pot : potencialidades.findByWorkspaceIdOrderByCreatedAtDesc(workspaceId)) {
             if (pot.getLatitude() != null && pot.getLongitude() != null) {
-                points.add(new MapPoint("potencialidade", pot.getId(), pot.getTitulo(), pot.getCategoria(),
+                points.add(new MapPoint(workspaceId, "potencialidade", pot.getId(), pot.getTitulo(), pot.getCategoria(),
                         pot.getStatus(), pot.getLatitude(), pot.getLongitude()));
             }
         }
         return points;
     }
 
-    /** The território's living memory: most recent events first. */
     @Transactional(readOnly = true)
     public List<MemoriaEvent> memoria(String workspaceId) {
-        return events.findTop100ByWorkspaceIdOrderBySequenceDesc(workspaceId).stream()
+        workspaceId = authorizationService.requireAuthorizedWorkspace(workspaceId);
+        return events.findByWorkspaceIdOrderBySequenceAsc(workspaceId).stream()
+                .filter(event -> conversationAccess.canAccessMemoryNode(
+                        event.getWorkspaceId(), event.getEntityType(), event.getEntityId()))
+                .sorted(Comparator.comparing(StoredMemoryEvent::getSequence).reversed())
+                .limit(100)
                 .map(this::toMemoriaEvent)
                 .toList();
     }
 
     private MemoriaEvent toMemoriaEvent(StoredMemoryEvent e) {
-        return new MemoriaEvent(e.getSequence(), e.getEntityType(), e.getEntityId(),
+        return new MemoriaEvent(e.getWorkspaceId(), e.getSequence(), e.getEntityType(), e.getEntityId(),
                 e.getEventType(), e.getActorId(), e.getOccurredAt());
     }
 
     private long count(String workspaceId, String entityType) {
-        return objects.countByWorkspaceIdAndEntityType(workspaceId, entityType);
+        return objects.countByWorkspaceIdAndEntityTypeIgnoreCase(workspaceId, entityType);
     }
 
     private List<DashboardResponse.Mission> missions(String workspaceId) {
-        return missoes.findByWorkspaceIdOrderByCreatedAtDesc(workspaceId).stream()
-                .limit(MAX_MISSIONS)
+        return missoes.findTop6ByWorkspaceIdOrderByCreatedAtDesc(workspaceId).stream()
                 .map(m -> toMission(workspaceId, m))
                 .toList();
     }
@@ -158,29 +193,66 @@ public class GlimpseService {
     }
 
     private List<DashboardResponse.Impact> impact(String workspaceId) {
-        return List.of(
-                new DashboardResponse.Impact(String.valueOf(count(workspaceId, "observacao")), "Observações registradas", "acumulado", "leaf"),
-                new DashboardResponse.Impact(String.valueOf(count(workspaceId, "problema")), "Problemas mapeados", "acumulado", "warning"),
-                new DashboardResponse.Impact(String.valueOf(count(workspaceId, "missao")), "Missões mobilizadas", "acumulado", "target"),
-                new DashboardResponse.Impact(String.valueOf(acoes.countByWorkspaceId(workspaceId)), "Ações realizadas", "acumulado", "check")
-        );
+        List<Medicao> recent = medicoes.findTop64ByWorkspaceIdOrderByCreatedAtDesc(workspaceId);
+        Set<Long> indicatorIds = recent.stream()
+                .map(Medicao::getIndicadorId)
+                .filter(java.util.Objects::nonNull)
+                .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
+        Map<Long, Indicador> indicatorsById = new LinkedHashMap<>();
+        indicadores.findAllById(indicatorIds).stream()
+                .filter(indicator -> workspaceId.equals(indicator.getWorkspaceId()))
+                .forEach(indicator -> indicatorsById.put(indicator.getId(), indicator));
+        List<DashboardResponse.Impact> measured = new ArrayList<>();
+        Set<Long> seenIndicators = new HashSet<>();
+        for (Medicao medicao : recent) {
+            if (measured.size() == MAX_MEASUREMENTS
+                    || medicao.getIndicadorId() == null
+                    || !seenIndicators.add(medicao.getIndicadorId())) {
+                continue;
+            }
+            Indicador indicador = indicatorsById.get(medicao.getIndicadorId());
+            if (indicador == null || medicao.getValor() == null) {
+                continue;
+            }
+            String unit = medicao.getUnidade() == null || medicao.getUnidade().isBlank()
+                    ? indicador.getUnidade()
+                    : medicao.getUnidade();
+            String value = BigDecimal.valueOf(medicao.getValor()).stripTrailingZeros().toPlainString();
+            if (unit != null && !unit.isBlank()) {
+                value += " " + unit.strip();
+            }
+            Instant measuredAt = medicao.getMeasuredAt() == null
+                    ? medicao.getCreatedAt()
+                    : medicao.getMeasuredAt();
+            if (measuredAt == null) {
+                continue;
+            }
+            measured.add(new DashboardResponse.Impact(
+                    value,
+                    indicador.getNome(),
+                    MEASUREMENT_DATE.format(measuredAt),
+                    "target"
+            ));
+        }
+        return List.copyOf(measured);
     }
 
-    private List<DashboardResponse.Category> categoryDistribution(List<ObservacaoTerritorial> observacoes) {
-        Map<String, Long> byCategory = new LinkedHashMap<>();
-        for (ObservacaoTerritorial o : observacoes) {
-            byCategory.merge(o.getCategoria(), 1L, Long::sum);
-        }
-        List<DashboardResponse.Category> categories = new ArrayList<>();
-        byCategory.forEach((name, value) -> categories.add(new DashboardResponse.Category(name, value)));
-        return categories;
+    private List<DashboardResponse.Category> categoryDistribution(List<ObservacaoCategoryCount> counts) {
+        return counts.stream()
+                .map(count -> new DashboardResponse.Category(count.getCategory(), count.getTotal()))
+                .toList();
     }
 
     private DashboardResponse.Territory territory(String workspaceId) {
-        // Placeholder until the territórios module carries real names. Derives a
-        // readable label from the workspace id (e.g. "coletivo-jardim-novo").
-        return new DashboardResponse.Territory(workspaceId, humanize(workspaceId),
-                "Visão geral socioambiental do território");
+        return workspaces.findBySlug(workspaceId)
+                .map(workspace -> new DashboardResponse.Territory(
+                        workspaceId,
+                        workspace.getNome(),
+                        workspace.getDescricao() == null || workspace.getDescricao().isBlank()
+                                ? "Leitura operacional dos territórios deste workspace"
+                                : workspace.getDescricao()
+                ))
+                .orElseThrow(() -> new IllegalStateException("Workspace autorizado não encontrado."));
     }
 
     private static String humanizeStatus(String status) {
@@ -189,24 +261,6 @@ public class GlimpseService {
         }
         String lower = status.replace('_', ' ').toLowerCase();
         return Character.toUpperCase(lower.charAt(0)) + lower.substring(1);
-    }
-
-    private static String humanize(String slug) {
-        if (slug == null || slug.isBlank()) {
-            return "Território";
-        }
-        String[] parts = slug.split("[-_]");
-        StringBuilder sb = new StringBuilder();
-        for (String part : parts) {
-            if (part.isBlank()) {
-                continue;
-            }
-            if (sb.length() > 0) {
-                sb.append(' ');
-            }
-            sb.append(Character.toUpperCase(part.charAt(0))).append(part.substring(1));
-        }
-        return sb.toString();
     }
 
     private static String relativeTime(Instant from, Instant now) {

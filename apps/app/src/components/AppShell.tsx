@@ -1,0 +1,393 @@
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Navigate, Outlet, useNavigate } from 'react-router-dom';
+import Sidebar from './Sidebar';
+import Topbar from './Topbar';
+import ProfileModal from './ProfileModal';
+import OfflineReadNotice from './OfflineReadNotice';
+import {
+  ApiNetworkError, createWorkspace, deleteWorkspace, getProfile, getSession,
+  hasFreshOfflineSession, isAuthenticated, listWorkspaces, logout, revalidateSession,
+  offlineSessionExpiresAt, sessionOwnerId, setSessionWorkspace
+} from '../lib/api';
+import { startSyncEngine } from '../lib/offlineSync';
+import { clearOfflineOwner, getOfflineOwnerState } from '../lib/offlineStore';
+import { clearOfflineReadSourcesForOwner } from '../lib/offlineReadState';
+import type { PessoaHit, Workspace } from '../types';
+
+export interface AppContext {
+  workspaceId: string;
+  workspaceRole: Workspace['role'] | null;
+  canWrite: boolean;
+}
+
+function workspaceLabel(workspaceId: string): string {
+  return workspaceId
+    .split(/[-_]/)
+    .filter(Boolean)
+    .map((w) => w[0].toUpperCase() + w.slice(1))
+    .join(' ') || 'Workspace';
+}
+
+const DRAWER_FOCUSABLE = [
+  'button:not([disabled])',
+  'input:not([disabled])',
+  'select:not([disabled])',
+  'textarea:not([disabled])',
+  'a[href]',
+  '[tabindex]:not([tabindex="-1"])'
+].join(',');
+
+export default function AppShell() {
+  const navigate = useNavigate();
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [profile, setProfile] = useState<PessoaHit | null>(null);
+  const [accountError, setAccountError] = useState<string | null>(null);
+  const [profileError, setProfileError] = useState<string | null>(null);
+  const [showProfile, setShowProfile] = useState(false);
+  const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
+  const [activeIdentity] = useState(() => {
+    const activeSession = getSession();
+    return { session: activeSession, ownerId: sessionOwnerId(activeSession) };
+  });
+  const activePessoaId = activeIdentity.session?.pessoaId;
+  const activeOwnerId = activeIdentity.ownerId;
+  const [session, setSession] = useState(activeIdentity.session);
+  const [authStatus, setAuthStatus] = useState<'checking' | 'authenticated' | 'anonymous'>(
+    isAuthenticated() || hasFreshOfflineSession() ? 'checking' : 'anonymous'
+  );
+  const [activeSlug, setActiveSlug] = useState(session?.workspaceId ?? '');
+  const writableWorkspaceIds = useMemo(
+    () => workspaces.filter((workspace) => workspace.role !== 'VIEWER').map((workspace) => workspace.slug),
+    [workspaces]
+  );
+  const hasWritableWorkspaces = writableWorkspaceIds.length > 0;
+  const applyWorkspaceAccess = useCallback((list: Workspace[]) => {
+    setWorkspaces((current) => (
+      JSON.stringify(current) === JSON.stringify(list) ? current : list
+    ));
+    if (list.length && !list.some((workspace) => workspace.slug === activeSlug)) {
+      const fallback = list[0].slug;
+      setActiveSlug(fallback);
+      setSessionWorkspace(fallback);
+    }
+  }, [activeSlug]);
+  const refreshWorkspaceAccess = useCallback(async () => {
+    const list = await listWorkspaces({ requireFresh: true });
+    applyWorkspaceAccess(list);
+    setAccountError(null);
+    return list
+      .filter((workspace) => workspace.role !== 'VIEWER')
+      .map((workspace) => workspace.slug);
+  }, [applyWorkspaceAccess]);
+
+  useEffect(() => {
+    let active = true;
+    const unauthorized = () => {
+      setSession(null);
+      setAuthStatus('anonymous');
+    };
+    window.addEventListener('angico:unauthorized', unauthorized);
+    if (activeIdentity.session) {
+      if (!navigator.onLine && hasFreshOfflineSession()) {
+        setAuthStatus('authenticated');
+        return () => {
+          active = false;
+          window.removeEventListener('angico:unauthorized', unauthorized);
+        };
+      }
+      revalidateSession().then((validated) => {
+        if (!active) return;
+        const sameIdentity = validated
+          && validated.pessoaId === activePessoaId
+          && sessionOwnerId(validated) === activeOwnerId;
+        setSession(sameIdentity ? validated : null);
+        setAuthStatus(sameIdentity ? 'authenticated' : 'anonymous');
+      }).catch((caught) => {
+        if (!active) return;
+        if (caught instanceof ApiNetworkError && hasFreshOfflineSession()) {
+          setAuthStatus('authenticated');
+        } else {
+          setSession(null);
+          setAuthStatus('anonymous');
+        }
+      });
+    }
+    return () => {
+      active = false;
+      window.removeEventListener('angico:unauthorized', unauthorized);
+    };
+  }, [activeIdentity.session, activeOwnerId, activePessoaId]);
+
+  useEffect(() => {
+    if (authStatus !== 'authenticated' || !activeOwnerId || !hasWritableWorkspaces) return;
+    return startSyncEngine(activeOwnerId, writableWorkspaceIds, refreshWorkspaceAccess);
+  }, [activeOwnerId, authStatus, hasWritableWorkspaces, refreshWorkspaceAccess, writableWorkspaceIds]);
+
+  useEffect(() => {
+    if (!sidebarOpen) return;
+    if (window.innerWidth > 1040) {
+      setSidebarOpen(false);
+      return;
+    }
+    const sidebar = document.getElementById('app-sidebar');
+    const toggle = document.querySelector<HTMLElement>('[aria-controls="app-sidebar"]');
+    sidebar?.querySelector<HTMLElement>(DRAWER_FOCUSABLE)?.focus();
+    const handleResize = () => {
+      if (window.innerWidth > 1040) setSidebarOpen(false);
+    };
+    const handleKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        setSidebarOpen(false);
+        return;
+      }
+      if (event.key !== 'Tab' || !sidebar) return;
+      const focusable = Array.from(sidebar.querySelectorAll<HTMLElement>(DRAWER_FOCUSABLE));
+      const first = focusable[0];
+      const last = focusable.at(-1);
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last?.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first?.focus();
+      }
+    };
+    window.addEventListener('resize', handleResize);
+    document.addEventListener('keydown', handleKey);
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      document.removeEventListener('keydown', handleKey);
+      if (toggle?.isConnected) toggle.focus();
+    };
+  }, [sidebarOpen]);
+
+  useEffect(() => {
+    if (authStatus !== 'authenticated') return;
+    let timer: number | undefined;
+    const reevaluate = () => {
+      if (timer !== undefined) window.clearTimeout(timer);
+      const currentSession = getSession();
+      if (!currentSession
+        || currentSession.pessoaId !== activePessoaId
+        || sessionOwnerId(currentSession) !== activeOwnerId) {
+        setSession(null);
+        setAuthStatus('anonymous');
+        return;
+      }
+      if (!hasFreshOfflineSession()) {
+        setSession(null);
+        setAuthStatus('anonymous');
+        return;
+      }
+      const expiresAt = offlineSessionExpiresAt();
+      if (expiresAt === undefined || expiresAt <= Date.now()) {
+        setSession(null);
+        setAuthStatus('anonymous');
+        return;
+      }
+      timer = window.setTimeout(
+        reevaluate,
+        Math.min(60_000, expiresAt - Date.now() + 1)
+      );
+    };
+    reevaluate();
+    window.addEventListener('focus', reevaluate);
+    window.addEventListener('online', reevaluate);
+    window.addEventListener('storage', reevaluate);
+    document.addEventListener('visibilitychange', reevaluate);
+    return () => {
+      if (timer !== undefined) window.clearTimeout(timer);
+      window.removeEventListener('focus', reevaluate);
+      window.removeEventListener('online', reevaluate);
+      window.removeEventListener('storage', reevaluate);
+      document.removeEventListener('visibilitychange', reevaluate);
+    };
+  }, [activeOwnerId, activePessoaId, authStatus]);
+
+  useEffect(() => {
+    if (authStatus !== 'authenticated') return;
+    let active = true;
+    const refresh = () => {
+      if (!active || navigator.onLine === false) return;
+      void refreshWorkspaceAccess().catch((caught) => {
+        if (!active || caught instanceof ApiNetworkError) return;
+        setAccountError(caught instanceof Error
+          ? caught.message
+          : 'Não foi possível atualizar os acessos aos espaços de trabalho.');
+      });
+    };
+    const refreshVisible = () => {
+      if (document.visibilityState !== 'hidden') refresh();
+    };
+    window.addEventListener('focus', refresh);
+    window.addEventListener('online', refresh);
+    window.addEventListener('angico:workspace-access-changed', refresh);
+    document.addEventListener('visibilitychange', refreshVisible);
+    const interval = hasWritableWorkspaces ? undefined : window.setInterval(refresh, 30_000);
+    return () => {
+      active = false;
+      window.removeEventListener('focus', refresh);
+      window.removeEventListener('online', refresh);
+      window.removeEventListener('angico:workspace-access-changed', refresh);
+      document.removeEventListener('visibilitychange', refreshVisible);
+      if (interval !== undefined) window.clearInterval(interval);
+    };
+  }, [authStatus, hasWritableWorkspaces, refreshWorkspaceAccess]);
+
+  useEffect(() => {
+    if (authStatus !== 'authenticated') return;
+    let active = true;
+    setAccountError(null);
+    listWorkspaces().then((list) => {
+      if (!active) return;
+      applyWorkspaceAccess(list);
+    }).catch((caught) => {
+      if (active) setAccountError(caught instanceof Error ? caught.message : 'Não foi possível carregar os espaços de trabalho.');
+    });
+    return () => { active = false; };
+  }, [applyWorkspaceAccess, authStatus]);
+
+  useEffect(() => {
+    if (authStatus !== 'authenticated') return;
+    let active = true;
+    setProfileError(null);
+    getProfile().then((p) => {
+      if (active) {
+        setProfile(p);
+        setProfileError(null);
+      }
+    }).catch((caught) => {
+      if (active) setProfileError(caught instanceof Error ? caught.message : 'Não foi possível carregar o perfil.');
+    });
+    return () => { active = false; };
+  }, [authStatus]);
+
+  if (authStatus === 'checking') {
+    return <main aria-busy="true">Validando sessão…</main>;
+  }
+  if (authStatus === 'anonymous') {
+    return <Navigate to="/login" replace />;
+  }
+
+  async function handleLogout() {
+    const ownerId = activeIdentity.ownerId;
+    let discardPending = false;
+    if (ownerId) {
+      const offline = await getOfflineOwnerState(ownerId);
+      if (offline.unsynced > 0) {
+        const noun = offline.unsynced === 1 ? 'registro ainda não foi compartilhado' : 'registros ainda não foram compartilhados';
+        const confirmed = window.confirm(
+          `${offline.unsynced} ${noun}. Sair agora apagará esses dados deste aparelho e eles não poderão ser recuperados. Deseja continuar?`
+        );
+        if (!confirmed) return;
+      }
+      discardPending = offline.unsynced > 0;
+    }
+    const request = logout();
+    setSession(null);
+    setAuthStatus('anonymous');
+    navigate('/login', { replace: true });
+    await request;
+    if (ownerId) {
+      await clearOfflineOwner(ownerId, { discardPending });
+      clearOfflineReadSourcesForOwner(ownerId);
+    }
+  }
+
+  function openProfile() {
+    if (!profile) {
+      setProfileError('O perfil ainda não está disponível. Tente novamente em instantes.');
+      return;
+    }
+    setShowProfile(true);
+  }
+
+  function switchWorkspace(slug: string) {
+    if (slug === activeSlug) return;
+    setActiveSlug(slug);
+    setSessionWorkspace(slug);
+  }
+
+  async function handleCreateWorkspace(nome: string) {
+    const created = await createWorkspace(nome);
+    setWorkspaces((prev) => [...prev, created]);
+    switchWorkspace(created.slug);
+  }
+
+  async function handleDeleteWorkspace(slug: string) {
+    await deleteWorkspace(slug);
+    setWorkspaces((prev) => prev.filter((w) => w.slug !== slug));
+    if (slug === activeSlug) {
+      const fallback = workspaces.find((w) => w.slug !== slug)?.slug;
+      if (fallback) switchWorkspace(fallback);
+    }
+  }
+
+  const activeWorkspace = workspaces.find((w) => w.slug === activeSlug);
+  const activeRole = activeWorkspace?.role ?? null;
+  const canWrite = activeRole !== null && activeRole !== 'VIEWER';
+  const context: AppContext = { workspaceId: activeSlug, workspaceRole: activeRole, canWrite };
+  const activeName = activeWorkspace?.nome ?? workspaceLabel(activeSlug);
+
+  const effectiveProfile: PessoaHit | null = profile ?? (session ? {
+    id: session.pessoaId,
+    workspaceId: activeSlug,
+    nome: session.nome,
+    papel: session.papel,
+    angicoId: session.angicoId,
+    telefone: null,
+    foto: null,
+    createdAt: ''
+  } : null);
+
+  return (
+    <div className="app-layout">
+      <Sidebar
+        workspaces={workspaces}
+        activeSlug={activeSlug}
+        onSwitchWorkspace={switchWorkspace}
+        onCreateWorkspace={handleCreateWorkspace}
+        onDeleteWorkspace={handleDeleteWorkspace}
+        userName={effectiveProfile?.nome ?? session?.nome ?? 'Visitante'}
+        userRole={activeRole ?? 'Acesso pendente'}
+        userFoto={effectiveProfile?.foto ?? null}
+        open={sidebarOpen}
+        onNavigate={() => setSidebarOpen(false)}
+        onEditProfile={openProfile}
+        onLogout={handleLogout}
+      />
+      {sidebarOpen && <button type="button" className="sidebar-backdrop" aria-label="Dispensar sobreposição" tabIndex={-1} onClick={() => setSidebarOpen(false)} />}
+      <Topbar
+        workspaceLabel={activeName}
+        workspaceId={activeSlug}
+        ownerId={activeIdentity.ownerId}
+        canWrite={canWrite}
+        sidebarOpen={sidebarOpen}
+        onToggleSidebar={() => setSidebarOpen((v) => !v)}
+        onWorkspaceClick={openProfile}
+      />
+      <main className="app-main">
+        {activeRole === 'VIEWER' && (
+          <div className="readonly-notice" role="status">Este espaço está em modo de leitura.</div>
+        )}
+        {(accountError || profileError) && (
+          <div className="form-error" role="alert">{accountError || profileError}</div>
+        )}
+        <OfflineReadNotice
+          ownerId={activeIdentity.ownerId}
+          workspaceId={activeSlug}
+          active={hasFreshOfflineSession()}
+        />
+        <Outlet context={context} />
+      </main>
+      {showProfile && profile && (
+        <ProfileModal
+          profile={profile}
+          onClose={() => setShowProfile(false)}
+          onSaved={(p) => { setProfile(p); setShowProfile(false); }}
+        />
+      )}
+    </div>
+  );
+}

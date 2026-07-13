@@ -1,7 +1,7 @@
 package com.angico.auth;
 
 import com.angico.common.UnauthorizedException;
-import com.angico.pessoas.Pessoa;
+import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.beans.factory.annotation.Value;
@@ -11,17 +11,20 @@ import org.springframework.web.servlet.HandlerInterceptor;
 @Component
 public class AuthInterceptor implements HandlerInterceptor {
 
+    public static final String SESSION_COOKIE = "ANGICO_SESSION";
     public static final String ATTR_PESSOA_ID = "angico.pessoaId";
     public static final String ATTR_WORKSPACE_ID = "angico.workspaceId";
     public static final String ATTR_NOME = "angico.nome";
     public static final String ATTR_PAPEL = "angico.papel";
+    public static final String ATTR_SESSION_ID = "angico.sessionId";
+    public static final String ATTR_CSRF_TOKEN = "angico.csrfToken";
 
     private final AuthService authService;
     private final boolean authRequired;
 
     public AuthInterceptor(
             AuthService authService,
-            @Value("${angico.auth.required:false}") boolean authRequired
+            @Value("${angico.auth.required:true}") boolean authRequired
     ) {
         this.authService = authService;
         this.authRequired = authRequired;
@@ -33,11 +36,10 @@ public class AuthInterceptor implements HandlerInterceptor {
             return true;
         }
 
-        String token = bearerToken(request.getHeader("Authorization"));
-        var pessoa = authService.authenticateToken(token);
-        pessoa.ifPresent(value -> attach(request, value));
+        var principal = authService.authenticateSession(sessionToken(request.getCookies()));
+        principal.ifPresent(value -> attach(request, value));
 
-        if (authRequired && pessoa.isEmpty()) {
+        if (authRequired && principal.isEmpty()) {
             throw new UnauthorizedException("Autenticação obrigatória.");
         }
         return true;
@@ -45,24 +47,31 @@ public class AuthInterceptor implements HandlerInterceptor {
 
     private boolean isPublic(String uri) {
         return "/health".equals(uri)
+                || "/health/ready".equals(uri)
                 || "/api/auth/login".equals(uri)
                 || "/api/auth/register".equals(uri)
-                || "/api/auth/angico-id/available".equals(uri)
                 || uri.startsWith("/assets/")
                 || "/".equals(uri);
     }
 
-    private String bearerToken(String authorization) {
-        if (authorization == null || !authorization.startsWith("Bearer ")) {
+    static String sessionToken(Cookie[] cookies) {
+        if (cookies == null) {
             return null;
         }
-        return authorization.substring("Bearer ".length()).trim();
+        for (Cookie cookie : cookies) {
+            if (SESSION_COOKIE.equals(cookie.getName())) {
+                return cookie.getValue();
+            }
+        }
+        return null;
     }
 
-    private void attach(HttpServletRequest request, Pessoa pessoa) {
-        request.setAttribute(ATTR_PESSOA_ID, pessoa.getId());
-        request.setAttribute(ATTR_WORKSPACE_ID, pessoa.getWorkspaceId());
-        request.setAttribute(ATTR_NOME, pessoa.getNome());
-        request.setAttribute(ATTR_PAPEL, pessoa.getPapel());
+    private void attach(HttpServletRequest request, AuthService.SessionPrincipal principal) {
+        request.setAttribute(ATTR_PESSOA_ID, principal.pessoa().getId());
+        request.setAttribute(ATTR_WORKSPACE_ID, principal.session().getWorkspaceId());
+        request.setAttribute(ATTR_NOME, principal.pessoa().getNome());
+        request.setAttribute(ATTR_PAPEL, principal.pessoa().getPapel());
+        request.setAttribute(ATTR_SESSION_ID, principal.session().getId());
+        request.setAttribute(ATTR_CSRF_TOKEN, principal.csrfToken());
     }
 }

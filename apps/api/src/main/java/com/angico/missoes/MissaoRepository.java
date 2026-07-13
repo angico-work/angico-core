@@ -9,5 +9,7 @@ public interface MissaoRepository extends JpaRepository<Missao, Long> {
 
     List<Missao> findByWorkspaceIdOrderByCreatedAtDesc(String workspaceId);
 
+    List<Missao> findTop6ByWorkspaceIdOrderByCreatedAtDesc(String workspaceId);
+
     long countByWorkspaceId(String workspaceId);
 }

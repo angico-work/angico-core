@@ -3,13 +3,14 @@ package com.angico.core.ontology;
 import java.util.List;
 import java.util.Map;
 
-import com.angico.common.CurrentActorProvider;
 import com.angico.common.ForbiddenException;
 import com.angico.core.memory.MemoryQueryService;
+import com.angico.workspaces.WorkspaceAuthorizationService;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import java.util.Set;
 
 @RestController
 @RequestMapping("/api/ontology")
@@ -17,16 +18,16 @@ public class OntologyController {
 
     private final OntologyService ontologyService;
     private final MemoryQueryService memoryQueryService;
-    private final CurrentActorProvider currentActorProvider;
+    private final WorkspaceAuthorizationService authorizationService;
 
     public OntologyController(
             OntologyService ontologyService,
             MemoryQueryService memoryQueryService,
-            CurrentActorProvider currentActorProvider
+            WorkspaceAuthorizationService authorizationService
     ) {
         this.ontologyService = ontologyService;
         this.memoryQueryService = memoryQueryService;
-        this.currentActorProvider = currentActorProvider;
+        this.authorizationService = authorizationService;
     }
 
     @GetMapping
@@ -58,24 +59,16 @@ public class OntologyController {
             @RequestParam String entityType,
             @RequestParam String entityId
     ) {
-        ensureWorkspaceAccess(workspaceId);
-        if (!canViewOntologyDetails()) {
-            throw new ForbiddenException("Detalhes ontologicos protegidos.");
-        }
+        authorizationService.requireRole(workspaceId, Set.of("OWNER", "ADMIN", "COORDINATOR"));
         return memoryQueryService.graphForEntity(workspaceId, entityType, entityId);
     }
 
-    private void ensureWorkspaceAccess(String workspaceId) {
-        String actorWorkspace = currentActorProvider.currentWorkspaceId()
-                .orElseThrow(() -> new ForbiddenException("Workspace protegido."));
-        if (!actorWorkspace.equals(workspaceId)) {
-            throw new ForbiddenException("Acesso negado ao workspace informado.");
-        }
-    }
-
     private boolean canViewOntologyDetails() {
-        return currentActorProvider.currentPapel()
-                .map(role -> role.equalsIgnoreCase("COORDENACAO") || role.equalsIgnoreCase("ADMIN"))
-                .orElse(false);
+        try {
+            String workspaceId = authorizationService.requireAuthorizedWorkspace(null);
+            return authorizationService.hasRole(workspaceId, Set.of("OWNER", "ADMIN", "COORDINATOR"));
+        } catch (ForbiddenException ex) {
+            return false;
+        }
     }
 }

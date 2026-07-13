@@ -15,7 +15,11 @@ public record MensagemResponse(
         String localDescricao,
         String linkedEntityType,
         String linkedEntityId,
+        String clientMessageId,
+        String deviceId,
         String status,
+        Instant occurredAt,
+        Instant recordedAt,
         Instant createdAt,
         List<MensagemAnexoResponse> anexos,
         List<String> relacoes

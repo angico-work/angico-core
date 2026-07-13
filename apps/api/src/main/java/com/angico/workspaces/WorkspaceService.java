@@ -1,6 +1,9 @@
 package com.angico.workspaces;
 
 import com.angico.common.ClockProvider;
+import com.angico.pessoas.AngicoIdNormalizer;
+import com.angico.pessoas.Pessoa;
+import com.angico.pessoas.PessoaRepository;
 import java.text.Normalizer;
 import java.time.Instant;
 import java.util.List;
@@ -11,47 +14,54 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class WorkspaceService {
 
-    // The workspace the web app ships with — seeded so the switcher is never
-    // empty and the existing território's data keeps a readable name.
-    private static final String DEFAULT_SLUG = "coletivo-jardim-novo";
-    private static final String DEFAULT_NOME = "Coletivo Jardim Novo";
-
     static final Set<String> ROLES = Set.of("OWNER", "ADMIN", "COORDINATOR", "MAPPER", "MEMBER", "VIEWER");
+    static final Set<String> MEMBER_STATUSES = Set.of("ACTIVE", "INACTIVE");
 
     private final WorkspaceRepository workspaceRepository;
     private final WorkspaceMemberRepository memberRepository;
+    private final PessoaRepository pessoaRepository;
     private final WorkspaceAccessService accessService;
+    private final WorkspaceAuthorizationService authorizationService;
     private final WorkspaceMemoryPublisher memoryPublisher;
     private final ClockProvider clock;
 
     public WorkspaceService(
             WorkspaceRepository workspaceRepository,
             WorkspaceMemberRepository memberRepository,
+            PessoaRepository pessoaRepository,
             WorkspaceAccessService accessService,
+            WorkspaceAuthorizationService authorizationService,
             WorkspaceMemoryPublisher memoryPublisher,
             ClockProvider clock
     ) {
         this.workspaceRepository = workspaceRepository;
         this.memberRepository = memberRepository;
+        this.pessoaRepository = pessoaRepository;
         this.accessService = accessService;
+        this.authorizationService = authorizationService;
         this.memoryPublisher = memoryPublisher;
         this.clock = clock;
     }
 
     @Transactional
     public List<WorkspaceResponse> listar() {
-        ensureDefault();
+        Set<String> authorized = Set.copyOf(authorizationService.authorizedWorkspaceIds());
         return workspaceRepository.findAllByOrderByCreatedAtAsc()
                 .stream()
-                .map(WorkspaceResponse::from)
+                .filter(workspace -> authorized.contains(workspace.getSlug()))
+                .filter(workspace -> "ACTIVE".equalsIgnoreCase(workspace.getStatus()))
+                .map(workspace -> WorkspaceResponse.from(
+                        workspace, authorizationService.currentRole(workspace.getSlug())))
                 .toList();
     }
 
     @Transactional
     public WorkspaceResponse criar(WorkspaceCreateRequest request) {
+        validateCoordinatePair(request.centerLatitude(), request.centerLongitude());
+        String actorId = authorizationService.currentActorId();
         Instant now = clock.now();
         Workspace workspace = new Workspace(uniqueSlug(slugify(request.nome().trim())),
-                request.nome().trim(), blankToNull(request.criadoPor()), now);
+                request.nome().trim(), actorId, now);
         workspace.setDescricao(blankToNull(request.descricao()));
         workspace.setCidade(blankToNull(request.cidade()));
         workspace.setEstado(blankToNull(request.estado()));
@@ -59,23 +69,20 @@ public class WorkspaceService {
         workspace.setCenterLongitude(request.centerLongitude());
         Workspace saved = workspaceRepository.save(workspace);
 
-        String actorId = accessService.currentActorId().orElse(null);
         memoryPublisher.publicarCriado(saved, actorId);
 
-        // The creator becomes the OWNER when there's an authenticated actor.
-        if (actorId != null) {
-            String displayName = accessService.currentActorName().orElse(actorId);
-            WorkspaceMember owner = memberRepository.save(
-                    new WorkspaceMember(saved.getSlug(), actorId, displayName, "OWNER", "ACTIVE", now));
-            memoryPublisher.publicarMembroAdicionado(owner, actorId);
-        }
+        String displayName = accessService.currentActorName().orElse(actorId);
+        WorkspaceMember owner = memberRepository.save(
+                new WorkspaceMember(saved.getSlug(), actorId, displayName, "OWNER", "ACTIVE", now));
+        memoryPublisher.publicarMembroAdicionado(owner, actorId);
 
-        return WorkspaceResponse.from(saved);
+        return WorkspaceResponse.from(saved, owner.getRole());
     }
 
     @Transactional
     public WorkspaceResponse atualizar(String slug, WorkspaceUpdateRequest request) {
         accessService.requireManage(slug);
+        validateCoordinatePair(request.centerLatitude(), request.centerLongitude());
         Workspace workspace = workspaceRepository.findBySlug(slug)
                 .orElseThrow(() -> new IllegalArgumentException("Workspace não encontrado: " + slug));
         if (request.nome() != null && !request.nome().isBlank()) {
@@ -90,37 +97,34 @@ public class WorkspaceService {
         if (request.estado() != null) {
             workspace.setEstado(blankToNull(request.estado()));
         }
-        if (request.centerLatitude() != null) {
+        if (request.centerLatitude() != null && request.centerLongitude() != null) {
             workspace.setCenterLatitude(request.centerLatitude());
-        }
-        if (request.centerLongitude() != null) {
             workspace.setCenterLongitude(request.centerLongitude());
-        }
-        if (request.status() != null && !request.status().isBlank()) {
-            workspace.setStatus(request.status().trim().toUpperCase(java.util.Locale.ROOT));
         }
         workspace.setUpdatedAt(clock.now());
         Workspace saved = workspaceRepository.save(workspace);
         memoryPublisher.publicarAtualizado(saved, accessService.currentActorId().orElse(null));
-        return WorkspaceResponse.from(saved);
+        return WorkspaceResponse.from(saved, authorizationService.currentRole(slug));
     }
 
     @Transactional
     public void remover(String slug) {
-        if (DEFAULT_SLUG.equals(slug)) {
-            // ApiExceptionHandler maps IllegalArgumentException -> HTTP 400.
-            throw new IllegalArgumentException("O workspace inicial não pode ser removido.");
-        }
         accessService.requireManage(slug);
         workspaceRepository.findBySlug(slug).ifPresent(workspace -> {
-            memberRepository.findByWorkspaceIdOrderByJoinedAtAsc(slug).forEach(memberRepository::delete);
-            workspaceRepository.delete(workspace);
+            workspace.setStatus("ARCHIVED");
+            workspace.setUpdatedAt(clock.now());
+            String actorId = accessService.currentActorId().orElse(null);
+            memberRepository.findByWorkspaceIdOrderByJoinedAtAsc(slug)
+                    .forEach(member -> {
+                        member.setStatus("INACTIVE");
+                        memoryPublisher.publicarMembroRemovido(member, actorId);
+                    });
+            memoryPublisher.publicarAtualizado(workspace, actorId);
         });
     }
 
-    // --- Members --------------------------------------------------------------
-
     public List<WorkspaceMemberResponse> membros(String slug) {
+        authorizationService.requireMember(slug);
         return memberRepository.findByWorkspaceIdOrderByJoinedAtAsc(slug)
                 .stream()
                 .map(WorkspaceMemberResponse::from)
@@ -131,14 +135,15 @@ public class WorkspaceService {
     public WorkspaceMemberResponse adicionarMembro(String slug, WorkspaceMemberRequest request) {
         accessService.requireManage(slug);
         assertWorkspaceExists(slug);
-        String actorId = request.actorId().trim();
+        String actorId = AngicoIdNormalizer.normalize(request.actorId());
+        Pessoa pessoa = requireActivePerson(actorId);
         memberRepository.findByWorkspaceIdAndActorId(slug, actorId).ifPresent(existing -> {
             throw new IllegalArgumentException("Esta pessoa já é membro do workspace.");
         });
         WorkspaceMember member = new WorkspaceMember(
                 slug,
                 actorId,
-                firstNonBlank(request.displayName(), actorId),
+                firstNonBlank(request.displayName(), firstNonBlank(pessoa.getNome(), actorId)),
                 normalizeRole(request.role()),
                 normalizeStatus(request.status()),
                 clock.now());
@@ -150,27 +155,36 @@ public class WorkspaceService {
     @Transactional
     public WorkspaceMemberResponse atualizarMembro(String slug, Long memberId, WorkspaceMemberRequest request) {
         accessService.requireManage(slug);
+        lockWorkspace(slug);
         WorkspaceMember member = memberRepository.findByIdAndWorkspaceId(memberId, slug)
                 .orElseThrow(() -> new IllegalArgumentException("Membro não pertence ao workspace informado."));
+        String nextRole = request.role() == null || request.role().isBlank()
+                ? member.getRole()
+                : normalizeRole(request.role());
+        String nextStatus = request.status() == null || request.status().isBlank()
+                ? member.getStatus()
+                : normalizeStatus(request.status());
+        assertActiveOwnerRemains(slug, member, nextRole, nextStatus);
         if (request.displayName() != null && !request.displayName().isBlank()) {
             member.setDisplayName(request.displayName().trim());
         }
-        if (request.role() != null && !request.role().isBlank()) {
-            member.setRole(normalizeRole(request.role()));
-        }
-        if (request.status() != null && !request.status().isBlank()) {
-            member.setStatus(normalizeStatus(request.status()));
-        }
-        return WorkspaceMemberResponse.from(memberRepository.save(member));
+        member.setRole(nextRole);
+        member.setStatus(nextStatus);
+        WorkspaceMember saved = memberRepository.save(member);
+        memoryPublisher.publicarMembroAtualizado(saved, accessService.currentActorId().orElse(null));
+        return WorkspaceMemberResponse.from(saved);
     }
 
     @Transactional
     public void removerMembro(String slug, Long memberId) {
         accessService.requireManage(slug);
-        memberRepository.findByIdAndWorkspaceId(memberId, slug).ifPresent(memberRepository::delete);
+        lockWorkspace(slug);
+        memberRepository.findByIdAndWorkspaceId(memberId, slug).ifPresent(member -> {
+            assertActiveOwnerRemains(slug, member, null, null);
+            memberRepository.delete(member);
+            memoryPublisher.publicarMembroRemovido(member, accessService.currentActorId().orElse(null));
+        });
     }
-
-    // --- Helpers --------------------------------------------------------------
 
     private void assertWorkspaceExists(String slug) {
         if (workspaceRepository.findBySlug(slug).isEmpty()) {
@@ -178,14 +192,11 @@ public class WorkspaceService {
         }
     }
 
-    /** Guarantees the shipped workspace exists so the list is never empty. */
-    private void ensureDefault() {
-        if (!workspaceRepository.existsBySlug(DEFAULT_SLUG)) {
-            workspaceRepository.save(new Workspace(DEFAULT_SLUG, DEFAULT_NOME, null, clock.now()));
-        }
+    private void lockWorkspace(String slug) {
+        workspaceRepository.findBySlugForUpdate(slug)
+                .orElseThrow(() -> new IllegalArgumentException("Workspace não encontrado: " + slug));
     }
 
-    /** Appends -2, -3, … until the slug is free, so names can repeat safely. */
     private String uniqueSlug(String base) {
         String root = base.isBlank() ? "workspace" : base;
         String candidate = root;
@@ -196,8 +207,6 @@ public class WorkspaceService {
         return candidate;
     }
 
-    // "Horta Comunitária 2" -> "horta-comunitaria-2": accent-folded, lowercased,
-    // every run of non-alphanumerics collapsed to a single hyphen.
     static String slugify(String input) {
         String folded = Normalizer.normalize(input, Normalizer.Form.NFD)
                 .replaceAll("\\p{M}", "");
@@ -215,7 +224,55 @@ public class WorkspaceService {
     }
 
     private String normalizeStatus(String status) {
-        return (status == null || status.isBlank() ? "ACTIVE" : status.trim()).toUpperCase(java.util.Locale.ROOT);
+        String normalized = (status == null || status.isBlank() ? "ACTIVE" : status.trim())
+                .toUpperCase(java.util.Locale.ROOT);
+        if (!MEMBER_STATUSES.contains(normalized)) {
+            throw new IllegalArgumentException("Status de membro inválido: " + status);
+        }
+        return normalized;
+    }
+
+    private Pessoa requireActivePerson(String actorId) {
+        Pessoa pessoa = pessoaRepository.findByAngicoIdIgnoreCase(actorId)
+                .orElseThrow(() -> new IllegalArgumentException("Pessoa não encontrada para o Angico ID informado."));
+        String persistedActorId;
+        try {
+            persistedActorId = AngicoIdNormalizer.normalize(pessoa.getAngicoId());
+        } catch (IllegalArgumentException exception) {
+            throw new IllegalArgumentException("Pessoa não encontrada para o Angico ID informado.");
+        }
+        if (!actorId.equals(persistedActorId)) {
+            throw new IllegalArgumentException("Pessoa não encontrada para o Angico ID informado.");
+        }
+        if (!"ATIVA".equalsIgnoreCase(pessoa.getStatus())) {
+            throw new IllegalArgumentException("Somente pessoas ativas podem entrar no workspace.");
+        }
+        return pessoa;
+    }
+
+    private void assertActiveOwnerRemains(
+            String workspaceId,
+            WorkspaceMember member,
+            String nextRole,
+            String nextStatus
+    ) {
+        if (!isActiveOwner(member)) {
+            return;
+        }
+        boolean remainsActiveOwner = "OWNER".equals(nextRole) && "ACTIVE".equals(nextStatus);
+        if (remainsActiveOwner) {
+            return;
+        }
+        long activeOwners = memberRepository.findByWorkspaceIdOrderByJoinedAtAsc(workspaceId).stream()
+                .filter(this::isActiveOwner)
+                .count();
+        if (activeOwners <= 1) {
+            throw new IllegalArgumentException("O workspace precisa manter ao menos um OWNER ativo.");
+        }
+    }
+
+    private boolean isActiveOwner(WorkspaceMember member) {
+        return "OWNER".equals(member.getRole()) && "ACTIVE".equals(member.getStatus());
     }
 
     private static String firstNonBlank(String value, String fallback) {
@@ -224,5 +281,13 @@ public class WorkspaceService {
 
     private static String blankToNull(String value) {
         return value == null || value.isBlank() ? null : value;
+    }
+
+    private static void validateCoordinatePair(Double latitude, Double longitude) {
+        if ((latitude == null) != (longitude == null)
+                || latitude != null && (!Double.isFinite(latitude) || !Double.isFinite(longitude)
+                || latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180)) {
+            throw new IllegalArgumentException("Coordenadas centrais inválidas.");
+        }
     }
 }

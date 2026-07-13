@@ -9,11 +9,6 @@ import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
 import java.time.Instant;
 
-/**
- * Current snapshot of an objeto in the território graph (Observação, Problema,
- * Missão, Pessoa, ...), identified by (workspaceId, entityType, entityId).
- * Upserted from domain events so the graph always reflects the latest state.
- */
 @Entity
 @Table(
         name = "memory_object",
@@ -88,8 +83,16 @@ public class StoredMemoryObject {
         this.updatedAt = now;
     }
 
+    public void canonicalizeType(String entityType) {
+        this.entityType = entityType;
+    }
+
     public Long getId() {
         return id;
+    }
+
+    public String getWorkspaceId() {
+        return workspaceId;
     }
 
     public String getEntityType() {
@@ -100,7 +103,27 @@ public class StoredMemoryObject {
         return entityId;
     }
 
+    public String getExternalCode() {
+        return externalCode;
+    }
+
+    public String getName() {
+        return name;
+    }
+
     public String getStatus() {
         return status;
+    }
+
+    public String getSource() {
+        return source;
+    }
+
+    public Instant getCreatedAt() {
+        return createdAt;
+    }
+
+    public Instant getUpdatedAt() {
+        return updatedAt;
     }
 }

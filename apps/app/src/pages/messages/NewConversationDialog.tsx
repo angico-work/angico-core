@@ -1,0 +1,92 @@
+import { useState, type FormEvent } from 'react';
+import { createConversa } from '../../lib/api';
+import type { Conversa } from '../../types';
+import ModalDialog from '../../components/ModalDialog';
+import type { ConversationContext } from './messageView';
+
+interface NewConversationDialogProps {
+  workspaceId: string;
+  contexts: ConversationContext[];
+  onClose: () => void;
+  onCreated: (conversation: Conversa) => void;
+}
+
+export function NewConversationDialog({
+  workspaceId,
+  contexts,
+  onClose,
+  onCreated
+}: NewConversationDialogProps) {
+  const [title, setTitle] = useState('');
+  const [contextKey, setContextKey] = useState(() => contexts[0]?.key ?? '');
+  const [participants, setParticipants] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    const context = contexts.find((candidate) => candidate.key === contextKey);
+    if (!context) return;
+    setSubmitting(true);
+    setError(null);
+    const refs = participants
+      .split(/[,;\s]+/)
+      .map((value) => value.trim().replace(/^@/, ''))
+      .filter(Boolean);
+    try {
+      onCreated(await createConversa({
+        workspaceId,
+        territorioId: context.territoryId,
+        contextEntityType: context.type,
+        contextEntityId: context.id,
+        titulo: title.trim(),
+        participanteRefs: refs
+      }));
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Não foi possível criar a conversa.');
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <ModalDialog
+      titleId="conversation-title"
+      descriptionId="conversation-description"
+      busy={submitting}
+      onClose={onClose}
+    >
+        <header className="dialog-head">
+          <div>
+            <span className="overline">Coordenação no território</span>
+            <h2 id="conversation-title">Nova conversa</h2>
+            <p id="conversation-description">Defina um contexto confirmado para preservar a conversa no Rastro.</p>
+          </div>
+          <button type="button" className="icon-button" aria-label="Fechar" onClick={onClose} disabled={submitting}>×</button>
+        </header>
+        <form onSubmit={submit}>
+          <div className="field">
+            <label htmlFor="conversation-name">Assunto</label>
+            <input id="conversation-name" data-autofocus required value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Ex.: Organização do mutirão" />
+          </div>
+          <div className="field">
+            <label htmlFor="conversation-context">Contexto da conversa</label>
+            <select id="conversation-context" value={contextKey} onChange={(event) => setContextKey(event.target.value)}>
+              {contexts.map((context) => (
+                <option key={context.key} value={context.key}>{context.label}</option>
+              ))}
+            </select>
+          </div>
+          <div className="field">
+            <label htmlFor="conversation-participants">Participantes <span>opcional</span></label>
+            <input id="conversation-participants" value={participants} onChange={(event) => setParticipants(event.target.value)} placeholder="@maria, @cooperativa" />
+            <small>Use identidades Angico separadas por vírgula.</small>
+          </div>
+          {error && <div className="form-error" role="alert">{error}</div>}
+          <footer className="dialog-actions">
+            <button type="button" className="ghost-button" onClick={onClose} disabled={submitting}>Cancelar</button>
+            <button type="submit" className="primary-button" disabled={submitting || !contextKey}>{submitting ? 'Criando…' : 'Criar conversa'}</button>
+          </footer>
+        </form>
+    </ModalDialog>
+  );
+}

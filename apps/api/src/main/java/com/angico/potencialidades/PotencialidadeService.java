@@ -1,6 +1,8 @@
 package com.angico.potencialidades;
 
 import com.angico.common.ClockProvider;
+import com.angico.workspaces.WorkspaceAuthorizationService;
+import com.angico.workspaces.WorkspaceReferenceValidator;
 import java.util.List;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -13,26 +15,29 @@ public class PotencialidadeService {
     private final PotencialidadeRepository potencialidadeRepository;
     private final PotencialidadeMemoryPublisher potencialidadeMemoryPublisher;
     private final ClockProvider clock;
+    private final WorkspaceAuthorizationService authorizationService;
+    private final WorkspaceReferenceValidator referenceValidator;
 
     public PotencialidadeService(
             PotencialidadeRepository potencialidadeRepository,
             PotencialidadeMemoryPublisher potencialidadeMemoryPublisher,
-            ClockProvider clock
+            ClockProvider clock,
+            WorkspaceAuthorizationService authorizationService,
+            WorkspaceReferenceValidator referenceValidator
     ) {
         this.potencialidadeRepository = potencialidadeRepository;
         this.potencialidadeMemoryPublisher = potencialidadeMemoryPublisher;
         this.clock = clock;
+        this.authorizationService = authorizationService;
+        this.referenceValidator = referenceValidator;
     }
 
-    /**
-     * Registra uma potencialidade e a inscreve na memória do território (objeto +
-     * evento + relação com o território). Persistência e memória commitam
-     * juntas na mesma transação.
-     */
     @Transactional
     public PotencialidadeResponse registrar(PotencialidadeCreateRequest request) {
+        String workspaceId = authorizationService.requireWritableWorkspace(request.workspaceId());
+        referenceValidator.requireTerritorio(request.territorioId(), workspaceId);
         PotencialidadeTerritorial potencialidade = new PotencialidadeTerritorial(
-                request.workspaceId(),
+                workspaceId,
                 request.territorioId(),
                 request.categoria(),
                 request.titulo(),
@@ -41,7 +46,7 @@ public class PotencialidadeService {
                 request.latitude(),
                 request.longitude(),
                 STATUS_INICIAL,
-                request.autorId(),
+                authorizationService.currentActorId(),
                 clock.now()
         );
 
@@ -52,7 +57,8 @@ public class PotencialidadeService {
 
     @Transactional(readOnly = true)
     public List<PotencialidadeResponse> listar(String workspaceId) {
-        return potencialidadeRepository.findByWorkspaceIdOrderByCreatedAtDesc(workspaceId)
+        String authorized = authorizationService.requireAuthorizedWorkspace(workspaceId);
+        return potencialidadeRepository.findByWorkspaceIdOrderByCreatedAtDesc(authorized)
                 .stream()
                 .map(PotencialidadeResponse::from)
                 .toList();

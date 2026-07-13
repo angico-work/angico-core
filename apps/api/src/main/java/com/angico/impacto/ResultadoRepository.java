@@ -8,4 +8,6 @@ import org.springframework.stereotype.Repository;
 public interface ResultadoRepository extends JpaRepository<Resultado, Long> {
     List<Resultado> findByWorkspaceIdOrderByCreatedAtDesc(String workspaceId);
     List<Resultado> findByAcaoIdOrderByCreatedAtDesc(Long acaoId);
+    List<Resultado> findByWorkspaceIdAndAcaoIdOrderByCreatedAtDesc(String workspaceId, Long acaoId);
+    long countByWorkspaceId(String workspaceId);
 }

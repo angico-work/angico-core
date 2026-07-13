@@ -1,5 +1,6 @@
 package com.angico.organizacoes;
 
+import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -12,10 +13,20 @@ public class Organizacao {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
+    @Column
     private String workspaceId;
+    @Column(length = 200)
     private String nome;
+    @Column(length = 40)
     private String tipo;
+    @Column(length = 20)
     private String status;
+    private Long missionId;
+    @Column(length = 20)
+    private String missionRelation;
+    @Column
+    private String actorId;
+    @Column
     private Instant createdAt;
 
     public Long getId() {
@@ -56,6 +67,30 @@ public class Organizacao {
 
     public void setStatus(String status) {
         this.status = status;
+    }
+
+    public Long getMissionId() {
+        return missionId;
+    }
+
+    public void setMissionId(Long missionId) {
+        this.missionId = missionId;
+    }
+
+    public String getMissionRelation() {
+        return missionRelation;
+    }
+
+    public void setMissionRelation(String missionRelation) {
+        this.missionRelation = missionRelation;
+    }
+
+    public String getActorId() {
+        return actorId;
+    }
+
+    public void setActorId(String actorId) {
+        this.actorId = actorId;
     }
 
     public Instant getCreatedAt() {

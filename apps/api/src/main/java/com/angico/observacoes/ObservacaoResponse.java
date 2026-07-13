@@ -18,6 +18,9 @@ public record ObservacaoResponse(
         String urgencia,
         String status,
         String autorId,
+        String clientMutationId,
+        Instant occurredAt,
+        String deviceId,
         Instant createdAt
 ) {
 
@@ -38,6 +41,9 @@ public record ObservacaoResponse(
                 o.getUrgencia(),
                 o.getStatus(),
                 o.getAutorId(),
+                o.getClientMutationId(),
+                o.getOccurredAt(),
+                o.getDeviceId(),
                 o.getCreatedAt()
         );
     }

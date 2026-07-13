@@ -7,11 +7,6 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import java.time.Instant;
 
-/**
- * Uma potencialidade territorial: um ativo/recurso positivo do território
- * (ex.: horta comunitária). É o contraponto da observação — o que já existe
- * de bom e pode ser potencializado no fluxo da memória viva do território.
- */
 @Entity
 public class PotencialidadeTerritorial {
 

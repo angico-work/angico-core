@@ -17,8 +17,9 @@ import java.util.Set;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -133,7 +134,7 @@ public class BrazilMunicipalitySearchService {
                 }
             });
             return municipalities;
-        } catch (IOException ex) {
+        } catch (IOException | JacksonException ex) {
             throw new IllegalStateException("Falha ao carregar municipios do IBGE.", ex);
         } catch (InterruptedException ex) {
             Thread.currentThread().interrupt();

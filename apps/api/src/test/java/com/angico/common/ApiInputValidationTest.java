@@ -1,0 +1,380 @@
+package com.angico.common;
+
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+import com.angico.acoes.AcaoController;
+import com.angico.acoes.AcaoService;
+import com.angico.evidencias.EvidenciaController;
+import com.angico.evidencias.EvidenciaService;
+import com.angico.impacto.IndicadorRequest;
+import com.angico.impacto.MedicaoRequest;
+import com.angico.impacto.ResultadoRequest;
+import com.angico.mensagens.MensagemController;
+import com.angico.mensagens.MensagemService;
+import com.angico.missoes.MissaoController;
+import com.angico.missoes.MissaoService;
+import com.angico.observacoes.ObservacaoController;
+import com.angico.observacoes.ObservacaoService;
+import com.angico.organizacoes.OrganizacaoCreateRequest;
+import com.angico.organizacoes.ParticipacaoRequest;
+import com.angico.pessoas.PessoaController;
+import com.angico.pessoas.PessoaService;
+import com.angico.potencialidades.PotencialidadeController;
+import com.angico.potencialidades.PotencialidadeService;
+import com.angico.problemas.ProblemaController;
+import com.angico.problemas.ProblemaService;
+import com.angico.recursos.RecursoRequest;
+import com.angico.recursos.UsoRecursoRequest;
+import com.angico.territorios.TerritorioController;
+import com.angico.territorios.TerritorioService;
+import com.angico.workspaces.WorkspaceController;
+import com.angico.workspaces.WorkspaceService;
+import jakarta.validation.Validator;
+import java.math.BigDecimal;
+import java.time.Instant;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.springframework.http.MediaType;
+import org.springframework.mock.web.MockMultipartFile;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import org.springframework.validation.beanvalidation.LocalValidatorFactoryBean;
+
+class ApiInputValidationTest {
+
+    private ObservacaoService observacaoService;
+    private ProblemaService problemaService;
+    private PotencialidadeService potencialidadeService;
+    private MissaoService missaoService;
+    private AcaoService acaoService;
+    private PessoaService pessoaService;
+    private TerritorioService territorioService;
+    private MensagemService mensagemService;
+    private WorkspaceService workspaceService;
+    private EvidenciaService evidenciaService;
+    private Validator validator;
+    private MockMvc mvc;
+
+    @BeforeEach
+    void setUp() {
+        observacaoService = mock(ObservacaoService.class);
+        problemaService = mock(ProblemaService.class);
+        potencialidadeService = mock(PotencialidadeService.class);
+        missaoService = mock(MissaoService.class);
+        acaoService = mock(AcaoService.class);
+        pessoaService = mock(PessoaService.class);
+        territorioService = mock(TerritorioService.class);
+        mensagemService = mock(MensagemService.class);
+        workspaceService = mock(WorkspaceService.class);
+        evidenciaService = mock(EvidenciaService.class);
+
+        LocalValidatorFactoryBean validatorFactory = new LocalValidatorFactoryBean();
+        validatorFactory.afterPropertiesSet();
+        validator = validatorFactory;
+        mvc = MockMvcBuilders.standaloneSetup(
+                        new ObservacaoController(observacaoService),
+                        new ProblemaController(problemaService),
+                        new PotencialidadeController(potencialidadeService),
+                        new MissaoController(missaoService),
+                        new AcaoController(acaoService),
+                        new PessoaController(pessoaService),
+                        new TerritorioController(territorioService),
+                        new MensagemController(mensagemService),
+                        new WorkspaceController(workspaceService),
+                        new EvidenciaController(evidenciaService)
+                )
+                .setControllerAdvice(new ApiExceptionHandler())
+                .setValidator(validatorFactory)
+                .build();
+    }
+
+    @Test
+    void requiresExplicitWorkspaceAcrossMutationContracts() {
+        assertFalse(validator.validate(new ResultadoRequest(null, 1L, "Resultado", null, null)).isEmpty());
+        assertFalse(validator.validate(new IndicadorRequest(null, 1L, null, "Indicador", null, null)).isEmpty());
+        assertFalse(validator.validate(new MedicaoRequest(null, 1L, 1.0, null, null, null)).isEmpty());
+        assertFalse(validator.validate(new RecursoRequest(null, "Luvas", "MATERIAL", "par", null)).isEmpty());
+        assertFalse(validator.validate(new UsoRecursoRequest(null, 1L, BigDecimal.ONE, "par", null)).isEmpty());
+        assertFalse(validator.validate(new OrganizacaoCreateRequest(null, "Coletivo", "COLETIVO", null, null)).isEmpty());
+        assertFalse(validator.validate(new ParticipacaoRequest(
+                null, 1L, "MEMBRO", "ATIVA", Instant.now(), null)).isEmpty());
+    }
+
+    @Test
+    void rejectsEvidenceCreationWithoutWorkspace() throws Exception {
+        mvc.perform(multipart("/api/evidencias")
+                        .param("subjectType", "OBSERVACAO")
+                        .param("subjectId", "1")
+                        .param("title", "Foto da nascente"))
+                .andExpect(status().isBadRequest());
+
+        verifyNoInteractions(evidenciaService);
+    }
+
+    @Test
+    void rejectsObservationWithOversizedIdOrInvalidOccurrenceTime() throws Exception {
+        mvc.perform(post("/api/observacoes")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"workspaceId":"%s","categoria":"AMBIENTE","titulo":"Nascente"}
+                                """.formatted("w".repeat(256))))
+                .andExpect(status().isBadRequest());
+        mvc.perform(post("/api/observacoes")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"workspaceId":"bairro","categoria":"AMBIENTE","titulo":"Nascente",
+                                 "occurredAt":"1999-12-31T23:59:59Z"}
+                                """))
+                .andExpect(status().isBadRequest());
+        mvc.perform(post("/api/observacoes")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"workspaceId":"bairro","categoria":"AMBIENTE","titulo":"Nascente",
+                                 "occurredAt":"2100-01-01T00:00:00Z"}
+                                """))
+                .andExpect(status().isBadRequest());
+
+        verifyNoInteractions(observacaoService);
+    }
+
+    @Test
+    void rejectsInvalidCoordinatesAcrossGeographicContracts() throws Exception {
+        mvc.perform(post("/api/observacoes")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"workspaceId":"bairro","categoria":"AMBIENTE","titulo":"Nascente",
+                                 "latitude":-23.5}
+                                """))
+                .andExpect(status().isBadRequest());
+        mvc.perform(post("/api/problemas")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"workspaceId":"bairro","categoria":"AMBIENTE","titulo":"Erosao",
+                                 "latitude":-23.5}
+                                """))
+                .andExpect(status().isBadRequest());
+        mvc.perform(post("/api/potencialidades")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"workspaceId":"bairro","categoria":"CULTURA","titulo":"Horta",
+                                 "latitude":-91,"longitude":0}
+                                """))
+                .andExpect(status().isBadRequest());
+        mvc.perform(post("/api/territorios")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"workspaceId":"bairro","nome":"Microbacia","longitude":-46.5}
+                                """))
+                .andExpect(status().isBadRequest());
+
+        verifyNoInteractions(observacaoService, problemaService, potencialidadeService, territorioService);
+    }
+
+    @Test
+    void rejectsProblemWithOversizedReferenceOrIncompleteCoordinates() throws Exception {
+        mvc.perform(post("/api/problemas")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"workspaceId":"bairro","categoria":"AMBIENTE","titulo":"Erosao",
+                                 "origemObservacaoId":"%s"}
+                                """.formatted("1".repeat(256))))
+                .andExpect(status().isBadRequest());
+        mvc.perform(post("/api/problemas")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"workspaceId":"bairro","categoria":"AMBIENTE","titulo":"Erosao",
+                                 "latitude":-23.5}
+                                """))
+                .andExpect(status().isBadRequest());
+
+        verifyNoInteractions(problemaService);
+    }
+
+    @Test
+    void rejectsPotentialWithOversizedReferenceOrInvalidCoordinates() throws Exception {
+        mvc.perform(post("/api/potencialidades")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"workspaceId":"bairro","territorioId":"%s","categoria":"CULTURA",
+                                 "titulo":"Horta"}
+                                """.formatted("1".repeat(256))))
+                .andExpect(status().isBadRequest());
+        mvc.perform(post("/api/potencialidades")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"workspaceId":"bairro","categoria":"CULTURA","titulo":"Horta",
+                                 "latitude":-91,"longitude":0}
+                                """))
+                .andExpect(status().isBadRequest());
+
+        verifyNoInteractions(potencialidadeService);
+    }
+
+    @Test
+    void rejectsMissionWithOversizedTextOrReference() throws Exception {
+        mvc.perform(post("/api/missoes")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"workspaceId":"bairro","titulo":"%s","responsavelId":"%s"}
+                                """.formatted("m".repeat(256), "1".repeat(256))))
+                .andExpect(status().isBadRequest());
+
+        verifyNoInteractions(missaoService);
+    }
+
+    @Test
+    void rejectsActionWithOversizedDescriptionOrReference() throws Exception {
+        mvc.perform(post("/api/acoes")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"workspaceId":"bairro","titulo":"Mutirao","descricao":"%s",
+                                 "missaoId":"%s"}
+                                """.formatted("d".repeat(2001), "1".repeat(256))))
+                .andExpect(status().isBadRequest());
+
+        verifyNoInteractions(acaoService);
+    }
+
+    @Test
+    void rejectsPersonWithOversizedNameOrAngicoId() throws Exception {
+        mvc.perform(post("/api/pessoas")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"workspaceId":"bairro","nome":"%s","angicoId":"%s"}
+                                """.formatted("p".repeat(256), "a".repeat(31))))
+                .andExpect(status().isBadRequest());
+
+        verifyNoInteractions(pessoaService);
+    }
+
+    @Test
+    void rejectsOversizedProfileUpdates() throws Exception {
+        mvc.perform(put("/api/pessoas/me")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"nome":"%s","telefone":"%s","foto":"%s"}
+                                """.formatted("p".repeat(256), "1".repeat(51), "data:image/jpeg;base64,eA==")))
+                .andExpect(status().isBadRequest());
+
+        verifyNoInteractions(pessoaService);
+    }
+
+    @Test
+    void acceptsACompressedProfilePhotoDataUrl() throws Exception {
+        mvc.perform(put("/api/pessoas/me")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"nome":"Ana","foto":"data:image/jpeg;base64,%s"}
+                                """.formatted("a".repeat(1024))))
+                .andExpect(status().isOk());
+
+        verify(pessoaService).updateCurrent(org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test
+    void rejectsProfilePhotoBeyondTheStorageLimit() throws Exception {
+        mvc.perform(put("/api/pessoas/me")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"nome":"Ana","foto":"%s"}
+                                """.formatted("a".repeat(500_001))))
+                .andExpect(status().isBadRequest());
+
+        verifyNoInteractions(pessoaService);
+    }
+
+    @Test
+    void rejectsTerritoryWithOversizedNameOrInvalidGeometry() throws Exception {
+        mvc.perform(post("/api/territorios")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"workspaceId":"bairro","nome":"%s","latitude":-23.5}
+                                """.formatted("t".repeat(256))))
+                .andExpect(status().isBadRequest());
+        mvc.perform(post("/api/territorios")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"workspaceId":"bairro","nome":"Microbacia",
+                                 "boundingBox":[-24,-23,-47,-46,-45]}
+                                """))
+                .andExpect(status().isBadRequest());
+
+        verifyNoInteractions(territorioService);
+    }
+
+    @Test
+    void rejectsOversizedOrIncompleteWorkspaceGeometry() throws Exception {
+        mvc.perform(post("/api/workspaces")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"nome":"%s","centerLatitude":-23.5}
+                                """.formatted("w".repeat(256))))
+                .andExpect(status().isBadRequest());
+        mvc.perform(put("/api/workspaces/equipe")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"descricao":"%s","centerLongitude":-46.5}
+                                """.formatted("d".repeat(2001))))
+                .andExpect(status().isBadRequest());
+
+        verifyNoInteractions(workspaceService);
+    }
+
+    @Test
+    void rejectsConversationWithOversizedTitleOrParticipantCollection() throws Exception {
+        String participants = java.util.stream.LongStream.rangeClosed(1, 51)
+                .mapToObj(String::valueOf)
+                .collect(java.util.stream.Collectors.joining(","));
+        mvc.perform(post("/api/mensagens/conversas")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"workspaceId":"bairro","contextEntityType":"TERRITORIO",
+                                 "contextEntityId":"1","titulo":"%s","participanteIds":[%s]}
+                                """.formatted("c".repeat(241), participants)))
+                .andExpect(status().isBadRequest());
+
+        verifyNoInteractions(mensagemService);
+    }
+
+    @Test
+    void rejectsMessageWithOversizedBodyOrTooManyAttachments() throws Exception {
+        mvc.perform(multipart("/api/mensagens/conversas/1/mensagens")
+                        .param("corpo", "m".repeat(4001)))
+                .andExpect(status().isBadRequest());
+
+        var request = multipart("/api/mensagens/conversas/1/mensagens").param("corpo", "Registro");
+        for (int index = 0; index < 9; index++) {
+            request.file(new MockMultipartFile(
+                    "attachments", "registro-%d.txt".formatted(index), "text/plain", "dado".getBytes()));
+        }
+        mvc.perform(request).andExpect(status().isBadRequest());
+
+        verifyNoInteractions(mensagemService);
+    }
+
+    @Test
+    void rejectsMessageWithIncompleteOrOutOfRangeCoordinates() throws Exception {
+        mvc.perform(multipart("/api/mensagens/conversas/1/mensagens")
+                        .param("corpo", "Registro")
+                        .param("latitude", "-23.5"))
+                .andExpect(status().isBadRequest());
+        mvc.perform(multipart("/api/mensagens/conversas/1/mensagens")
+                        .param("corpo", "Registro")
+                        .param("latitude", "0")
+                        .param("longitude", "181"))
+                .andExpect(status().isBadRequest());
+        mvc.perform(multipart("/api/mensagens/conversas/1/mensagens")
+                        .param("corpo", "Registro")
+                        .param("occurredAt", "2100-01-01T00:00:00Z"))
+                .andExpect(status().isBadRequest());
+
+        verifyNoInteractions(mensagemService);
+    }
+}

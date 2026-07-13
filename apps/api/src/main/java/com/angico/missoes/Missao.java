@@ -7,10 +7,6 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import java.time.Instant;
 
-/**
- * Uma missão: uma frente de ação que o território assume para responder a um
- * problema priorizado. Carrega progresso e pode ser liderada por alguém.
- */
 @Entity
 public class Missao {
 
@@ -32,6 +28,8 @@ public class Missao {
 
     private int progresso;
 
+    private String territorioId;
+
     private String problemaId;
 
     private String responsavelId;
@@ -48,6 +46,7 @@ public class Missao {
             String descricao,
             String status,
             int progresso,
+            String territorioId,
             String problemaId,
             String responsavelId,
             Instant createdAt
@@ -57,6 +56,7 @@ public class Missao {
         this.descricao = descricao;
         this.status = status;
         this.progresso = progresso;
+        this.territorioId = territorioId;
         this.problemaId = problemaId;
         this.responsavelId = responsavelId;
         this.createdAt = createdAt;
@@ -84,6 +84,10 @@ public class Missao {
 
     public int getProgresso() {
         return progresso;
+    }
+
+    public String getTerritorioId() {
+        return territorioId;
     }
 
     public String getProblemaId() {

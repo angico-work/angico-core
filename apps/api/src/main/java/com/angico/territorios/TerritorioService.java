@@ -4,77 +4,41 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 
-import com.angico.acoes.AcaoRepository;
-import com.angico.common.CurrentActorProvider;
-import com.angico.common.ForbiddenException;
+import com.angico.common.ClockProvider;
 import com.angico.core.memory.MemoryEvent;
-import com.angico.core.memory.MemoryQueryService;
 import com.angico.core.memory.OperationalMemoryService;
-import com.angico.impacto.IndicadorRepository;
-import com.angico.impacto.MedicaoRepository;
-import com.angico.mensagens.MensagemRepository;
-import com.angico.missoes.MissaoRepository;
-import com.angico.observacoes.ObservacaoRepository;
-import com.angico.potencialidades.PotencialidadeRepository;
-import com.angico.problemas.ProblemaRepository;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import com.angico.workspaces.WorkspaceAuthorizationService;
+import tools.jackson.core.JacksonException;
+import tools.jackson.core.type.TypeReference;
+import tools.jackson.databind.ObjectMapper;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class TerritorioService {
 
-    public static final String DEFAULT_WORKSPACE_ID = "angico-publico";
-
     private final TerritorioRepository territorioRepository;
-    private final ObservacaoRepository observacaoRepository;
-    private final ProblemaRepository problemaRepository;
-    private final PotencialidadeRepository potencialidadeRepository;
-    private final MissaoRepository missaoRepository;
-    private final AcaoRepository acaoRepository;
-    private final IndicadorRepository indicadorRepository;
-    private final MedicaoRepository medicaoRepository;
-    private final MensagemRepository mensagemRepository;
     private final OperationalMemoryService memoryService;
-    private final MemoryQueryService memoryQueryService;
-    private final CurrentActorProvider currentActorProvider;
+    private final WorkspaceAuthorizationService authorizationService;
     private final ObjectMapper objectMapper;
+    private final ClockProvider clock;
 
     public TerritorioService(
             TerritorioRepository territorioRepository,
-            ObservacaoRepository observacaoRepository,
-            ProblemaRepository problemaRepository,
-            PotencialidadeRepository potencialidadeRepository,
-            MissaoRepository missaoRepository,
-            AcaoRepository acaoRepository,
-            IndicadorRepository indicadorRepository,
-            MedicaoRepository medicaoRepository,
-            MensagemRepository mensagemRepository,
             OperationalMemoryService memoryService,
-            MemoryQueryService memoryQueryService,
-            CurrentActorProvider currentActorProvider,
-            ObjectMapper objectMapper
+            WorkspaceAuthorizationService authorizationService,
+            ObjectMapper objectMapper,
+            ClockProvider clock
     ) {
         this.territorioRepository = territorioRepository;
-        this.observacaoRepository = observacaoRepository;
-        this.problemaRepository = problemaRepository;
-        this.potencialidadeRepository = potencialidadeRepository;
-        this.missaoRepository = missaoRepository;
-        this.acaoRepository = acaoRepository;
-        this.indicadorRepository = indicadorRepository;
-        this.medicaoRepository = medicaoRepository;
-        this.mensagemRepository = mensagemRepository;
         this.memoryService = memoryService;
-        this.memoryQueryService = memoryQueryService;
-        this.currentActorProvider = currentActorProvider;
+        this.authorizationService = authorizationService;
         this.objectMapper = objectMapper;
+        this.clock = clock;
     }
 
     public List<TerritorioResponse> list(String workspaceId) {
-        String selectedWorkspace = workspace(workspaceId);
-        ensureWorkspaceAccess(selectedWorkspace);
+        String selectedWorkspace = authorizationService.requireAuthorizedWorkspace(workspaceId);
         return territorioRepository.findByWorkspaceIdOrderByNomeAsc(selectedWorkspace)
                 .stream()
                 .map(this::toResponse)
@@ -83,35 +47,31 @@ public class TerritorioService {
 
     public TerritorioResponse get(Long id) {
         Territorio territorio = requireTerritorio(id);
-        ensureWorkspaceAccess(territorio.getWorkspaceId());
         return toResponse(territorio);
     }
 
     public Territorio requireTerritorio(Long id) {
-        return territorioRepository.findById(id)
+        Territorio territorio = territorioRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Territorio nao encontrado: " + id));
-    }
-
-    public Territorio defaultTerritory() {
-        return territorioRepository.findFirstByWorkspaceIdOrderByIdAsc(DEFAULT_WORKSPACE_ID)
-                .orElseGet(() -> territorioRepository.findAll().stream().findFirst()
-                        .orElseThrow(() -> new IllegalStateException("Nenhum territorio cadastrado.")));
+        authorizationService.requireMember(territorio.getWorkspaceId());
+        return territorio;
     }
 
     @Transactional
     public TerritorioResponse create(TerritorioCreateRequest request) {
-        Instant now = Instant.now();
+        validateCoordinates(request.latitude(), request.longitude());
+        validateBoundingBox(request.boundingBox());
+        Instant now = clock.now();
         Territorio territorio = new Territorio();
-        territorio.setWorkspaceId(workspace(request.workspaceId()));
-        ensureWorkspaceAccess(territorio.getWorkspaceId());
+        territorio.setWorkspaceId(authorizationService.requireWritableWorkspace(request.workspaceId()));
         territorio.setNome(requireText(request.nome(), "nome"));
         territorio.setTipo(defaultText(request.tipo(), "BAIRRO"));
         territorio.setCidade(request.cidade());
         territorio.setBairro(request.bairro());
         territorio.setEstado(request.estado());
         territorio.setPais(defaultText(request.pais(), "Brasil"));
-        territorio.setLatitude(defaultNumber(request.latitude(), -23.5614));
-        territorio.setLongitude(defaultNumber(request.longitude(), -46.6559));
+        territorio.setLatitude(request.latitude());
+        territorio.setLongitude(request.longitude());
         territorio.setBoundingBox(toJson(request.boundingBox()));
         territorio.setStatus("ATIVO");
         territorio.setCreatedAt(now);
@@ -119,6 +79,7 @@ public class TerritorioService {
         territorio = territorioRepository.save(territorio);
 
         String entityId = String.valueOf(territorio.getId());
+        String actorId = authorizationService.currentActorId();
         memoryService.registrarObjeto(
                 territorio.getWorkspaceId(),
                 "TERRITORIO",
@@ -134,7 +95,7 @@ public class TerritorioService {
                 entityId,
                 "TERRITORIO_CRIADO",
                 "api",
-                null,
+                actorId,
                 null,
                 null,
                 null,
@@ -144,20 +105,6 @@ public class TerritorioService {
         ));
 
         return toResponse(territorio);
-    }
-
-    private void ensureWorkspaceAccess(String workspaceId) {
-        currentActorProvider.currentWorkspaceId().ifPresent(actorWorkspace -> {
-            if (!actorWorkspace.equals(workspaceId)) {
-                throw new ForbiddenException("Acesso negado ao workspace informado.");
-            }
-        });
-    }
-
-    private boolean canViewOntologyDetails() {
-        return currentActorProvider.currentPapel()
-                .map(role -> role.equalsIgnoreCase("COORDENACAO") || role.equalsIgnoreCase("ADMIN"))
-                .orElse(false);
     }
 
     private TerritorioResponse toResponse(Territorio territorio) {
@@ -178,10 +125,6 @@ public class TerritorioService {
         );
     }
 
-    public static String workspace(String value) {
-        return value == null || value.isBlank() ? DEFAULT_WORKSPACE_ID : value.trim();
-    }
-
     public static String defaultText(String value, String defaultValue) {
         return value == null || value.isBlank() ? defaultValue : value.trim();
     }
@@ -197,8 +140,32 @@ public class TerritorioService {
         return value == null ? "" : value;
     }
 
-    private Double defaultNumber(Double value, Double defaultValue) {
-        return value == null ? defaultValue : value;
+    private void validateCoordinates(Double latitude, Double longitude) {
+        if ((latitude == null) != (longitude == null)) {
+            throw new IllegalArgumentException("Latitude e longitude devem ser informadas juntas.");
+        }
+        if (latitude != null && (!Double.isFinite(latitude) || !Double.isFinite(longitude)
+                || latitude < -90 || latitude > 90
+                || longitude < -180 || longitude > 180)) {
+            throw new IllegalArgumentException("Coordenadas inválidas.");
+        }
+    }
+
+    private void validateBoundingBox(List<Double> values) {
+        if (values == null || values.isEmpty()) {
+            return;
+        }
+        if (values.size() != 4 || values.stream().anyMatch(value -> value == null || !Double.isFinite(value))) {
+            throw new IllegalArgumentException("boundingBox deve conter quatro coordenadas finitas.");
+        }
+        double south = values.get(0);
+        double north = values.get(1);
+        double west = values.get(2);
+        double east = values.get(3);
+        if (south < -90 || north > 90 || west < -180 || east > 180
+                || south > north || west > east) {
+            throw new IllegalArgumentException("boundingBox inválido.");
+        }
     }
 
     private String toJson(List<Double> values) {
@@ -207,7 +174,7 @@ public class TerritorioService {
         }
         try {
             return objectMapper.writeValueAsString(values);
-        } catch (JsonProcessingException ex) {
+        } catch (JacksonException ex) {
             throw new IllegalArgumentException("boundingBox invalido.", ex);
         }
     }

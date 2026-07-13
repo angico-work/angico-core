@@ -8,33 +8,41 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.angico.common.ClockProvider;
+import com.angico.pessoas.Pessoa;
+import com.angico.pessoas.PessoaRepository;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicLong;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.test.util.ReflectionTestUtils;
 
-/**
- * Unit tests for the workspace registry that underpins per-workspace data
- * isolation, plus the workspace membership model. The repositories are stateful
- * in-memory fakes and access control is stubbed permissive, so the real
- * slug/seed/guard/member logic runs without a database or request context.
- */
 class WorkspaceServiceTest {
 
     private List<Workspace> workspaceStore;
     private List<WorkspaceMember> memberStore;
+    private List<Pessoa> pessoaStore;
+    private WorkspaceRepository workspaceRepository;
+    private WorkspaceAuthorizationService authorizationService;
+    private WorkspaceMemoryPublisher memoryPublisher;
     private WorkspaceService service;
 
     @BeforeEach
     void setUp() {
         workspaceStore = new ArrayList<>();
         memberStore = new ArrayList<>();
+        pessoaStore = new ArrayList<>();
+        pessoaStore.add(person("maria.sp", "Maria", "ATIVA"));
+        pessoaStore.add(person("ana.sp", "Ana", "ATIVA"));
+        pessoaStore.add(person("bia.sp", "Bia", "INATIVA"));
 
-        WorkspaceRepository workspaceRepository = mock(WorkspaceRepository.class);
+        workspaceRepository = mock(WorkspaceRepository.class);
         when(workspaceRepository.save(any(Workspace.class))).thenAnswer(call -> {
             Workspace workspace = call.getArgument(0);
             workspaceStore.add(workspace);
@@ -45,15 +53,23 @@ class WorkspaceServiceTest {
         when(workspaceRepository.findAllByOrderByCreatedAtAsc()).thenReturn(workspaceStore);
         when(workspaceRepository.findBySlug(anyString())).thenAnswer(call ->
                 workspaceStore.stream().filter(w -> w.getSlug().equals(call.getArgument(0))).findFirst());
+        when(workspaceRepository.findBySlugForUpdate(anyString())).thenAnswer(call ->
+                workspaceStore.stream().filter(w -> w.getSlug().equals(call.getArgument(0))).findFirst());
         doAnswer(call -> {
             workspaceStore.remove(call.getArgument(0));
             return null;
         }).when(workspaceRepository).delete(any(Workspace.class));
 
         WorkspaceMemberRepository memberRepository = mock(WorkspaceMemberRepository.class);
+        AtomicLong memberId = new AtomicLong(1);
         when(memberRepository.save(any(WorkspaceMember.class))).thenAnswer(call -> {
             WorkspaceMember member = call.getArgument(0);
-            memberStore.add(member);
+            if (member.getId() == null) {
+                ReflectionTestUtils.setField(member, "id", memberId.getAndIncrement());
+            }
+            if (!memberStore.contains(member)) {
+                memberStore.add(member);
+            }
             return member;
         });
         when(memberRepository.findByWorkspaceIdOrderByJoinedAtAsc(anyString())).thenAnswer(call ->
@@ -62,55 +78,129 @@ class WorkspaceServiceTest {
                 memberStore.stream()
                         .filter(m -> m.getWorkspaceId().equals(call.getArgument(0)) && m.getActorId().equals(call.getArgument(1)))
                         .findFirst());
+        when(memberRepository.findByIdAndWorkspaceId(any(), anyString())).thenAnswer(call ->
+                memberStore.stream()
+                        .filter(m -> m.getId().equals(call.getArgument(0))
+                                && m.getWorkspaceId().equals(call.getArgument(1)))
+                        .findFirst());
+        doAnswer(call -> {
+            memberStore.remove(call.getArgument(0));
+            return null;
+        }).when(memberRepository).delete(any(WorkspaceMember.class));
 
-        // Permissive access (no request context in a unit test): never blocks,
-        // and no authenticated actor so create() adds no owner.
+        PessoaRepository pessoaRepository = mock(PessoaRepository.class);
+        when(pessoaRepository.findByAngicoIdIgnoreCase(anyString())).thenAnswer(call ->
+                pessoaStore.stream()
+                        .filter(pessoa -> pessoa.getAngicoId().equalsIgnoreCase(call.getArgument(0)))
+                        .findFirst());
+
         WorkspaceAccessService accessService = mock(WorkspaceAccessService.class);
-        when(accessService.currentActorId()).thenReturn(Optional.empty());
-        when(accessService.currentActorName()).thenReturn(Optional.empty());
+        when(accessService.currentActorId()).thenReturn(Optional.of("test.actor"));
+        when(accessService.currentActorName()).thenReturn(Optional.of("Test Actor"));
 
-        // Memory wiring is exercised at integration level; here it is a no-op.
-        WorkspaceMemoryPublisher memoryPublisher = mock(WorkspaceMemoryPublisher.class);
+        authorizationService = mock(WorkspaceAuthorizationService.class);
+        when(authorizationService.currentActorId()).thenReturn("test.actor");
+        when(authorizationService.authorizedWorkspaceIds()).thenAnswer(call ->
+                workspaceStore.stream().map(Workspace::getSlug).toList());
+        when(authorizationService.currentRole(anyString())).thenAnswer(call ->
+                memberStore.stream()
+                        .filter(member -> member.getWorkspaceId().equals(call.getArgument(0)))
+                        .filter(member -> "test.actor".equals(member.getActorId()))
+                        .filter(member -> "ACTIVE".equals(member.getStatus()))
+                        .map(WorkspaceMember::getRole)
+                        .findFirst()
+                        .orElse(null));
 
-        service = new WorkspaceService(workspaceRepository, memberRepository, accessService, memoryPublisher, new ClockProvider());
+        memoryPublisher = mock(WorkspaceMemoryPublisher.class);
+
+        service = new WorkspaceService(
+                workspaceRepository,
+                memberRepository,
+                pessoaRepository,
+                accessService,
+                authorizationService,
+                memoryPublisher,
+                new ClockProvider());
     }
 
-    private WorkspaceResponse create(String nome, String criadoPor) {
-        return service.criar(new WorkspaceCreateRequest(nome, null, null, null, null, null, criadoPor));
+    private Pessoa person(String angicoId, String nome, String status) {
+        Pessoa pessoa = new Pessoa("pessoas", nome, "MEMBER", Instant.parse("2026-07-10T12:00:00Z"));
+        pessoa.setAngicoId(angicoId);
+        pessoa.setStatus(status);
+        return pessoa;
+    }
+
+    private WorkspaceResponse create(String nome) {
+        return service.criar(new WorkspaceCreateRequest(nome, null, null, null, null, null));
     }
 
     @Test
-    void listingSeedsTheHomeWorkspace() {
-        List<WorkspaceResponse> list = service.listar();
-        assertTrue(list.stream().anyMatch(w -> "coletivo-jardim-novo".equals(w.slug())),
-                "the home workspace should always be present");
+    void listingDoesNotCreateImplicitWorkspaces() {
+        assertTrue(service.listar().isEmpty());
     }
 
     @Test
     void creatingMintsAnAccentFoldedSlugFromTheName() {
-        WorkspaceResponse created = create("Mutirão da Horta", "Júlia (@julia)");
+        WorkspaceResponse created = create("Mutirão da Horta");
         assertEquals("mutirao-da-horta", created.slug());
         assertEquals("Mutirão da Horta", created.nome());
-        assertEquals("Júlia (@julia)", created.createdBy());
+        assertEquals("test.actor", created.createdBy());
         assertEquals("ACTIVE", created.status());
+        assertEquals("OWNER", created.role());
+    }
+
+    @Test
+    void listingReturnsTheCurrentActiveMembershipRole() {
+        create("Equipe");
+        memberStore.getFirst().setRole("VIEWER");
+
+        assertEquals("VIEWER", service.listar().getFirst().role());
+    }
+
+    @Test
+    void updatingReturnsTheCurrentActiveMembershipRole() {
+        WorkspaceResponse created = create("Equipe");
+
+        WorkspaceResponse updated = service.atualizar(created.slug(),
+                new WorkspaceUpdateRequest(null, "Novo contexto", null, null, null, null));
+
+        assertEquals("OWNER", updated.role());
     }
 
     @Test
     void duplicateNamesGetDistinctSlugsSoDataNeverCollides() {
-        assertEquals("horta", create("Horta", null).slug());
-        assertEquals("horta-2", create("Horta", null).slug());
+        assertEquals("horta", create("Horta").slug());
+        assertEquals("horta-2", create("Horta").slug());
     }
 
     @Test
     void removingDropsTheWorkspaceFromTheRegistry() {
-        WorkspaceResponse created = create("Temporário", null);
+        WorkspaceResponse created = create("Temporário");
+        WorkspaceMember owner = memberStore.getFirst();
         service.remover(created.slug());
         assertFalse(service.listar().stream().anyMatch(w -> created.slug().equals(w.slug())));
+        assertEquals("ARCHIVED", workspaceStore.getFirst().getStatus());
+        assertTrue(memberStore.stream().allMatch(member -> "INACTIVE".equals(member.getStatus())));
+        verify(memoryPublisher).publicarMembroRemovido(owner, "test.actor");
     }
 
     @Test
-    void theHomeWorkspaceIsProtectedFromRemoval() {
-        assertThrows(IllegalArgumentException.class, () -> service.remover("coletivo-jardim-novo"));
+    void aWorkspaceNamedLikeTheLocalDemoCanBeRemoved() {
+        WorkspaceResponse created = create("Coletivo Jardim Novo");
+
+        service.remover(created.slug());
+
+        assertTrue(service.listar().isEmpty());
+    }
+
+    @Test
+    void archivedWorkspaceSlugIsNeverReused() {
+        WorkspaceResponse archived = create("Horta Comunitária");
+        service.remover(archived.slug());
+
+        WorkspaceResponse replacement = create("Horta Comunitária");
+
+        assertEquals("horta-comunitaria-2", replacement.slug());
     }
 
     @Test
@@ -120,18 +210,44 @@ class WorkspaceServiceTest {
 
     @Test
     void addingAMemberStoresItWithNormalizedRole() {
-        String slug = create("Equipe", null).slug();
+        String slug = create("Equipe").slug();
         WorkspaceMemberResponse member = service.adicionarMembro(slug,
-                new WorkspaceMemberRequest("maria.sp", "Maria", "coordinator", null));
+                new WorkspaceMemberRequest("@MARIA.SP", "Maria", "coordinator", null));
         assertEquals("maria.sp", member.actorId());
         assertEquals("COORDINATOR", member.role());
         assertEquals("ACTIVE", member.status());
-        assertEquals(1, service.membros(slug).size());
+        assertEquals(2, service.membros(slug).size());
+    }
+
+    @Test
+    void addingUsesTheExistingPersonsNameWhenDisplayNameIsBlank() {
+        String slug = create("Equipe").slug();
+
+        WorkspaceMemberResponse member = service.adicionarMembro(slug,
+                new WorkspaceMemberRequest("maria.sp", " ", null, null));
+
+        assertEquals("Maria", member.displayName());
+    }
+
+    @Test
+    void addingAnUnknownPersonIsRejected() {
+        String slug = create("Equipe").slug();
+
+        assertThrows(IllegalArgumentException.class, () -> service.adicionarMembro(slug,
+                new WorkspaceMemberRequest("desconhecida.sp", "Desconhecida", null, null)));
+    }
+
+    @Test
+    void addingAnInactivePersonIsRejected() {
+        String slug = create("Equipe").slug();
+
+        assertThrows(IllegalArgumentException.class, () -> service.adicionarMembro(slug,
+                new WorkspaceMemberRequest("bia.sp", "Bia", null, null)));
     }
 
     @Test
     void addingTheSameMemberTwiceIsRejected() {
-        String slug = create("Equipe", null).slug();
+        String slug = create("Equipe").slug();
         service.adicionarMembro(slug, new WorkspaceMemberRequest("maria.sp", "Maria", null, null));
         assertThrows(IllegalArgumentException.class, () ->
                 service.adicionarMembro(slug, new WorkspaceMemberRequest("maria.sp", "Maria", null, null)));
@@ -139,8 +255,103 @@ class WorkspaceServiceTest {
 
     @Test
     void anInvalidRoleIsRejected() {
-        String slug = create("Equipe", null).slug();
+        String slug = create("Equipe").slug();
         assertThrows(IllegalArgumentException.class, () ->
                 service.adicionarMembro(slug, new WorkspaceMemberRequest("ana.sp", "Ana", "BOSS", null)));
+    }
+
+    @Test
+    void anInvalidMemberStatusIsRejectedOnAddAndUpdate() {
+        String slug = create("Equipe").slug();
+        assertThrows(IllegalArgumentException.class, () -> service.adicionarMembro(slug,
+                new WorkspaceMemberRequest("maria.sp", "Maria", null, "PENDING")));
+        WorkspaceMemberResponse member = service.adicionarMembro(slug,
+                new WorkspaceMemberRequest("maria.sp", "Maria", null, "ACTIVE"));
+
+        assertThrows(IllegalArgumentException.class, () -> service.atualizarMembro(
+                slug,
+                member.id(),
+                new WorkspaceMemberRequest("maria.sp", null, null, "SUSPENDED")));
+    }
+
+    @Test
+    void theLastActiveOwnerCannotBeDemoted() {
+        String slug = create("Equipe").slug();
+        WorkspaceMember owner = memberStore.getFirst();
+
+        assertThrows(IllegalArgumentException.class, () -> service.atualizarMembro(
+                slug,
+                owner.getId(),
+                new WorkspaceMemberRequest(owner.getActorId(), null, "ADMIN", null)));
+        assertEquals("OWNER", owner.getRole());
+    }
+
+    @Test
+    void theLastActiveOwnerCannotBeDeactivated() {
+        String slug = create("Equipe").slug();
+        WorkspaceMember owner = memberStore.getFirst();
+
+        assertThrows(IllegalArgumentException.class, () -> service.atualizarMembro(
+                slug,
+                owner.getId(),
+                new WorkspaceMemberRequest(owner.getActorId(), null, null, "INACTIVE")));
+        assertEquals("ACTIVE", owner.getStatus());
+    }
+
+    @Test
+    void theLastActiveOwnerCannotBeRemoved() {
+        String slug = create("Equipe").slug();
+        WorkspaceMember owner = memberStore.getFirst();
+
+        assertThrows(IllegalArgumentException.class, () -> service.removerMembro(slug, owner.getId()));
+        assertTrue(memberStore.contains(owner));
+    }
+
+    @Test
+    void anOwnerCanBeDemotedWhenAnotherActiveOwnerExists() {
+        String slug = create("Equipe").slug();
+        WorkspaceMember originalOwner = memberStore.getFirst();
+        service.adicionarMembro(slug, new WorkspaceMemberRequest("ana.sp", "Ana", "OWNER", "ACTIVE"));
+
+        WorkspaceMemberResponse updated = service.atualizarMembro(
+                slug,
+                originalOwner.getId(),
+                new WorkspaceMemberRequest(originalOwner.getActorId(), null, "ADMIN", null));
+
+        assertEquals("ADMIN", updated.role());
+        verify(memoryPublisher).publicarMembroAtualizado(originalOwner, "test.actor");
+    }
+
+    @Test
+    void updatingAndRemovingMembersPublishMemoryEvents() {
+        String slug = create("Equipe").slug();
+        WorkspaceMemberResponse added = service.adicionarMembro(
+                slug,
+                new WorkspaceMemberRequest("maria.sp", "Maria", "MEMBER", "ACTIVE"));
+        WorkspaceMember member = memberStore.stream()
+                .filter(candidate -> candidate.getId().equals(added.id()))
+                .findFirst()
+                .orElseThrow();
+
+        service.atualizarMembro(slug, member.getId(),
+                new WorkspaceMemberRequest(member.getActorId(), "Maria Silva", null, null));
+        service.removerMembro(slug, member.getId());
+
+        verify(memoryPublisher).publicarMembroAtualizado(member, "test.actor");
+        verify(memoryPublisher).publicarMembroRemovido(member, "test.actor");
+        assertFalse(memberStore.contains(member));
+    }
+
+    @Test
+    void changingMembershipAcquiresTheWorkspaceLock() {
+        String slug = create("Equipe").slug();
+        WorkspaceMemberResponse added = service.adicionarMembro(
+                slug,
+                new WorkspaceMemberRequest("maria.sp", "Maria", "MEMBER", "ACTIVE"));
+
+        service.atualizarMembro(slug, added.id(),
+                new WorkspaceMemberRequest(added.actorId(), "Maria Silva", null, null));
+
+        verify(workspaceRepository).findBySlugForUpdate(slug);
     }
 }

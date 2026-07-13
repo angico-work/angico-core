@@ -14,9 +14,13 @@ public record PessoaResponse(
 ) {
 
     public static PessoaResponse from(Pessoa p) {
+        return inWorkspace(p, p.getWorkspaceId());
+    }
+
+    public static PessoaResponse inWorkspace(Pessoa p, String workspaceId) {
         return new PessoaResponse(
                 p.getId(),
-                p.getWorkspaceId(),
+                workspaceId,
                 p.getNome(),
                 p.getPapel(),
                 p.getAngicoId(),

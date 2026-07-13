@@ -1,23 +1,18 @@
 package com.angico.potencialidades;
 
 import com.angico.core.memory.MemoryEvent;
+import com.angico.core.memory.MemoryRelationMetadata;
 import com.angico.core.memory.OperationalMemoryService;
+import com.angico.core.ontology.OntologyService;
 import java.util.HashMap;
 import java.util.Map;
 import org.springframework.stereotype.Component;
 
-/**
- * Traduz mudanças em potencialidades para a memória operacional do território:
- * registra o objeto, o evento e a relação com o território. É aqui que
- * "cada registro vira memória viva".
- */
 @Component
 public class PotencialidadeMemoryPublisher {
 
-    static final String TIPO = "potencialidade";
-    private static final String SOURCE = "web";
-    private static final String RELACAO_TERRITORIO = "ocorre_em";
-    private static final String TIPO_TERRITORIO = "territorio";
+    static final String TIPO = OntologyService.POTENCIALIDADE;
+    private static final String SOURCE = "api";
 
     private final OperationalMemoryService memory;
 
@@ -45,7 +40,8 @@ public class PotencialidadeMemoryPublisher {
         if (p.getTerritorioId() != null && !p.getTerritorioId().isBlank()) {
             memory.registrarRelacaoAtiva(
                     p.getWorkspaceId(), TIPO, entityId,
-                    TIPO_TERRITORIO, p.getTerritorioId(), RELACAO_TERRITORIO, SOURCE, null);
+                    OntologyService.TERRITORIO, p.getTerritorioId(), "EXISTE_EM",
+                    new MemoryRelationMetadata(SOURCE, null, p.getAutorId(), null));
         }
     }
 }

@@ -8,12 +8,6 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.web.servlet.config.annotation.CorsRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
-/**
- * Cross-origin support for deployments where the web client is served from a
- * different origin than the API (e.g. the Vercel front-end calling the API
- * host). In local dev the Vite proxy keeps everything same-origin, so this
- * stays inert unless {@code angico.allowed-origins} is set.
- */
 @Configuration
 public class CorsConfig implements WebMvcConfigurer {
 
@@ -37,6 +31,7 @@ public class CorsConfig implements WebMvcConfigurer {
                 .allowedOrigins(allowedOrigins.toArray(String[]::new))
                 .allowedMethods("GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS")
                 .allowedHeaders("*")
+                .allowCredentials(true)
                 .exposedHeaders("Content-Disposition");
     }
 }

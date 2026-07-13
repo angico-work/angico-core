@@ -1,6 +1,8 @@
 package com.angico.problemas;
 
 import com.angico.common.ClockProvider;
+import com.angico.workspaces.WorkspaceAuthorizationService;
+import com.angico.workspaces.WorkspaceReferenceValidator;
 import java.util.List;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -14,26 +16,30 @@ public class ProblemaService {
     private final ProblemaRepository problemaRepository;
     private final ProblemaMemoryPublisher problemaMemoryPublisher;
     private final ClockProvider clock;
+    private final WorkspaceAuthorizationService authorizationService;
+    private final WorkspaceReferenceValidator referenceValidator;
 
     public ProblemaService(
             ProblemaRepository problemaRepository,
             ProblemaMemoryPublisher problemaMemoryPublisher,
-            ClockProvider clock
+            ClockProvider clock,
+            WorkspaceAuthorizationService authorizationService,
+            WorkspaceReferenceValidator referenceValidator
     ) {
         this.problemaRepository = problemaRepository;
         this.problemaMemoryPublisher = problemaMemoryPublisher;
         this.clock = clock;
+        this.authorizationService = authorizationService;
+        this.referenceValidator = referenceValidator;
     }
 
-    /**
-     * Registra um problema socioambiental e o inscreve na memória do território
-     * (objeto + evento + eventual relação com a observação de origem).
-     * Persistência e memória commitam juntas na mesma transação.
-     */
     @Transactional
     public ProblemaResponse registrar(ProblemaRequest request) {
+        String workspaceId = authorizationService.requireWritableWorkspace(request.workspaceId());
+        referenceValidator.requireTerritorio(request.territorioId(), workspaceId);
+        referenceValidator.requireObservacao(request.origemObservacaoId(), workspaceId);
         ProblemaSocioambiental problema = new ProblemaSocioambiental(
-                request.workspaceId(),
+                workspaceId,
                 request.territorioId(),
                 request.categoria(),
                 request.titulo(),
@@ -45,7 +51,7 @@ public class ProblemaService {
                         ? SEVERIDADE_PADRAO : request.severidade(),
                 STATUS_INICIAL,
                 request.origemObservacaoId(),
-                request.autorId(),
+                authorizationService.currentActorId(),
                 clock.now()
         );
 
@@ -56,7 +62,8 @@ public class ProblemaService {
 
     @Transactional(readOnly = true)
     public List<ProblemaResponse> listar(String workspaceId) {
-        return problemaRepository.findByWorkspaceIdOrderByCreatedAtDesc(workspaceId)
+        String authorized = authorizationService.requireAuthorizedWorkspace(workspaceId);
+        return problemaRepository.findByWorkspaceIdOrderByCreatedAtDesc(authorized)
                 .stream()
                 .map(ProblemaResponse::from)
                 .toList();

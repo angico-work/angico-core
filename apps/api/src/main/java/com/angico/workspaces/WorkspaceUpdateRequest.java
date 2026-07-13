@@ -1,16 +1,26 @@
 package com.angico.workspaces;
 
-/**
- * Partial update for a workspace — every field is optional; only the non-null
- * ones are applied. Editing requires a managing role (see WorkspaceAccessService).
- */
+import com.angico.common.validation.CoordinatePair;
+import com.angico.common.validation.ValidCoordinatePair;
+import jakarta.validation.constraints.Size;
+
+@ValidCoordinatePair
 public record WorkspaceUpdateRequest(
-        String nome,
-        String descricao,
-        String cidade,
-        String estado,
+        @Size(max = 255) String nome,
+        @Size(max = 2000) String descricao,
+        @Size(max = 255) String cidade,
+        @Size(max = 255) String estado,
         Double centerLatitude,
-        Double centerLongitude,
-        String status
-) {
+        Double centerLongitude
+) implements CoordinatePair {
+
+    @Override
+    public Double latitude() {
+        return centerLatitude;
+    }
+
+    @Override
+    public Double longitude() {
+        return centerLongitude;
+    }
 }

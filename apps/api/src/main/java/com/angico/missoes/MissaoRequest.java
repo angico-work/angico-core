@@ -1,16 +1,14 @@
 package com.angico.missoes;
 
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
 
-/**
- * Payload to register a new missão. Only workspaceId/titulo are strictly
- * required; problemaId/responsavelId enrich the território's memory.
- */
 public record MissaoRequest(
-        @NotBlank String workspaceId,
-        @NotBlank String titulo,
-        String descricao,
-        String problemaId,
-        String responsavelId
+        @NotBlank @Size(max = 255) String workspaceId,
+        @Size(max = 255) String territorioId,
+        @NotBlank @Size(max = 255) String titulo,
+        @Size(max = 2000) String descricao,
+        @Size(max = 255) String problemaId,
+        @Size(max = 255) String responsavelId
 ) {
 }

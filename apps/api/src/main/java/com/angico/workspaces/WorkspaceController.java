@@ -35,7 +35,7 @@ public class WorkspaceController {
     }
 
     @PutMapping("/{slug}")
-    public WorkspaceResponse atualizar(@PathVariable String slug, @RequestBody WorkspaceUpdateRequest request) {
+    public WorkspaceResponse atualizar(@PathVariable String slug, @Valid @RequestBody WorkspaceUpdateRequest request) {
         return workspaceService.atualizar(slug, request);
     }
 
@@ -44,8 +44,6 @@ public class WorkspaceController {
     public void remover(@PathVariable String slug) {
         workspaceService.remover(slug);
     }
-
-    // --- Members --------------------------------------------------------------
 
     @GetMapping("/{slug}/members")
     public List<WorkspaceMemberResponse> membros(@PathVariable String slug) {

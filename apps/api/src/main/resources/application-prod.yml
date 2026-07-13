@@ -1,0 +1,26 @@
+spring:
+  config:
+    activate:
+      on-profile: prod
+  datasource:
+    url: ${ANGICO_DB_URL}
+    username: ${ANGICO_DB_USER}
+    password: ${ANGICO_DB_PASSWORD}
+  servlet:
+    multipart:
+      max-request-size: ${ANGICO_UPLOAD_MAX_REQUEST_SIZE:4MB}
+  jpa:
+    hibernate:
+      ddl-auto: validate
+  flyway:
+    enabled: ${ANGICO_FLYWAY_ENABLED:true}
+    locations: classpath:db/migration/{vendor}
+    baseline-on-migrate: true
+    baseline-version: 0
+    clean-disabled: true
+    validate-migration-naming: true
+
+angico:
+  auth:
+    cookie-secure: true
+  allowed-origins: ${ANGICO_ALLOWED_ORIGINS}

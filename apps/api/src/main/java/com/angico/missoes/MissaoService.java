@@ -1,6 +1,8 @@
 package com.angico.missoes;
 
 import com.angico.common.ClockProvider;
+import com.angico.workspaces.WorkspaceAuthorizationService;
+import com.angico.workspaces.WorkspaceReferenceValidator;
 import java.util.List;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -14,43 +16,50 @@ public class MissaoService {
     private final MissaoRepository missaoRepository;
     private final MissaoMemoryPublisher missaoMemoryPublisher;
     private final ClockProvider clock;
+    private final WorkspaceAuthorizationService authorizationService;
+    private final WorkspaceReferenceValidator referenceValidator;
 
     public MissaoService(
             MissaoRepository missaoRepository,
             MissaoMemoryPublisher missaoMemoryPublisher,
-            ClockProvider clock
+            ClockProvider clock,
+            WorkspaceAuthorizationService authorizationService,
+            WorkspaceReferenceValidator referenceValidator
     ) {
         this.missaoRepository = missaoRepository;
         this.missaoMemoryPublisher = missaoMemoryPublisher;
         this.clock = clock;
+        this.authorizationService = authorizationService;
+        this.referenceValidator = referenceValidator;
     }
 
-    /**
-     * Registra uma missão e a inscreve na memória do território (objeto +
-     * evento + relações com problema/responsável). Persistência e memória
-     * commitam juntas na mesma transação.
-     */
     @Transactional
     public MissaoResponse registrar(MissaoRequest request) {
+        String workspaceId = authorizationService.requireWritableWorkspace(request.workspaceId());
+        referenceValidator.requireTerritorio(request.territorioId(), workspaceId);
+        referenceValidator.requireProblema(request.problemaId(), workspaceId);
+        referenceValidator.requirePessoa(request.responsavelId(), workspaceId);
         Missao missao = new Missao(
-                request.workspaceId(),
+                workspaceId,
                 request.titulo(),
                 request.descricao(),
                 STATUS_INICIAL,
                 PROGRESSO_INICIAL,
+                request.territorioId(),
                 request.problemaId(),
                 request.responsavelId(),
                 clock.now()
         );
 
         Missao saved = missaoRepository.save(missao);
-        missaoMemoryPublisher.publicarCriada(saved);
+        missaoMemoryPublisher.publicarCriada(saved, authorizationService.currentActorId());
         return MissaoResponse.from(saved);
     }
 
     @Transactional(readOnly = true)
     public List<MissaoResponse> listar(String workspaceId) {
-        return missaoRepository.findByWorkspaceIdOrderByCreatedAtDesc(workspaceId)
+        String authorized = authorizationService.requireAuthorizedWorkspace(workspaceId);
+        return missaoRepository.findByWorkspaceIdOrderByCreatedAtDesc(authorized)
                 .stream()
                 .map(MissaoResponse::from)
                 .toList();

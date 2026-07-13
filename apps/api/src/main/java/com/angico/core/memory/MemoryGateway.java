@@ -14,7 +14,7 @@ public interface MemoryGateway {
             String source
     );
 
-    void ensureActiveRelation(
+    default void ensureActiveRelation(
             String workspaceId,
             String originType,
             String originId,
@@ -23,7 +23,48 @@ public interface MemoryGateway {
             String relationType,
             String source,
             String notes
+    ) {
+        ensureActiveRelation(
+                workspaceId,
+                originType,
+                originId,
+                destinationType,
+                destinationId,
+                relationType,
+                MemoryRelationMetadata.fromLegacy(source, notes)
+        );
+    }
+
+    void ensureActiveRelation(
+            String workspaceId,
+            String originType,
+            String originId,
+            String destinationType,
+            String destinationId,
+            String relationType,
+            MemoryRelationMetadata metadata
     );
+
+    default void replaceActiveRelation(
+            String workspaceId,
+            String originType,
+            String originId,
+            String destinationType,
+            String destinationId,
+            String relationType,
+            String source,
+            String notes
+    ) {
+        replaceActiveRelation(
+                workspaceId,
+                originType,
+                originId,
+                destinationType,
+                destinationId,
+                relationType,
+                MemoryRelationMetadata.fromLegacy(source, notes)
+        );
+    }
 
     void replaceActiveRelation(
             String workspaceId,
@@ -32,14 +73,22 @@ public interface MemoryGateway {
             String destinationType,
             String destinationId,
             String relationType,
-            String source,
-            String notes
+            MemoryRelationMetadata metadata
     );
 
     int endActiveRelations(
             String workspaceId,
             String originType,
             String originId,
+            String relationType
+    );
+
+    int endActiveRelation(
+            String workspaceId,
+            String originType,
+            String originId,
+            String destinationType,
+            String destinationId,
             String relationType
     );
 }

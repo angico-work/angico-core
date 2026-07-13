@@ -9,16 +9,6 @@ import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
 import java.time.Instant;
 
-/**
- * A workspace is the top-level partition of the platform: every observação,
- * problema, potencialidade, mensagem, ponto de mapa e pessoa é escopada pelo
- * {@code slug} do workspace. Esta entidade é o registro nomeado que permite a um
- * membro alternar entre atividades paralelas, com metadados de lugar/estado.
- *
- * <p>O {@code slug} continua sendo a chave de partição usada por todos os
- * módulos — os campos extras (descrição, cidade, estado, centro, status) apenas
- * enriquecem o registro e são nuláveis para conviver com linhas já existentes.
- */
 @Entity
 @Table(name = "workspace", uniqueConstraints = @UniqueConstraint(name = "uk_workspace_slug", columnNames = "slug"))
 public class Workspace {

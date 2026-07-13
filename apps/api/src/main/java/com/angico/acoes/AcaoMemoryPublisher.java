@@ -1,25 +1,18 @@
 package com.angico.acoes;
 
 import com.angico.core.memory.MemoryEvent;
+import com.angico.core.memory.MemoryRelationMetadata;
 import com.angico.core.memory.OperationalMemoryService;
+import com.angico.core.ontology.OntologyService;
 import java.util.HashMap;
 import java.util.Map;
 import org.springframework.stereotype.Component;
 
-/**
- * Traduz mudanças em ações para a memória operacional: registra o objeto, o
- * evento e as relações com a missão (parte_de) e com o responsável
- * (liderada_por). É aqui que cada ação iniciada vira memória viva.
- */
 @Component
 public class AcaoMemoryPublisher {
 
-    static final String TIPO = "acao";
-    private static final String SOURCE = "web";
-    private static final String RELACAO_MISSAO = "parte_de";
-    private static final String TIPO_MISSAO = "missao";
-    private static final String RELACAO_RESPONSAVEL = "liderada_por";
-    private static final String TIPO_PESSOA = "pessoa";
+    static final String TIPO = OntologyService.ACAO;
+    private static final String SOURCE = "api";
 
     private final OperationalMemoryService memory;
 
@@ -27,8 +20,9 @@ public class AcaoMemoryPublisher {
         this.memory = memory;
     }
 
-    public void publicarIniciada(Acao a) {
+    public void publicarIniciada(Acao a, String actorId) {
         String entityId = String.valueOf(a.getId());
+        MemoryRelationMetadata metadata = new MemoryRelationMetadata(SOURCE, null, actorId, null);
 
         memory.registrarObjeto(
                 a.getWorkspaceId(), TIPO, entityId, null, a.getTitulo(), a.getStatus(), SOURCE);
@@ -39,18 +33,18 @@ public class AcaoMemoryPublisher {
 
         memory.registrarEvento(new MemoryEvent(
                 a.getWorkspaceId(), TIPO, entityId, "acao.iniciada", SOURCE,
-                a.getResponsavelId(), null, null, null, 1, a.getCreatedAt(), payload));
+                actorId, null, null, null, 1, a.getCreatedAt(), payload));
 
         if (a.getMissaoId() != null && !a.getMissaoId().isBlank()) {
             memory.registrarRelacaoAtiva(
-                    a.getWorkspaceId(), TIPO, entityId,
-                    TIPO_MISSAO, a.getMissaoId(), RELACAO_MISSAO, SOURCE, null);
+                    a.getWorkspaceId(), OntologyService.MISSAO, a.getMissaoId(),
+                    TIPO, entityId, "COMPOSTA_POR", metadata);
         }
 
         if (a.getResponsavelId() != null && !a.getResponsavelId().isBlank()) {
             memory.registrarRelacaoAtiva(
-                    a.getWorkspaceId(), TIPO, entityId,
-                    TIPO_PESSOA, a.getResponsavelId(), RELACAO_RESPONSAVEL, SOURCE, null);
+                    a.getWorkspaceId(), OntologyService.PESSOA, a.getResponsavelId(),
+                    TIPO, entityId, "RESPONSAVEL_POR", metadata);
         }
     }
 }

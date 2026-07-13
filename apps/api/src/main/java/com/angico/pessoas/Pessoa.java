@@ -8,10 +8,6 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Lob;
 import java.time.Instant;
 
-/**
- * Uma pessoa do território: jovem mapeador, mentor ou participante que se
- * engaja no fluxo de observação e ação local.
- */
 @Entity
 public class Pessoa {
 
@@ -30,15 +26,10 @@ public class Pessoa {
     @Column(nullable = false)
     private Instant createdAt;
 
-    // --- Auth / identity, grafted from the dev "v.1 funcional" auth slice ---
-    // All nullable so the existing 4-arg creation path (PessoaService) keeps
-    // working; uniqueness is enforced in AuthService, not via DB constraints,
-    // to avoid ddl-auto=update friction on an existing data directory.
     private String email;
 
     private String angicoId;
 
-    // Contact + avatar, editable from the in-app profile editor.
     private String telefone;
 
     @Lob
@@ -54,8 +45,6 @@ public class Pessoa {
 
     private Instant lastLoginAt;
 
-    // Public no-arg constructor: required by JPA and used by the auth flow,
-    // which builds a Pessoa via setters during register / ensureLeader.
     public Pessoa() {
     }
 
