@@ -44,9 +44,9 @@ export default function TerritoryAtlas() {
           focusable="false"
         >
           <defs>
-            <pattern id="atlas-grid" width="240" height="152" patternUnits="userSpaceOnUse">
+            <pattern id="atlas-grid" x="38" y="38" width="281" height="171" patternUnits="userSpaceOnUse">
               <path
-                d="M240 0H0V152"
+                d="M281 0H0V171"
                 fill="none"
                 stroke="#8dac9f"
                 strokeWidth="1"
@@ -65,16 +65,26 @@ export default function TerritoryAtlas() {
           <g className="map-base atlas-reveal">
             <rect width="1200" height="760" fill="#dfeae6" />
             <rect x="38" y="38" width="1124" height="684" fill="url(#atlas-grid)" />
+            <rect
+              x="38"
+              y="38"
+              width="1124"
+              height="684"
+              fill="none"
+              stroke="#8dac9f"
+              strokeWidth="1.5"
+              opacity=".5"
+            />
             <g fill="#58756d" fontFamily="var(--font-label)" fontSize="16" textAnchor="middle">
               {['A', 'B', 'C', 'D'].map((label, index) => (
-                <text data-grid-axis="column" x={180 + index * 280} y="28" key={label}>
+                <text data-grid-axis="column" x={178.5 + index * 281} y="28" key={label}>
                   {label}
                 </text>
               ))}
             </g>
             <g fill="#58756d" fontFamily="var(--font-label)" fontSize="16" textAnchor="middle">
               {['1', '2', '3', '4'].map((label, index) => (
-                <text data-grid-axis="row" x="20" y={124 + index * 170} key={label}>
+                <text data-grid-axis="row" x="20" y={128.5 + index * 171} key={label}>
                   {label}
                 </text>
               ))}
