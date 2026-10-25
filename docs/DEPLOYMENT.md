@@ -2,6 +2,44 @@
 
 Este documento descreve o procedimento futuro. Os workflows do repositório apenas verificam código; não publicam aplicações, não promovem ambientes e não executam migrations em banco remoto.
 
+## Vercel e Supabase
+
+O `vercel.json` da raiz reúne a aplicação Vite e a API Java em Vercel Services, com Container Runtime para o Dockerfile da API. Ambos os recursos estão em beta. `/api/*` e `/health/*` chegam à API; as demais rotas chegam ao app, incluindo deep links. Os cookies continuam na mesma origem. Essa configuração dispensa `ANGICO_API_ORIGIN`; o proxy em `apps/app/api` permanece disponível para publicações independentes.
+
+Crie dois projetos Vercel na equipe Angico, a partir do mesmo commit:
+
+- Aplicação: Root Directory na raiz do repositório; use `vercel.json` para os serviços.
+- Site público: Root Directory `apps/site`; configure `VITE_APP_URL` com a URL HTTPS definitiva da aplicação e publique após validar o app.
+
+No projeto da aplicação, configure estas variáveis **somente no servidor** para Production. Não conecte previews ao banco de produção; use outro projeto Supabase para testes.
+
+| Variável | Configuração |
+| --- | --- |
+| `SPRING_PROFILES_ACTIVE` | `prod` |
+| `PORT` | `8082` |
+| `ANGICO_DB_URL` | URL JDBC do Session Pooler Supabase, porta `5432`, com `sslmode=require`; sem senha na URL |
+| `ANGICO_DB_USER` | Usuário exibido no Session Pooler (`postgres.<project-ref>`) |
+| `ANGICO_DB_PASSWORD` | Senha do banco, configurada como segredo |
+| `ANGICO_ALLOWED_ORIGINS` | Origem HTTPS exata da aplicação |
+| `ANGICO_AUTH_REQUIRED` | `true` |
+| `ANGICO_PUBLIC_REGISTRATION` | `false` |
+| `ANGICO_COOKIE_SECURE` | `true` |
+| `ANGICO_FLYWAY_ENABLED` | `true` |
+| `ANGICO_SEED_DEMO_LEADER` | `false` |
+| `SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE` | `5` por instância; ajustar à capacidade do banco e à concorrência |
+| `SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE` | `0` |
+| `ANGICO_UPLOAD_STORAGE` | `supabase` |
+| `SUPABASE_URL` | Origem HTTPS do projeto Supabase |
+| `SUPABASE_SECRET_KEY` | Chave `sb_secret_...` do projeto, configurada como segredo |
+| `ANGICO_UPLOAD_BUCKET` | `angico-private` |
+| `ANGICO_GEOCODER_USER_AGENT` | `Angico/0.1 timeangico@gmail.com` |
+
+No Supabase da organização Angico, use um projeto novo e banco vazio. Mantenha a Data API desativada: o backend usa JDBC e a autenticação já existente no Angico. Crie o bucket **privado** `angico-private`, com limite de `2097152` bytes e tipos `image/jpeg`, `image/png`, `image/webp`, `application/pdf`, `text/plain`. Não crie políticas públicas de leitura; downloads passam pela autorização do backend. A chave secreta acessa Storage pelo cabeçalho `apikey` e nunca entra no bundle do frontend.
+
+Após configurar os segredos, a inicialização aplica as migrations. Verifique `/health/ready`, login, rejeição de acesso entre workspaces, envio e leitura de um anexo e releitura após reiniciar a API. O primeiro usuário precisa ser provisionado antes do teste de login; não habilite cadastro público apenas para contornar esse passo. Não considere um build bem-sucedido como validação da conexão ao banco ou do Storage.
+
+Referências: [Vercel Services](https://vercel.com/docs/services), [Container Runtime](https://vercel.com/docs/functions/runtimes/container), [Supabase com Spring Boot](https://supabase.com/docs/guides/getting-started/quickstarts/springboot), [chaves Supabase](https://supabase.com/docs/guides/api/api-keys).
+
 ## Unidades independentes
 
 | Unidade | Diretório | Artefato | Porta local |

@@ -1,10 +1,5 @@
 package com.angico.mensagens;
 
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.LinkOption;
-import java.nio.file.Path;
-import java.nio.file.StandardOpenOption;
 import java.text.Normalizer;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -16,7 +11,6 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
-import java.util.UUID;
 import java.util.stream.Collectors;
 
 import com.angico.common.ClockProvider;
@@ -27,6 +21,7 @@ import com.angico.common.idempotency.IdempotencyRecord;
 import com.angico.common.idempotency.IdempotencyService;
 import com.angico.common.upload.SafeUploadValidator;
 import com.angico.common.upload.SafeUploadValidator.PreparedUpload;
+import com.angico.common.upload.UploadStorage;
 import com.angico.core.memory.MemoryEvent;
 import com.angico.core.memory.MemoryRelationMetadata;
 import com.angico.core.memory.MemorySyncStatus;
@@ -41,8 +36,6 @@ import com.angico.territorios.TerritorioService;
 import com.angico.workspaces.WorkspaceAuthorizationService;
 import com.angico.workspaces.WorkspaceMemberRepository;
 import com.angico.workspaces.WorkspaceReferenceValidator;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.Resource;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
@@ -55,6 +48,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 @Service
 public class MensagemService {
+    private static final org.slf4j.Logger LOGGER = org.slf4j.LoggerFactory.getLogger(MensagemService.class);
 
     private static final Set<String> LINKABLE_TYPES = Set.of(
             OntologyService.TERRITORIO,
@@ -82,7 +76,7 @@ public class MensagemService {
     private final ClockProvider clock;
     private final TransactionTemplate transactions;
     private final SafeUploadValidator uploadValidator;
-    private final Path uploadRoot;
+    private final UploadStorage storage;
 
     public MensagemService(
             ConversaRepository conversaRepository,
@@ -101,7 +95,7 @@ public class MensagemService {
             ClockProvider clock,
             PlatformTransactionManager transactionManager,
             SafeUploadValidator uploadValidator,
-            @Value("${angico.uploads.dir:uploads}") String uploadDir
+            UploadStorage storage
     ) {
         this.conversaRepository = conversaRepository;
         this.mensagemRepository = mensagemRepository;
@@ -119,7 +113,7 @@ public class MensagemService {
         this.clock = clock;
         this.transactions = new TransactionTemplate(transactionManager);
         this.uploadValidator = uploadValidator;
-        this.uploadRoot = Path.of(uploadDir).toAbsolutePath().normalize();
+        this.storage = storage;
     }
 
     public List<ConversaResponse> list(String workspaceId) {
@@ -523,19 +517,7 @@ public class MensagemService {
     }
 
     public Resource attachmentResource(MensagemAnexo anexo) {
-        Path path = Path.of(anexo.getStoragePath()).toAbsolutePath().normalize();
-        try {
-            Path realRoot = uploadRoot.toRealPath();
-            Path realPath = path.toRealPath();
-            if (!realPath.startsWith(realRoot)
-                    || Files.isSymbolicLink(path)
-                    || !Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) {
-                throw new IllegalArgumentException("Arquivo nao encontrado.");
-            }
-            return new FileSystemResource(realPath);
-        } catch (IOException exception) {
-            throw new IllegalArgumentException("Arquivo nao encontrado.");
-        }
+        return storage.resource(anexo.getStoragePath());
     }
 
     private Conversa requireConversa(Long id) {
@@ -646,25 +628,8 @@ public class MensagemService {
     private MensagemAnexo saveAttachment(String workspaceId, Mensagem mensagem, PreparedUpload file) {
         String contentType = file.contentType();
         String originalName = file.originalFilename();
-        String storedName = UUID.randomUUID() + "_" + originalName;
-        Path folder = uploadRoot.resolve(workspaceId).resolve("mensagens").normalize();
-        if (!folder.startsWith(uploadRoot)) {
-            throw new IllegalArgumentException("Nome de arquivo invalido.");
-        }
-        Path destination;
-        try {
-            Files.createDirectories(uploadRoot);
-            Files.createDirectories(folder);
-            Path realRoot = uploadRoot.toRealPath();
-            Path realFolder = folder.toRealPath();
-            if (!realFolder.startsWith(realRoot)) {
-                throw new IllegalArgumentException("Caminho de anexo inválido.");
-            }
-            destination = realFolder.resolve(storedName).normalize();
-            Files.write(destination, file.bytes(), StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE);
-        } catch (IOException ex) {
-            throw new IllegalStateException("Falha ao gravar anexo.", ex);
-        }
+        String destination = storage.store(workspaceId + "/mensagens", file.extension(),
+                file.bytes(), contentType);
         registerRollbackCleanup(destination);
 
         MensagemAnexo anexo = new MensagemAnexo();
@@ -673,13 +638,13 @@ public class MensagemService {
         anexo.setOriginalFilename(originalName);
         anexo.setContentType(contentType);
         anexo.setSizeBytes(file.sizeBytes());
-        anexo.setStoragePath(destination.toString());
+        anexo.setStoragePath(destination);
         anexo.setAttachmentType(contentType.startsWith("image/") ? "IMAGEM" : "ARQUIVO");
         anexo.setCreatedAt(clock.now());
         return anexoRepository.save(anexo);
     }
 
-    private void registerRollbackCleanup(Path path) {
+    private void registerRollbackCleanup(String path) {
         if (!TransactionSynchronizationManager.isSynchronizationActive()) {
             return;
         }
@@ -688,8 +653,9 @@ public class MensagemService {
             public void afterCompletion(int status) {
                 if (status != TransactionSynchronization.STATUS_COMMITTED) {
                     try {
-                        Files.deleteIfExists(path);
-                    } catch (IOException ignored) {
+                        storage.delete(path);
+                    } catch (RuntimeException exception) {
+                        LOGGER.warn("Não foi possível remover um anexo após rollback.");
                     }
                 }
             }

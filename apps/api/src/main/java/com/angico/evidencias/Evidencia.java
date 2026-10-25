@@ -96,7 +96,7 @@ public class Evidencia {
         this.contentType = stored.contentType();
         this.sizeBytes = stored.sizeBytes();
         this.sha256 = stored.sha256();
-        this.storagePath = stored.path().toString();
+        this.storagePath = stored.path();
     }
 
     public Long getId() {

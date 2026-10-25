@@ -30,6 +30,10 @@ angico:
     user-agent: ${ANGICO_GEOCODER_USER_AGENT:Angico/0.1 (contato@angico.app)}
     default-country: ${ANGICO_GEOCODER_DEFAULT_COUNTRY:BR}
   uploads:
+    storage: ${ANGICO_UPLOAD_STORAGE:local}
+    supabase-url: ${SUPABASE_URL:}
+    supabase-secret-key: ${SUPABASE_SECRET_KEY:}
+    bucket: ${ANGICO_UPLOAD_BUCKET:angico-private}
     dir: ${ANGICO_UPLOAD_DIR:uploads}
     max-bytes: ${ANGICO_UPLOAD_MAX_BYTES:2097152}
     allowed-content-types: ${ANGICO_UPLOAD_ALLOWED_TYPES:image/jpeg,image/png,image/webp,application/pdf,text/plain}

@@ -70,6 +70,8 @@ Não execute migrations contra `apps/api/data` durante testes. A suíte usa H2 e
 
 ## Uploads
 
-O diretório configurado por `ANGICO_UPLOAD_DIR` precisa ser privado e persistente em uma publicação futura. Cada arquivo é limitado a `2 MB` por padrão; nome, extensão, MIME, assinatura do conteúdo e tamanho são validados antes da gravação. O limite total do request é configurado separadamente por `ANGICO_UPLOAD_MAX_REQUEST_SIZE`.
+Com `ANGICO_UPLOAD_STORAGE=local` (padrão), `ANGICO_UPLOAD_DIR` precisa ser privado e persistente. Em containers efêmeros, use `ANGICO_UPLOAD_STORAGE=supabase`, `SUPABASE_URL`, `SUPABASE_SECRET_KEY` e `ANGICO_UPLOAD_BUCKET` para armazenar evidências e anexos em um bucket privado. A chave `sb_secret_...` é exclusiva do servidor; o navegador acessa arquivos pela API, após autorização do objeto e do workspace. O banco guarda um localizador `supabase://bucket/chave`, sem credenciais ou URLs públicas.
+
+Cada arquivo é limitado a `2 MB` por padrão; nome, extensão, MIME, assinatura do conteúdo e tamanho são validados antes da gravação. O limite total do request é configurado separadamente por `ANGICO_UPLOAD_MAX_REQUEST_SIZE`. Trocar o provedor de um ambiente com arquivos existentes exige migrar objetos e localizadores juntos; a configuração não copia arquivos automaticamente.
 
 Consulte [segurança](../../docs/SECURITY.md), [ontologia](../../docs/ONTOLOGY.md) e [operação futura](../../docs/DEPLOYMENT.md) antes de preparar um ambiente externo.
