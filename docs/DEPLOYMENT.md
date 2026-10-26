@@ -25,7 +25,7 @@ No projeto da aplicação, configure estas variáveis **somente no servidor** pa
 | `ANGICO_DB_PASSWORD` | Senha do banco, configurada como segredo |
 | `ANGICO_ALLOWED_ORIGINS` | Origem HTTPS exata da aplicação |
 | `ANGICO_AUTH_REQUIRED` | `true` |
-| `ANGICO_PUBLIC_REGISTRATION` | `false` |
+| `ANGICO_PUBLIC_REGISTRATION` | `true` no protótipo para permitir cadastro pelo aplicativo; `false` para uma instalação fechada |
 | `ANGICO_COOKIE_SECURE` | `true` |
 | `ANGICO_FLYWAY_ENABLED` | `true` |
 | `SPRING_FLYWAY_DEFAULT_SCHEMA` | `angico` |
@@ -44,7 +44,7 @@ No Supabase da organização Angico, use um projeto novo e o esquema dedicado `a
 
 Mantenha a Data API desativada: o backend usa JDBC e a autenticação já existente no Angico. Não exponha o esquema `angico` à Data API. Crie o bucket **privado** `angico-private`, com limite de `2097152` bytes e tipos `image/jpeg`, `image/png`, `image/webp`, `application/pdf`, `text/plain`. Não crie políticas públicas de leitura; downloads passam pela autorização do backend. A chave secreta acessa Storage pelo cabeçalho `apikey` e nunca entra no bundle do frontend.
 
-Após configurar os segredos, a inicialização aplica as migrations. Verifique `/health/ready`, login, rejeição de acesso entre workspaces, envio e leitura de um anexo e releitura após reiniciar a API. O primeiro usuário precisa ser provisionado antes do teste de login; não habilite cadastro público apenas para contornar esse passo. Não considere um build bem-sucedido como validação da conexão ao banco ou do Storage.
+Após configurar os segredos, a inicialização aplica as migrations. Verifique `/health/ready`, cadastro, login, rejeição de acesso entre workspaces, envio e leitura de um anexo e releitura após reiniciar a API. No protótipo, o cadastro público foi solicitado: a pessoa acessa `/cadastro` (também disponível pelo link “Criar conta” no login), informa nome, e-mail, Angico ID e senha e entra automaticamente em um espaço novo e isolado. O papel de proprietário vale apenas nesse espaço; o cadastro não concede acesso aos espaços existentes. O fluxo atual não inclui confirmação de e-mail nem recuperação de senha. Não considere um build bem-sucedido como validação da conexão ao banco ou do Storage.
 
 O serviço pode ser reduzido a zero quando inativo. O cliente aguarda até 60 segundos para permitir a primeira inicialização da API; requisições posteriores normalmente reutilizam a instância ativa.
 
