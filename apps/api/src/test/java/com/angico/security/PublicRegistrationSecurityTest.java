@@ -3,6 +3,7 @@ package com.angico.security;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.cookie;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -68,5 +69,40 @@ class PublicRegistrationSecurityTest {
         assertEquals("ACTIVE", membership.getStatus());
         assertTrue(memberRepository.findByWorkspaceIdAndActorId(
                 AuthService.DEFAULT_WORKSPACE_ID, "isolated.person").isEmpty());
+
+        var sessionCookie = result.getResponse().getCookie("ANGICO_SESSION");
+        String csrfToken = com.jayway.jsonpath.JsonPath.read(
+                result.getResponse().getContentAsString(), "$.csrfToken");
+        mvc.perform(get("/api/auth/me").cookie(sessionCookie))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.angicoId").value("isolated.person"));
+        mvc.perform(get("/api/workspaces").cookie(sessionCookie))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].slug").value(workspaceId));
+        mvc.perform(get("/api/workspaces/" + AuthService.DEFAULT_WORKSPACE_ID + "/members")
+                        .cookie(sessionCookie))
+                .andExpect(status().isForbidden());
+
+        mvc.perform(post("/api/auth/logout").cookie(sessionCookie).header("X-CSRF-Token", csrfToken))
+                .andExpect(status().isNoContent());
+        mvc.perform(get("/api/auth/me").cookie(sessionCookie))
+                .andExpect(status().isUnauthorized());
+        mvc.perform(post("/api/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"email":"isolated@example.test","password":"password-123"}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(cookie().exists("ANGICO_SESSION"))
+                .andExpect(jsonPath("$.workspaceId").value(workspaceId));
+
+        mvc.perform(post("/api/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"nome":"Outra Pessoa","email":"ISOLATED@example.test","angicoId":"another.person","password":"password-123"}
+                                """))
+                .andExpect(status().isBadRequest());
+        assertEquals(2, workspaceRepository.count());
     }
 }
