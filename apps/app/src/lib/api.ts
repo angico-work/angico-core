@@ -47,7 +47,8 @@ export function apiUrl(path: string): string {
 }
 
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
-const REQUEST_TIMEOUT_MS = 20_000;
+// Allow the production API to start after scaling to zero.
+const REQUEST_TIMEOUT_MS = 60_000;
 
 export interface ApiRequestInit extends RequestInit {
   timeoutMs?: number;

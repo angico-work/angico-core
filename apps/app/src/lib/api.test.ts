@@ -338,6 +338,29 @@ describe('cookie session API', () => {
     await expect(requestJson('/api/territorios')).rejects.toBeInstanceOf(ApiNetworkError);
   });
 
+  it('waits for login while a scaled-to-zero API starts', async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal('fetch', vi.fn((_input: RequestInfo | URL, init?: RequestInit) => (
+      new Promise<Response>((resolve, reject) => {
+        const timer = setTimeout(() => resolve(response(200, session)), 25_000);
+        init?.signal?.addEventListener('abort', () => {
+          clearTimeout(timer);
+          reject(init.signal?.reason);
+        });
+      })
+    )));
+
+    try {
+      const result = login('ana@example.test', 'correct-password').catch((error) => error);
+      await vi.advanceTimersByTimeAsync(25_000);
+
+      await expect(result).resolves.toEqual(session);
+      expect(isAuthenticated()).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('aborts a stalled request at the client boundary', async () => {
     vi.useFakeTimers();
     const fetchMock = vi.fn((_input: RequestInfo | URL, init?: RequestInit) => (
@@ -348,7 +371,7 @@ describe('cookie session API', () => {
     vi.stubGlobal('fetch', fetchMock);
 
     const request = requestJson('/api/territorios').catch((error) => error);
-    await vi.advanceTimersByTimeAsync(20_000);
+    await vi.advanceTimersByTimeAsync(60_000);
 
     await expect(request).resolves.toBeInstanceOf(ApiNetworkError);
     vi.useRealTimers();
@@ -364,12 +387,12 @@ describe('cookie session API', () => {
     });
     vi.stubGlobal('fetch', fetchMock);
 
-    const request = apiFetch('/api/evidencias', { method: 'POST', timeoutMs: 60_000 })
+    const request = apiFetch('/api/evidencias', { method: 'POST', timeoutMs: 90_000 })
       .catch((error) => error);
-    await vi.advanceTimersByTimeAsync(20_000);
+    await vi.advanceTimersByTimeAsync(70_000);
     const init = fetchMock.mock.calls[0][1] as RequestInit;
     expect(init.signal?.aborted).toBe(false);
-    await vi.advanceTimersByTimeAsync(40_000);
+    await vi.advanceTimersByTimeAsync(20_000);
 
     await expect(request).resolves.toMatchObject({ name: 'TimeoutError' });
     vi.useRealTimers();
