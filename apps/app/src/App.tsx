@@ -37,7 +37,8 @@ export default function App() {
   return (
     <Routes>
       <Route path="/" element={<EntryRoute />} />
-      <Route path="/login" element={<LoginPage />} />
+      <Route path="/login" element={<LoginPage key="login" />} />
+      <Route path="/cadastro" element={<LoginPage key="register" mode="register" />} />
       <Route path="/app" element={<AppShell />}>
         <Route index element={<LazyRoute label="Abrindo painel…"><DashboardPage /></LazyRoute>} />
         <Route path="mapa" element={<LazyRoute label="Abrindo mapa…"><MapPage /></LazyRoute>} />
