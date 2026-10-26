@@ -1,6 +1,8 @@
 # Operação e publicação
 
-Este documento descreve o procedimento futuro. Os workflows do repositório apenas verificam código; não publicam aplicações, não promovem ambientes e não executam migrations em banco remoto.
+Este documento descreve a configuração de publicação e os cuidados para liberações futuras. Os workflows do repositório apenas verificam código. A integração Git da Vercel publica a branch `production`, e a API aplica migrations ao iniciar.
+
+Publicação inicial: [site público](https://angico-site.vercel.app) e [aplicativo](https://angico-app.vercel.app), na equipe Angico da Vercel, com banco e Storage na organização Angico do Supabase. A branch `production` parte de `dev` (`c82a9b9`), a linha mais avançada verificada na preparação do deploy; não havia uma branch `develop`.
 
 ## Vercel e Supabase
 
@@ -17,7 +19,8 @@ No projeto da aplicação, configure estas variáveis **somente no servidor** pa
 | --- | --- |
 | `SPRING_PROFILES_ACTIVE` | `prod` |
 | `PORT` | `8082` |
-| `ANGICO_DB_URL` | URL JDBC do Session Pooler Supabase, porta `5432`, com `sslmode=require`; sem senha na URL |
+| `JAVA_TOOL_OPTIONS` | `-XX:TieredStopAtLevel=1` para reduzir o tempo de partida da JVM no Container Runtime |
+| `ANGICO_DB_URL` | URL JDBC do Session Pooler Supabase, porta `5432`, com `sslmode=require&currentSchema=angico`; sem senha na URL |
 | `ANGICO_DB_USER` | Usuário exibido no Session Pooler (`postgres.<project-ref>`) |
 | `ANGICO_DB_PASSWORD` | Senha do banco, configurada como segredo |
 | `ANGICO_ALLOWED_ORIGINS` | Origem HTTPS exata da aplicação |
@@ -25,6 +28,9 @@ No projeto da aplicação, configure estas variáveis **somente no servidor** pa
 | `ANGICO_PUBLIC_REGISTRATION` | `false` |
 | `ANGICO_COOKIE_SECURE` | `true` |
 | `ANGICO_FLYWAY_ENABLED` | `true` |
+| `SPRING_FLYWAY_DEFAULT_SCHEMA` | `angico` |
+| `SPRING_FLYWAY_SCHEMAS` | `angico` |
+| `SPRING_FLYWAY_BASELINE_ON_MIGRATE` | `false` para a instalação nova |
 | `ANGICO_SEED_DEMO_LEADER` | `false` |
 | `SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE` | `5` por instância; ajustar à capacidade do banco e à concorrência |
 | `SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE` | `0` |
@@ -34,9 +40,13 @@ No projeto da aplicação, configure estas variáveis **somente no servidor** pa
 | `ANGICO_UPLOAD_BUCKET` | `angico-private` |
 | `ANGICO_GEOCODER_USER_AGENT` | `Angico/0.1 timeangico@gmail.com` |
 
-No Supabase da organização Angico, use um projeto novo e banco vazio. Mantenha a Data API desativada: o backend usa JDBC e a autenticação já existente no Angico. Crie o bucket **privado** `angico-private`, com limite de `2097152` bytes e tipos `image/jpeg`, `image/png`, `image/webp`, `application/pdf`, `text/plain`. Não crie políticas públicas de leitura; downloads passam pela autorização do backend. A chave secreta acessa Storage pelo cabeçalho `apikey` e nunca entra no bundle do frontend.
+No Supabase da organização Angico, use um projeto novo e o esquema dedicado `angico`, criado automaticamente pelo Flyway. O esquema `public` do Supabase pode conter objetos da plataforma mesmo em um projeto novo: habilitar baseline automático nele pode pular `V0` e deixar as migrations seguintes sem as tabelas básicas. Não use o histórico parcial de `public` para a instalação nova; mantenha JDBC e Flyway apontando para `angico`, com baseline automático desativado. Não troque o esquema de uma instalação que já contenha dados sem um plano de migração.
+
+Mantenha a Data API desativada: o backend usa JDBC e a autenticação já existente no Angico. Não exponha o esquema `angico` à Data API. Crie o bucket **privado** `angico-private`, com limite de `2097152` bytes e tipos `image/jpeg`, `image/png`, `image/webp`, `application/pdf`, `text/plain`. Não crie políticas públicas de leitura; downloads passam pela autorização do backend. A chave secreta acessa Storage pelo cabeçalho `apikey` e nunca entra no bundle do frontend.
 
 Após configurar os segredos, a inicialização aplica as migrations. Verifique `/health/ready`, login, rejeição de acesso entre workspaces, envio e leitura de um anexo e releitura após reiniciar a API. O primeiro usuário precisa ser provisionado antes do teste de login; não habilite cadastro público apenas para contornar esse passo. Não considere um build bem-sucedido como validação da conexão ao banco ou do Storage.
+
+O serviço pode ser reduzido a zero quando inativo. O cliente aguarda até 60 segundos para permitir a primeira inicialização da API; requisições posteriores normalmente reutilizam a instância ativa.
 
 Referências: [Vercel Services](https://vercel.com/docs/services), [Container Runtime](https://vercel.com/docs/functions/runtimes/container), [Supabase com Spring Boot](https://supabase.com/docs/guides/getting-started/quickstarts/springboot), [chaves Supabase](https://supabase.com/docs/guides/api/api-keys).
 
