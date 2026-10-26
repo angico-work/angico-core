@@ -5,7 +5,7 @@ import 'leaflet/dist/leaflet.css';
 import '../styles/map.css';
 import type { MapPoint } from '../types';
 
-const TILE_URL = import.meta.env.VITE_MAP_TILE_URL ?? 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
+const TILE_URL = import.meta.env.VITE_MAP_TILE_URL ?? 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
 
 const TYPE_COLOR: Record<string, string> = {
   observacao: '#34ABA6',
@@ -100,8 +100,9 @@ export default function MapView({
   return (
     <MapContainer center={center} zoom={zoom} scrollWheelZoom style={{ height, width: '100%' }}>
       <TileLayer
-        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
         url={TILE_URL}
+        referrerPolicy="strict-origin-when-cross-origin"
       />
       {recenter && <Recenter center={center} zoom={zoom} />}
       {fitToPoints && <FitBounds points={points} />}
