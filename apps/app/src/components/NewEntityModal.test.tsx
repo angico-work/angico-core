@@ -3,7 +3,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import NewEntityModal from './NewEntityModal';
 import { captureDomainMutation, captureObservation } from '../lib/offlineSync';
-import { listEntities, listTerritorios } from '../lib/api';
+import { createTerritorio, listEntities, listTerritorios, resolveCoords, searchGeocoding } from '../lib/api';
 
 vi.mock('../lib/offlineSync', () => ({
   captureDomainMutation: vi.fn(),
@@ -14,6 +14,7 @@ vi.mock('../lib/api', () => ({
   getSession: vi.fn().mockReturnValue({ pessoaId: 7, nome: 'Ana', angicoId: 'ana.sp' }),
   listEntities: vi.fn(),
   listTerritorios: vi.fn(),
+  createTerritorio: vi.fn(),
   resolveCoords: vi.fn(),
   reverseGeocode: vi.fn(),
   searchGeocoding: vi.fn().mockResolvedValue([])
@@ -30,6 +31,11 @@ const origin = {
 };
 
 beforeEach(() => {
+  vi.clearAllMocks();
+  vi.mocked(captureObservation).mockReset();
+  vi.mocked(createTerritorio).mockReset();
+  vi.mocked(resolveCoords).mockReset();
+  vi.mocked(searchGeocoding).mockReset().mockResolvedValue([]);
   vi.mocked(listTerritorios).mockResolvedValue([territory]);
   vi.mocked(listEntities).mockResolvedValue([origin]);
   vi.mocked(captureDomainMutation).mockResolvedValue({
@@ -43,6 +49,92 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe('field observation capture', () => {
+  const place = {
+    displayName: 'Mococa, São Paulo, Brasil', city: 'Mococa', state: 'São Paulo',
+    neighborhood: null, country: 'Brasil', latitude: -21.467, longitude: -47.004, boundingBox: []
+  };
+
+  async function choosePlace() {
+    fireEvent.change(await screen.findByLabelText('Buscar cidade, local ou endereço'), { target: { value: 'Mococa' } });
+    fireEvent.mouseDown(await screen.findByRole('option', { name: /Mococa/ }));
+    await waitFor(() => expect(screen.getByText(/será adicionado aos territórios ao salvar/)).toBeInTheDocument());
+    fireEvent.change(screen.getByLabelText('Título'), { target: { value: 'Praça com resíduos' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Continuar para ancorar' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Continuar para comprovar' }));
+  }
+
+  it('captures a searched city in an empty workspace without a separate territory form', async () => {
+    vi.mocked(listTerritorios).mockResolvedValue([]);
+    vi.mocked(searchGeocoding).mockResolvedValue([place]);
+    vi.mocked(resolveCoords).mockResolvedValue([-21.467, -47.004]);
+    vi.mocked(createTerritorio).mockResolvedValue({ ...territory, id: 9, nome: place.displayName });
+    vi.mocked(captureObservation).mockResolvedValue({ clientMutationId: 'place-1', status: 'SYNCED' });
+    render(<NewEntityModal workspaceId="territorio-teste" onClose={() => undefined} onCreated={() => undefined} />);
+
+    await choosePlace();
+    expect(createTerritorio).not.toHaveBeenCalled();
+    expect(screen.getAllByText(place.displayName).length).toBeGreaterThan(0);
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar observação' }));
+    expect(await screen.findByRole('status')).toHaveTextContent('Registro sincronizado');
+    expect(createTerritorio).toHaveBeenCalledWith(expect.objectContaining({
+      workspaceId: 'territorio-teste', nome: place.displayName, cidade: 'Mococa', latitude: -21.467, longitude: -47.004
+    }));
+    expect(captureObservation).toHaveBeenCalledWith(expect.objectContaining({
+      territorioId: '9', localizacao: place.displayName, latitude: -21.467, longitude: -47.004
+    }));
+  });
+
+  it('retains the created territory when retrying a failed observation save', async () => {
+    vi.mocked(listTerritorios).mockResolvedValue([]);
+    vi.mocked(searchGeocoding).mockResolvedValue([place]);
+    vi.mocked(resolveCoords).mockResolvedValue([-21.467, -47.004]);
+    vi.mocked(createTerritorio).mockResolvedValue({ ...territory, id: 9, nome: place.displayName });
+    vi.mocked(captureObservation).mockRejectedValueOnce(new Error('Não foi possível salvar')).mockResolvedValue({ clientMutationId: 'place-2', status: 'SYNCED' });
+    render(<NewEntityModal workspaceId="territorio-teste" onClose={() => undefined} onCreated={() => undefined} />);
+    await choosePlace();
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar observação' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Não foi possível salvar');
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar observação' }));
+    expect(await screen.findByRole('status')).toHaveTextContent('Registro sincronizado');
+    expect(createTerritorio).toHaveBeenCalledTimes(1);
+  });
+
+  it('invalidates a selected place when its text changes', async () => {
+    vi.mocked(listTerritorios).mockResolvedValue([]);
+    vi.mocked(searchGeocoding).mockResolvedValue([place]);
+    vi.mocked(resolveCoords).mockResolvedValue([-21.467, -47.004]);
+    render(<NewEntityModal workspaceId="territorio-teste" onClose={() => undefined} onCreated={() => undefined} />);
+    await choosePlace();
+    fireEvent.click(screen.getByRole('button', { name: 'Voltar' }));
+    fireEvent.change(screen.getByLabelText('Endereço, comunidade ou referência'), { target: { value: 'Outro lugar' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Continuar para comprovar' }));
+    expect(screen.getByRole('alert')).toHaveTextContent('Selecione uma cidade, local ou endereço');
+    expect(createTerritorio).not.toHaveBeenCalled();
+  });
+
+  it('does not save the record if adding its searched location fails', async () => {
+    vi.mocked(listTerritorios).mockResolvedValue([]);
+    vi.mocked(searchGeocoding).mockResolvedValue([place]);
+    vi.mocked(resolveCoords).mockResolvedValue([-21.467, -47.004]);
+    vi.mocked(createTerritorio).mockRejectedValue(new Error('Sem conexão para adicionar o local'));
+    render(<NewEntityModal workspaceId="territorio-teste" onClose={() => undefined} onCreated={() => undefined} />);
+    await choosePlace();
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar observação' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Sem conexão para adicionar o local');
+    expect(captureObservation).not.toHaveBeenCalled();
+  });
+
+  it('shows a lookup failure instead of accepting a place without coordinates', async () => {
+    vi.mocked(listTerritorios).mockResolvedValue([]);
+    vi.mocked(searchGeocoding).mockResolvedValue([{ ...place, latitude: null, longitude: null }]);
+    vi.mocked(resolveCoords).mockResolvedValue(null);
+    render(<NewEntityModal workspaceId="territorio-teste" onClose={() => undefined} onCreated={() => undefined} />);
+    fireEvent.change(await screen.findByLabelText('Buscar cidade, local ou endereço'), { target: { value: 'Mococa' } });
+    fireEvent.mouseDown(await screen.findByRole('option', { name: /Mococa/ }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Não foi possível localizar esse resultado no mapa');
+    expect(createTerritorio).not.toHaveBeenCalled();
+  });
+
   it('moves through the three explicit field steps without exposing database ids', async () => {
     render(
       <NewEntityModal
@@ -57,7 +149,7 @@ describe('field observation capture', () => {
     expect(screen.getByText('Registrar')).toBeInTheDocument();
     expect(screen.getByText('Ancorar')).toBeInTheDocument();
     expect(screen.getByText('Comprovar e salvar')).toBeInTheDocument();
-    expect(screen.queryByLabelText(/id/i)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/\bid\b/i)).not.toBeInTheDocument();
 
     fireEvent.change(await screen.findByLabelText('Território relacionado'), { target: { value: '4' } });
     fireEvent.change(screen.getByLabelText('Título'), { target: { value: 'Nascente com resíduos' } });
