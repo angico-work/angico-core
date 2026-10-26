@@ -39,6 +39,18 @@ describe('DashboardPage', () => {
     vi.clearAllMocks();
   });
 
+  it('shows the basemap in a new workspace with no mapped records', async () => {
+    vi.mocked(loadDashboard).mockResolvedValue(dashboard);
+    const view = render(<Page workspaceId="workspace-a" />);
+    await screen.findByRole('heading', { name: 'Território A' });
+    expect(view.container.querySelector('.leaflet-container')).toBeInTheDocument();
+    expect(view.container.querySelectorAll('.leaflet-marker-icon')).toHaveLength(0);
+    const tile = view.container.querySelector<HTMLImageElement>('.leaflet-tile');
+    expect(tile?.src).toMatch(/^https:\/\/tile\.openstreetmap\.org\//);
+    expect(tile?.referrerPolicy).toBe('strict-origin-when-cross-origin');
+    expect(screen.getByText('Nenhum registro com localização ainda')).toBeInTheDocument();
+  });
+
   it('ignores a late response from the previous workspace', async () => {
     const first = deferred<DashboardData>();
     const second = deferred<DashboardData>();
