@@ -69,9 +69,9 @@ export default function DashboardPage() {
     return () => { refreshRequest.current += 1; };
   }, [refresh]);
 
-  const center = points.length
+  const center: [number, number] = points.length
     ? [points[0].latitude, points[0].longitude] as [number, number]
-    : null;
+    : [-14.235, -51.9253];
 
   return (
     <div className="page dashboard-page">
@@ -106,10 +106,11 @@ export default function DashboardPage() {
                 <Link to="/app/mapa">Abrir mapa</Link>
               </header>
               <div className="map-frame">
-                {center ? (
-                  <MapView points={points} center={center} zoom={14} height={360} fitToPoints />
-                ) : (
-                  <EmptyState title="Nenhum ponto localizado" message="Registros sem local continuam preservados no caderno; o mapa só abre com coordenadas reais." />
+                <MapView points={points} center={center} zoom={points.length ? 14 : 4} height={360} fitToPoints />
+                {points.length === 0 && (
+                  <div className="map-overlay-empty">
+                    <EmptyState title="Nenhum registro com localização ainda" message="Abra o mapa, encontre seu território e marque o primeiro registro." />
+                  </div>
                 )}
               </div>
             </section>
