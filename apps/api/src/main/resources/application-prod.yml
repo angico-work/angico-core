@@ -2,6 +2,11 @@ spring:
   config:
     activate:
       on-profile: prod
+  data:
+    jpa:
+      repositories:
+        # Initialize query repositories when used instead of delaying every cold start.
+        bootstrap-mode: lazy
   datasource:
     url: ${ANGICO_DB_URL}
     username: ${ANGICO_DB_USER}
