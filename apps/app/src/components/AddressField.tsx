@@ -80,6 +80,11 @@ export default function AddressField({ value, onChange, onSelect, placeholder, i
   }
 
   function onKeyDown(e: KeyboardEvent<HTMLInputElement>) {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      if (open && !loading && results.length > 0) choose(results[Math.max(active, 0)]);
+      return;
+    }
     if (!open || results.length === 0) return;
     if (e.key === 'ArrowDown') {
       e.preventDefault();
@@ -87,9 +92,6 @@ export default function AddressField({ value, onChange, onSelect, placeholder, i
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
       setActive((a) => Math.max(a - 1, 0));
-    } else if (e.key === 'Enter' && active >= 0) {
-      e.preventDefault();
-      choose(results[active]);
     } else if (e.key === 'Escape') {
       setOpen(false);
     }
