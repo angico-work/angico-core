@@ -4,6 +4,7 @@ import { MemoryRouter, Outlet, Route, Routes } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import MapPage from './MapPage';
 import { loadMapPoints, resolveCoords } from '../lib/api';
+import type { MapPoint } from '../types';
 
 vi.mock('../lib/api', () => ({
   loadMapPoints: vi.fn(),
@@ -17,8 +18,8 @@ vi.mock('../lib/api', () => ({
 }));
 
 vi.mock('../components/MapView', () => ({
-  default: ({ center, onMapClick }: { center: [number, number]; onMapClick?: (lat: number, lng: number) => void }) => (
-    <button type="button" data-testid="map-view" data-center={center.join(',')} onClick={() => onMapClick?.(-8, -34)}>
+  default: ({ center, points = [], onMapClick }: { center: [number, number]; points?: MapPoint[]; onMapClick?: (lat: number, lng: number) => void }) => (
+    <button type="button" data-testid="map-view" data-center={center.join(',')} data-points={points.map((point) => point.titulo).join(',')} onClick={() => onMapClick?.(-8, -34)}>
       Mapa
     </button>
   )
@@ -71,11 +72,36 @@ describe('MapPage real location boundaries', () => {
     vi.clearAllMocks();
   });
 
-  it('shows an empty state instead of centering the map on an invented place', async () => {
+  it('opens a navigable map without inventing records in a new workspace', async () => {
     renderPage();
 
-    expect(await screen.findByText('Nenhuma localização real disponível')).toBeInTheDocument();
-    expect(screen.queryByTestId('map-view')).not.toBeInTheDocument();
+    expect(await screen.findByTestId('map-view')).toHaveAttribute('data-points', '');
+    expect(screen.getByTestId('map-view')).toHaveAttribute('data-center', '-14.235,-51.9253');
+    expect(await screen.findByText('Nenhum registro com localização ainda')).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('map-view'));
+    expect(await screen.findByRole('dialog')).toBeInTheDocument();
+  });
+
+  it('keeps the basemap available while records are loading', async () => {
+    const pending = deferred<Awaited<ReturnType<typeof loadMapPoints>>>();
+    vi.mocked(loadMapPoints).mockReturnValue(pending.promise);
+    renderPage();
+    expect(screen.getByTestId('map-view')).toBeInTheDocument();
+    expect(screen.getByText('Carregando pontos do território…')).toBeInTheDocument();
+    expect(screen.queryByText('Nenhum registro com localização ainda')).not.toBeInTheDocument();
+    await act(async () => { pending.resolve([]); });
+  });
+
+  it('filters saved map points by record type', async () => {
+    vi.mocked(loadMapPoints).mockResolvedValue([
+      { workspaceId: 'workspace-a', type: 'observacao', id: 1, titulo: 'Nascente', categoria: 'Água', status: 'ABERTA', latitude: -8, longitude: -34 },
+      { workspaceId: 'workspace-a', type: 'problema', id: 2, titulo: 'Resíduos', categoria: 'Água', status: 'ABERTO', latitude: -9, longitude: -35 }
+    ]);
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId('map-view')).toHaveAttribute('data-points', 'Nascente,Resíduos'));
+    fireEvent.click(screen.getByRole('button', { name: 'Problemas' }));
+    expect(screen.getByTestId('map-view')).toHaveAttribute('data-points', 'Nascente');
+    expect(screen.getByText('1 de 2 pontos visíveis')).toBeInTheDocument();
   });
 
   it('anchors the map to confirmed points when they exist', async () => {
@@ -150,7 +176,7 @@ describe('MapPage real location boundaries', () => {
   it('preserves search and fly-to when a pending role resolves', async () => {
     vi.mocked(resolveCoords).mockResolvedValue([-8, -34]);
     const view = render(mapView('workspace-a', false, null));
-    await screen.findByText('Nenhuma localização real disponível');
+    await screen.findByText('Nenhum registro com localização ainda');
 
     const search = screen.getByRole('textbox', { name: 'Buscar localização' });
     fireEvent.change(search, { target: { value: 'Endereço pesquisado' } });
@@ -170,7 +196,7 @@ describe('MapPage real location boundaries', () => {
       result.displayName === 'Endereço A' ? first.promise : second.promise
     ));
     renderPage();
-    await screen.findByText('Nenhuma localização real disponível');
+    await screen.findByText('Nenhum registro com localização ainda');
 
     fireEvent.click(screen.getByRole('button', { name: 'Endereço A' }));
     fireEvent.click(screen.getByRole('button', { name: 'Endereço B' }));
@@ -185,7 +211,7 @@ describe('MapPage real location boundaries', () => {
     const pending = deferred<[number, number] | null>();
     vi.mocked(resolveCoords).mockReturnValue(pending.promise);
     renderPage();
-    await screen.findByText('Nenhuma localização real disponível');
+    await screen.findByText('Nenhum registro com localização ainda');
 
     fireEvent.click(screen.getByRole('button', { name: 'Endereço A' }));
     fireEvent.change(screen.getByRole('textbox', { name: 'Buscar localização' }), {
@@ -193,7 +219,7 @@ describe('MapPage real location boundaries', () => {
     });
     await act(async () => { pending.resolve([-8, -34]); });
 
-    expect(screen.queryByTestId('map-view')).not.toBeInTheDocument();
-    expect(screen.getByText('Nenhuma localização real disponível')).toBeInTheDocument();
+    expect(screen.getByTestId('map-view')).toHaveAttribute('data-center', '-14.235,-51.9253');
+    expect(screen.getByText('Nenhum registro com localização ainda')).toBeInTheDocument();
   });
 });
