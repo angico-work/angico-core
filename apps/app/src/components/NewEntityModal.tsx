@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
-import { getSession, listEntities, listTerritorios, reverseGeocode, resolveCoords } from '../lib/api';
+import { createTerritorio, getSession, listEntities, listTerritorios, reverseGeocode, resolveCoords } from '../lib/api';
 import { captureDomainMutation, captureObservation, type CaptureResult } from '../lib/offlineSync';
 import { mutationFeedback } from '../lib/mutationFeedback';
 import type { GeoResult, ObservacaoInput, PotencialidadeInput, ProblemaInput, Territorio } from '../types';
@@ -119,6 +119,7 @@ export default function NewEntityModal({
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [location, setLocation] = useState('');
+  const [selectedPlace, setSelectedPlace] = useState<GeoResult | null>(null);
   const [city, setCity] = useState('');
   const [state, setState] = useState('');
   const [neighborhood, setNeighborhood] = useState('');
@@ -190,23 +191,62 @@ export default function NewEntityModal({
   async function applyResult(result: GeoResult) {
     const request = ++geocodeRequest.current;
     resolvedAddress.current = result.displayName;
+    setSelectedPlace(null);
+    setCoords(null);
+    setError(null);
     setCity(result.city ?? '');
     setState(result.state ?? '');
     setNeighborhood(result.neighborhood ?? '');
-    const resolved = await resolveCoords(result);
-    if (resolved && request === geocodeRequest.current) setCoords(resolved);
+    try {
+      const resolved = await resolveCoords(result);
+      if (request !== geocodeRequest.current) return;
+      if (!resolved) {
+        setError('Não foi possível localizar esse resultado no mapa. Tente um endereço mais completo.');
+        return;
+      }
+      setCoords(resolved);
+      setSelectedPlace({ ...result, latitude: resolved[0], longitude: resolved[1] });
+    } catch (caught) {
+      if (request === geocodeRequest.current) setError(caught instanceof Error ? caught.message : 'Não foi possível localizar esse lugar.');
+    }
+  }
+
+  function changeLocation(next: string) {
+    geocodeRequest.current += 1;
+    if (resolvedAddress.current && next !== resolvedAddress.current) {
+      resolvedAddress.current = null;
+      setSelectedPlace(null);
+      setCoords(null);
+      setCity('');
+      setState('');
+      setNeighborhood('');
+    }
+    setLocation(next);
   }
 
   async function handlePick(lat: number, lng: number) {
     const request = ++geocodeRequest.current;
     setCoords([lat, lng]);
-    const result = await reverseGeocode(lat, lng);
-    if (!result || request !== geocodeRequest.current) return;
-    resolvedAddress.current = result.displayName;
-    setLocation(result.displayName || location);
-    setCity(result.city ?? '');
-    setState(result.state ?? '');
-    setNeighborhood(result.neighborhood ?? '');
+    try {
+      const result = await reverseGeocode(lat, lng);
+      if (!result || request !== geocodeRequest.current) return;
+      resolvedAddress.current = result.displayName;
+      setSelectedPlace({ ...result, latitude: lat, longitude: lng });
+      setLocation(result.displayName || location);
+      setCity(result.city ?? '');
+      setState(result.state ?? '');
+      setNeighborhood(result.neighborhood ?? '');
+    } catch {
+      // The manually chosen coordinates remain usable if reverse lookup is unavailable.
+    }
+  }
+
+  function hasPlace() {
+    if (requiresTerritory && !territorioId && !selectedPlace) {
+      setError('Selecione uma cidade, local ou endereço na busca, ou escolha um território cadastrado.');
+      return false;
+    }
+    return true;
   }
 
   function advanceFromRecord() {
@@ -215,11 +255,7 @@ export default function NewEntityModal({
       document.getElementById('ne-title')?.focus();
       return;
     }
-    if (requiresTerritory && !territorioId) {
-      setError('Selecione o território relacionado para continuar.');
-      document.getElementById('ne-territory')?.focus();
-      return;
-    }
+    if (!hasPlace()) return;
     setError(null);
     setStep(2);
   }
@@ -227,6 +263,7 @@ export default function NewEntityModal({
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (step !== 3) return;
+    if (!hasPlace() || submitting) return;
     setSubmitting(true);
     setError(null);
     const submittedWorkspace = workspaceId;
@@ -251,6 +288,26 @@ export default function NewEntityModal({
     }
 
     try {
+      if (requiresTerritory && !territorioId && selectedPlace) {
+        const name = selectedPlace.displayName.slice(0, 255);
+        const existing = territories.find((territory) => territory.nome === name);
+        const territory = existing ?? await createTerritorio({
+          workspaceId,
+          nome: name,
+          tipo: 'OUTRO',
+          cidade: city || null,
+          bairro: neighborhood || null,
+          estado: state || null,
+          pais: selectedPlace.country,
+          latitude: coords?.[0] ?? null,
+          longitude: coords?.[1] ?? null,
+          boundingBox: null
+        });
+        if (activeWorkspace.current !== submittedWorkspace) return;
+        setTerritorioId(String(territory.id));
+        if (!existing) setTerritories((current) => [...current, territory]);
+        body.territorioId = String(territory.id);
+      }
       if (type === 'observacao') {
         const result = await captureObservation(body as unknown as ObservacaoInput);
         if (activeWorkspace.current !== submittedWorkspace) return;
@@ -340,23 +397,35 @@ export default function NewEntityModal({
                 <h3 id="capture-record-title">{type === 'problema' ? 'Qual situação foi reconhecida?' : type === 'potencialidade' ? 'Qual potencialidade foi reconhecida?' : 'O que você observou?'}</h3>
                 <p>Use palavras reconhecíveis por quem vive o território.</p>
               </div>
+              <div className="field">
+                <label htmlFor="ne-place-search">Buscar cidade, local ou endereço</label>
+                <AddressField
+                  id="ne-place-search"
+                  value={location}
+                  onChange={changeLocation}
+                  onSelect={applyResult}
+                  placeholder="Ex.: Mococa, Parque Ibirapuera ou Avenida Paulista, São Paulo"
+                />
+                <small>Escolha um resultado para localizar o registro no mapa.</small>
+                {requiresTerritory && !territorioId && selectedPlace && <small>Este local será adicionado aos territórios ao salvar o registro.</small>}
+              </div>
               {requiresTerritory && (
                 <div className="field">
                   <label htmlFor="ne-territory">Território relacionado</label>
                   <select
                     id="ne-territory"
                     value={territorioId}
-                    required
+                    required={!selectedPlace}
                     disabled={relationsLoading || Boolean(relationsError)}
                     onChange={(event) => {
                       setTerritorioId(event.target.value);
                       setOrigemObservacaoId('');
                     }}
                   >
-                    <option value="">Selecione por nome</option>
+                    <option value="">{selectedPlace ? 'Usar o local escolhido acima' : 'Ou selecione um território cadastrado'}</option>
                     {territories.map((territory) => <option key={territory.id} value={String(territory.id)}>{territory.nome}</option>)}
                   </select>
-                  {!relationsLoading && !relationsError && territories.length === 0 && <small>Nenhum território está cadastrado neste espaço de trabalho.</small>}
+                  {!relationsLoading && !relationsError && territories.length === 0 && <small>Você pode começar pela busca acima, sem cadastrar um território antes.</small>}
                 </div>
               )}
               {type === 'problema' && (
@@ -424,17 +493,7 @@ export default function NewEntityModal({
                 <AddressField
                   id="ne-location"
                   value={location}
-                  onChange={(next) => {
-                    geocodeRequest.current += 1;
-                    if (resolvedAddress.current && next !== resolvedAddress.current) {
-                      resolvedAddress.current = null;
-                      setCoords(null);
-                      setCity('');
-                      setState('');
-                      setNeighborhood('');
-                    }
-                    setLocation(next);
-                  }}
+                  onChange={changeLocation}
                   onSelect={applyResult}
                   placeholder="Ex.: margem da nascente, Comunidade do Sol"
                 />
@@ -468,7 +527,7 @@ export default function NewEntityModal({
               <dl className="capture-review">
                 <div><dt>Registro</dt><dd>{title}</dd></div>
                 <div><dt>Contexto</dt><dd>{category} · {meta.levelLabel ? `${meta.levelLabel}: ${level.toLowerCase()}` : meta.label}</dd></div>
-                {requiresTerritory && <div><dt>Território relacionado</dt><dd>{selectedTerritory?.nome ?? 'Não selecionado'}</dd></div>}
+                {requiresTerritory && <div><dt>Território relacionado</dt><dd>{selectedTerritory?.nome ?? selectedPlace?.displayName ?? 'Não selecionado'}</dd></div>}
                 <div><dt>Local</dt><dd>{location || [neighborhood, city, state].filter(Boolean).join(', ') || 'Local não informado'}</dd></div>
                 {type === 'problema' && <div><dt>Origem</dt><dd>{availableObservations.find((observation) => String(observation.id) === origemObservacaoId)?.titulo ?? 'Observação não vinculada'}</dd></div>}
                 <div><dt>Autoria</dt><dd>{authorRef() ?? 'Pessoa da sessão atual'}</dd></div>
@@ -495,7 +554,7 @@ export default function NewEntityModal({
               <button type="button" className="primary-button" onClick={advanceFromRecord}>Continuar para ancorar</button>
             )}
             {step === 2 && (
-              <button type="button" className="primary-button" onClick={() => setStep(3)}>Continuar para comprovar</button>
+              <button type="button" className="primary-button" onClick={() => { if (hasPlace()) { setError(null); setStep(3); } }}>Continuar para comprovar</button>
             )}
             {step === 3 && (
               <button type="submit" className="primary-button" disabled={submitting}>
