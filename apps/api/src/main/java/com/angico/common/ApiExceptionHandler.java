@@ -77,7 +77,7 @@ public class ApiExceptionHandler {
         LOGGER.error("Erro inesperado na API.", ex);
         return ProblemDetail.forStatusAndDetail(
                 HttpStatus.INTERNAL_SERVER_ERROR,
-                "Erro interno ao processar a requisicao."
+                "Erro interno ao processar a requisição."
         );
     }
 }

@@ -143,7 +143,7 @@ public class OntologyService {
     public String canonicalObjectType(String objectType) {
         String canonical = canonicalToken(objectType, "Tipo ontologico invalido");
         if (!objectTypes.contains(canonical)) {
-            throw new IllegalArgumentException("Tipo ontologico invalido: " + objectType);
+            throw new IllegalArgumentException("Tipo ontológico inválido: " + objectType);
         }
         return canonical;
     }
@@ -160,7 +160,7 @@ public class OntologyService {
         RelationRule candidate = new RelationRule(canonicalOrigin, canonicalRelation, canonicalDestination);
         if (!relationRules.contains(candidate)) {
             throw new IllegalArgumentException(
-                    "Relacao ontologica invalida: " + candidate.label()
+                    "Relação ontológica inválida: " + candidate.label()
             );
         }
     }

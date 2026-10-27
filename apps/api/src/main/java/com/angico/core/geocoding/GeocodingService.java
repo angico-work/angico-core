@@ -68,14 +68,14 @@ public class GeocodingService {
             return new GeocodingSearchResponse(
                     normalizedQuery,
                     List.of(),
-                    "Geocodificador indisponivel no momento."
+                    "Geocodificador indisponível no momento."
             );
         }
     }
 
     public GeocodingResult reverse(Double latitude, Double longitude) {
         if (latitude == null || longitude == null) {
-            throw new IllegalArgumentException("lat e lng sao obrigatorios.");
+            throw new IllegalArgumentException("lat e lng são obrigatórios.");
         }
         if (!Double.isFinite(latitude) || !Double.isFinite(longitude)
                 || latitude < -90 || latitude > 90

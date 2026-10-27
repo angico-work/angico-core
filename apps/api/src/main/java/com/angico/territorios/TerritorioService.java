@@ -52,7 +52,7 @@ public class TerritorioService {
 
     public Territorio requireTerritorio(Long id) {
         Territorio territorio = territorioRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("Territorio nao encontrado: " + id));
+                .orElseThrow(() -> new IllegalArgumentException("Território não encontrado: " + id));
         authorizationService.requireMember(territorio.getWorkspaceId());
         return territorio;
     }
@@ -131,7 +131,7 @@ public class TerritorioService {
 
     public static String requireText(String value, String fieldName) {
         if (value == null || value.isBlank()) {
-            throw new IllegalArgumentException(fieldName + " e obrigatorio.");
+            throw new IllegalArgumentException(fieldName + " é obrigatório.");
         }
         return value.trim();
     }
@@ -175,7 +175,7 @@ public class TerritorioService {
         try {
             return objectMapper.writeValueAsString(values);
         } catch (JacksonException ex) {
-            throw new IllegalArgumentException("boundingBox invalido.", ex);
+            throw new IllegalArgumentException("boundingBox inválido.", ex);
         }
     }
 

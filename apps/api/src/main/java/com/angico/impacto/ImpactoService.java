@@ -131,7 +131,7 @@ public class ImpactoService {
         String workspaceId = authorizationService.requireWritableWorkspace(request.workspaceId());
         double value = requireFiniteValue(request.valor());
         Indicador indicador = indicadorRepository.findById(request.indicadorId())
-                .orElseThrow(() -> new IllegalArgumentException("Indicador nao encontrado: " + request.indicadorId()));
+                .orElseThrow(() -> new IllegalArgumentException("Indicador não encontrado: " + request.indicadorId()));
         if (!workspaceId.equals(indicador.getWorkspaceId())) {
             throw new ForbiddenException("Indicador fora do workspace autorizado.");
         }
@@ -152,7 +152,7 @@ public class ImpactoService {
                 "MEDICAO",
                 String.valueOf(medicao.getId()),
                 null,
-                "Medicao de " + indicador.getNome(),
+                "Medição de " + indicador.getNome(),
                 "REGISTRADA",
                 "api"
         );

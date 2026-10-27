@@ -272,7 +272,7 @@ public class MensagemService {
         resolvedParticipantIds.stream()
                 .filter(id -> !id.equals(actor.getId()))
                 .map(id -> pessoaRepository.findById(id)
-                        .orElseThrow(() -> new IllegalArgumentException("Pessoa nao encontrada: " + id)))
+                        .orElseThrow(() -> new IllegalArgumentException("Pessoa não encontrada: " + id)))
                 .forEach(pessoa -> registerParticipant(workspaceId, conversaId, pessoa, actor));
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("titulo", conversa.getTitulo());
@@ -503,7 +503,7 @@ public class MensagemService {
 
     public MensagemAnexo requireAttachment(Long anexoId) {
         MensagemAnexo anexo = anexoRepository.findById(anexoId)
-                .orElseThrow(() -> new IllegalArgumentException("Anexo nao encontrado: " + anexoId));
+                .orElseThrow(() -> new IllegalArgumentException("Anexo não encontrado: " + anexoId));
         authorizationService.requireMember(anexo.getWorkspaceId());
         Mensagem mensagem = mensagemRepository.findById(anexo.getMensagemId())
                 .orElseThrow(() -> new IllegalArgumentException("Mensagem do anexo nao encontrada."));
@@ -522,7 +522,7 @@ public class MensagemService {
 
     private Conversa requireConversa(Long id) {
         return conversaRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("Conversa nao encontrada: " + id));
+                .orElseThrow(() -> new IllegalArgumentException("Conversa não encontrada: " + id));
     }
 
     private Pessoa currentPessoa() {
@@ -538,16 +538,16 @@ public class MensagemService {
         if (reference.startsWith("@")) {
             String angicoId = AngicoIdNormalizer.normalize(reference);
             return pessoaRepository.findByAngicoIdIgnoreCase(angicoId)
-                    .orElseThrow(() -> new IllegalArgumentException("Angico ID nao encontrado: @" + angicoId));
+                    .orElseThrow(() -> new IllegalArgumentException("Angico ID não encontrado: @" + angicoId));
         }
         if (reference.contains("@")) {
             String email = reference.toLowerCase(Locale.ROOT);
             return pessoaRepository.findByEmailIgnoreCase(email)
-                    .orElseThrow(() -> new IllegalArgumentException("Email nao encontrado: " + email));
+                    .orElseThrow(() -> new IllegalArgumentException("Email não encontrado: " + email));
         }
         String angicoId = AngicoIdNormalizer.normalize(reference);
         return pessoaRepository.findByAngicoIdIgnoreCase(angicoId)
-                .orElseThrow(() -> new IllegalArgumentException("Angico ID nao encontrado: @" + angicoId));
+                .orElseThrow(() -> new IllegalArgumentException("Angico ID não encontrado: @" + angicoId));
     }
 
     private void registerParticipant(
@@ -592,7 +592,7 @@ public class MensagemService {
         boolean hasLocation = latitude != null && longitude != null;
         boolean hasAttachment = attachments != null && attachments.stream().anyMatch(file -> file != null && !file.isEmpty());
         if (!hasText && !hasLocation && !hasAttachment) {
-            throw new IllegalArgumentException("Mensagem precisa ter texto, localizacao ou anexo.");
+            throw new IllegalArgumentException("Mensagem precisa ter texto, localização ou anexo.");
         }
         if ((latitude == null) != (longitude == null)) {
             throw new IllegalArgumentException("Latitude e longitude devem ser enviadas juntas.");
@@ -609,7 +609,7 @@ public class MensagemService {
         String type = linkedEntityType == null ? "" : linkedEntityType.trim().toUpperCase(Locale.ROOT);
         ontologyService.requireObjectType(type);
         if (!LINKABLE_TYPES.contains(type)) {
-            throw new IllegalArgumentException("Tipo nao pode ser mencionado em mensagem: " + type);
+            throw new IllegalArgumentException("Tipo não pode ser mencionado em mensagem: " + type);
         }
         ontologyService.requireValidRelation(OntologyService.MENSAGEM, "MENCIONA", type);
         return type;
@@ -701,7 +701,7 @@ public class MensagemService {
                     localizacaoId,
                     null,
                     mensagem.getLocalDescricao() == null || mensagem.getLocalDescricao().isBlank()
-                            ? "Localizacao compartilhada"
+                            ? "Localização compartilhada"
                             : mensagem.getLocalDescricao(),
                     "COMPARTILHADA",
                     "api"

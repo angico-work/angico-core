@@ -99,9 +99,9 @@ public class PessoaService {
     @Transactional
     public PessoaResponse updateCurrent(PessoaUpdateRequest request) {
         Long pessoaId = currentActorProvider.currentPessoaId()
-                .orElseThrow(() -> new UnauthorizedException("Sessao invalida."));
+                .orElseThrow(() -> new UnauthorizedException("Sessão inválida."));
         Pessoa pessoa = pessoaRepository.findById(pessoaId)
-                .orElseThrow(() -> new UnauthorizedException("Sessao invalida."));
+                .orElseThrow(() -> new UnauthorizedException("Sessão inválida."));
         List<String> workspaceIds = authorizationService.authorizedWorkspaceIds();
         String actorId = authorizationService.currentActorId();
         if (request.nome() != null && !request.nome().isBlank()) {
