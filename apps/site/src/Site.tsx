@@ -24,6 +24,7 @@ export default function Site({ appUrl, contactApiUrl }: SiteProps) {
 
           <nav aria-label="Navegação principal">
             <a href="#unico">Por que é único</a>
+            <a href="#inteligencia">Inteligência artificial</a>
             <a href="#como-funciona">Como funciona</a>
             {appUrl ? (
               <a className="header-access" href={appUrl}>

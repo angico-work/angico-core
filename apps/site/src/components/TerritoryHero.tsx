@@ -8,8 +8,9 @@ export default function TerritoryHero() {
           <p className="eyebrow">— Memória operacional socioambiental</p>
           <h1 id="hero-title">O trabalho continua. A memória também.</h1>
           <p className="h-summary">
-            O Angico conecta território, autoria, evidência e resultado para que uma ação possa
-            ser retomada, compreendida e demonstrada ao longo do tempo.
+            Inteligência artificial a serviço de quem cuida do território. O Angico conecta
+            relatos, pessoas e evidências, com machine learning para ajudar a organizar
+            observações e transformar conhecimento local em ação.
           </p>
           <a className="primary-action" href="#contato">
             Quero levar o Angico ao meu território

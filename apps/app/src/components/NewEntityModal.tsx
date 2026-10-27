@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { createTerritorio, getSession, listEntities, listTerritorios, reverseGeocode, resolveCoords } from '../lib/api';
 import { captureDomainMutation, captureObservation, type CaptureResult } from '../lib/offlineSync';
 import { mutationFeedback } from '../lib/mutationFeedback';
+import { suggestCategory, type CategorySuggestion } from '../lib/fieldIntelligence';
 import type { GeoResult, ObservacaoInput, PotencialidadeInput, ProblemaInput, Territorio } from '../types';
 import AddressField from './AddressField';
 import MapView from './MapView';
@@ -118,6 +119,9 @@ export default function NewEntityModal({
   const [category, setCategory] = useState(TYPES[initialType].categories[0]);
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
+  const [analysis, setAnalysis] = useState<{ source: string; suggestion: CategorySuggestion | null } | null>(null);
+  const analysisSource = JSON.stringify([type, title, description]);
+  const currentAnalysis = analysis?.source === analysisSource ? analysis : null;
   const [location, setLocation] = useState('');
   const [selectedPlace, setSelectedPlace] = useState<GeoResult | null>(null);
   const [city, setCity] = useState('');
@@ -479,6 +483,33 @@ export default function NewEntityModal({
                   placeholder="Descreva o que viu, sem interpretar além do que pode comprovar."
                 />
               </div>
+              {type !== 'potencialidade' && (
+                <aside className="evidence-note" aria-label="Assistente Angico">
+                  <h4>Assistente Angico · IA experimental</h4>
+                  <p>Uma sugestão de categoria a partir do seu relato. Você revisa e decide.</p>
+                  <button type="button" className="ghost-button" disabled={!title.trim() && !description.trim()}
+                    onClick={() => setAnalysis({ source: analysisSource, suggestion: suggestCategory(`${title} ${description}`) })}>
+                    Sugerir categoria com IA
+                  </button>
+                  <div aria-live="polite">
+                    {currentAnalysis && (currentAnalysis.suggestion ? (
+                      <>
+                        <p><b>Categoria sugerida: {currentAnalysis.suggestion.category}</b></p>
+                        <p>Termos relacionados: {currentAnalysis.suggestion.terms.join(', ')}.</p>
+                        <p>A categoria indica o assunto, não confirma a ocorrência nem a gravidade.</p>
+                        <button type="button" className="ghost-button" onClick={() => setCategory(currentAnalysis.suggestion!.category)}>
+                          Usar {currentAnalysis.suggestion.category}
+                        </button>
+                      </>
+                    ) : <p>Sem uma sugestão clara. Acrescente detalhes ou escolha a categoria manualmente.</p>)}
+                  </div>
+                  <details>
+                    <summary>Como funciona e limites</summary>
+                    <p>Machine learning leve, com 36 exemplos ilustrativos em português. A análise roda neste navegador, inclusive offline, sem enviar seu texto a um serviço de IA.</p>
+                    <p>Esta versão pode errar e não aprende automaticamente com seus registros. Urgência e severidade permanecem sob sua avaliação. Ao salvar, o registro segue a sincronização normal do Angico.</p>
+                  </details>
+                </aside>
+              )}
             </section>
           )}
 

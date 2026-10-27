@@ -49,6 +49,25 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe('field observation capture', () => {
+  it('only applies an AI category after review, preserves urgency and invalidates stale suggestions', async () => {
+    render(<NewEntityModal workspaceId="territorio-teste" onClose={() => undefined} onCreated={() => undefined} />);
+    const title = screen.getByLabelText('Título');
+    fireEvent.change(title, { target: { value: 'Esgoto vazando e água contaminada' } });
+    fireEvent.change(screen.getByLabelText('Urgência'), { target: { value: 'BAIXA' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Sugerir categoria com IA' }));
+    expect(await screen.findByRole('button', { name: 'Usar Água e Saneamento' })).toBeInTheDocument();
+    expect(screen.getByLabelText('Categoria')).toHaveValue('Resíduos');
+    fireEvent.click(screen.getByRole('button', { name: 'Usar Água e Saneamento' }));
+    expect(screen.getByLabelText('Categoria')).toHaveValue('Água e Saneamento');
+    expect(screen.getByLabelText('Urgência')).toHaveValue('BAIXA');
+    expect(captureObservation).not.toHaveBeenCalled();
+    fireEvent.change(title, { target: { value: 'Calçada quebrada atrapalha pedestres' } });
+    expect(screen.queryByRole('button', { name: 'Usar Água e Saneamento' })).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Categoria')).toHaveValue('Água e Saneamento');
+    fireEvent.click(screen.getByRole('button', { name: 'Sugerir categoria com IA' }));
+    expect(screen.getByRole('button', { name: 'Usar Mobilidade' })).toBeInTheDocument();
+  });
+
   const place = {
     displayName: 'Mococa, São Paulo, Brasil', city: 'Mococa', state: 'São Paulo',
     neighborhood: null, country: 'Brasil', latitude: -21.467, longitude: -47.004, boundingBox: []

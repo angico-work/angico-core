@@ -59,6 +59,29 @@ export default function WhyAngico() {
         </p>
       </section>
 
+      <section id="inteligencia" className="why-angico site-frame" aria-labelledby="intelligence-title">
+        <div className="why-angico__heading">
+          <p className="section-label">— Inteligência artificial e machine learning</p>
+          <h2 id="intelligence-title">O território traz o conhecimento. A IA ajuda a organizar.</h2>
+          <p>Menos esforço para classificar relatos, mais tempo para compreender o lugar e agir com a comunidade. O Assistente Angico já dá esse primeiro passo dentro da plataforma.</p>
+        </div>
+        <ul className="why-angico__list" aria-label="Inteligência no Angico">
+          <li>
+            <h3>Já no protótipo: classificação assistida</h3>
+            <p>Descreva uma observação ou problema e peça uma sugestão de categoria. Um modelo de machine learning identifica o tema e mostra os termos relacionados. Você aceita ou ajusta.</p>
+          </li>
+          <li>
+            <h3>Leve, local e sob seu controle</h3>
+            <p>A análise funciona no navegador, inclusive sem conexão, sem enviar o relato a um serviço externo de IA. Nenhuma sugestão altera ou salva um registro sozinha.</p>
+          </li>
+          <li>
+            <h3>Próximos passos de pesquisa</h3>
+            <p>Queremos explorar padrões recorrentes e conexões entre registros, com dados autorizados e validação em campo. Previsões de risco e recomendações automáticas ainda não estão disponíveis.</p>
+          </li>
+        </ul>
+        <p className="why-angico__boundary">IA experimental: a versão inicial usa 36 exemplos ilustrativos em português. Pode errar, não foi validada em campo e não substitui a avaliação de quem conhece o território.</p>
+      </section>
+
       <section
         id="como-funciona"
         className="journey site-frame"
