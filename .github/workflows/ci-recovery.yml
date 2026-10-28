@@ -27,7 +27,8 @@ jobs:
       - name: Resolve compatible security updates
         run: |
           npm pkg set 'devDependencies.vite=^8.1.6'
-          npm audit fix --package-lock-only --ignore-scripts
+          npm install --ignore-scripts
+          npm audit fix --ignore-scripts
       - name: Export resolved dependencies for review
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
