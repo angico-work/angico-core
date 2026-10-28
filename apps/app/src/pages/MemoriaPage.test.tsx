@@ -89,8 +89,8 @@ describe('MemoriaPage workspace boundary', () => {
       actorId: 'ana.sp',
       source: 'offline',
       syncStatus: 'SYNCED_FROM_OFFLINE',
-      from: expect.stringContaining('2026-07-01'),
-      to: expect.stringContaining('2026-08-01')
+      from: new Date(2026, 6, 1, 0, 0, 0, 0).toISOString(),
+      to: new Date(2026, 6, 31, 23, 59, 59, 999).toISOString()
     })));
   });
 });

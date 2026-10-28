@@ -2,6 +2,7 @@ package com.angico.mensagens;
 
 import java.text.Normalizer;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedHashSet;
@@ -412,7 +413,9 @@ public class MensagemService {
                         idempotencyKey,
                         requestHash
                 );
-        Instant recordedAt = clock.now();
+        // Match timestamp(6) persistence before returning the first response, so
+        // an idempotent replay returns exactly the same server timestamp.
+        Instant recordedAt = clock.now().truncatedTo(ChronoUnit.MICROS);
         Mensagem mensagem = new Mensagem();
         mensagem.setWorkspaceId(conversa.getWorkspaceId());
         mensagem.setConversaId(conversa.getId());

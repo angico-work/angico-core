@@ -2,6 +2,7 @@ package com.angico.mensagens;
 
 import static org.hamcrest.Matchers.hasSize;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.mockito.Mockito.doReturn;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -9,6 +10,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.angico.auth.PasswordHasher;
+import com.angico.common.ClockProvider;
 import com.angico.core.memory.MemoryEventRepository;
 import com.angico.core.memory.MemoryRelationRepository;
 import com.angico.pessoas.Pessoa;
@@ -31,6 +33,7 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.mock.web.MockMultipartFile;
+import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 
 @SpringBootTest(properties = {
         "spring.datasource.url=jdbc:h2:mem:message-domain;MODE=PostgreSQL;DB_CLOSE_DELAY=-1",
@@ -50,6 +53,9 @@ class MessageDomainIntegrationTest {
 
     @Autowired
     private MockMvc mvc;
+
+    @MockitoSpyBean
+    private ClockProvider clock;
 
     @Autowired
     private WorkspaceRepository workspaceRepository;
@@ -188,6 +194,9 @@ class MessageDomainIntegrationTest {
     void replayWithoutOccurredAtKeepsTheOriginalServerTimestamp() throws Exception {
         long conversationId = createConversation("Resposta perdida", ownerSession);
         String clientMessageId = "message-" + IDS.incrementAndGet();
+        // Linux can supply nanoseconds; PostgreSQL and H2 persist microseconds.
+        doReturn(Instant.now().truncatedTo(java.time.temporal.ChronoUnit.SECONDS).plusNanos(123456789))
+                .when(clock).now();
 
         MvcResult first = mvc.perform(multipart("/api/mensagens/conversas/{id}/mensagens", conversationId)
                         .param("corpo", "Mensagem sem horário do cliente")

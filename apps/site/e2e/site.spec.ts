@@ -103,6 +103,7 @@ test('keeps the public journey responsive, sourced, keyboard-accessible and quie
     page.getByRole('link', { name: 'Ir para o conteúdo' }),
     page.getByRole('link', { name: 'Angico, início' }),
     page.getByRole('link', { name: 'Por que é único' }),
+    page.getByRole('link', { name: 'Inteligência artificial', exact: true }),
     page.getByRole('link', { name: 'Como funciona' }),
     page.getByRole('link', { name: 'Já sou membro' }),
     page.getByRole('link', { name: 'Quero levar o Angico ao meu território' }),
