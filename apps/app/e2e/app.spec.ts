@@ -1,15 +1,10 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
 import { installApiFixtures } from './api-fixtures';
+import { findVisibleOverflow } from './layout';
 
 async function expectNoVisibleOverflow(page: Page) {
-  const overflowingElements = await page.locator('body *').evaluateAll((elements) => elements.flatMap((element) => {
-    const style = getComputedStyle(element);
-    if (style.display === 'none' || style.visibility === 'hidden') return [];
-    const rect = element.getBoundingClientRect();
-    if (rect.left >= -0.5 && rect.right <= window.innerWidth + 0.5) return [];
-    return [`${element.tagName.toLowerCase()}.${element.className}: ${rect.left}/${rect.right}`];
-  }));
+  const overflowingElements = await page.locator('body *').evaluateAll(findVisibleOverflow);
   expect(overflowingElements).toEqual([]);
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
     await page.evaluate(() => window.innerWidth)
