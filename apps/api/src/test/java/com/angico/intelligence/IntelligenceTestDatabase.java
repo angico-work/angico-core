@@ -12,7 +12,7 @@ final class IntelligenceTestDatabase {
     final JdbcTemplate jdbc = new JdbcTemplate(ds);
     final DataSourceTransactionManager tx = new DataSourceTransactionManager(ds);
     IntelligenceTestDatabase() {
-        new ResourceDatabasePopulator(new ClassPathResource("db/migration/h2/V0__complete_schema.sql"), new ClassPathResource("db/migration/h2/V7__api_intelligence.sql")).execute(ds);
+        new ResourceDatabasePopulator(new ClassPathResource("db/migration/h2/V0__complete_schema.sql"), new ClassPathResource("db/migration/h2/V7__api_intelligence.sql"), new ClassPathResource("db/migration/h2/V8__intelligence_feedback.sql")).execute(ds);
         jdbc.update("insert into pessoa(workspace_id,nome,angico_id,created_at) values ('w','Test','actor',current_timestamp), ('w','Test 2','actor2',current_timestamp)");
         jdbc.update("insert into workspace(slug,nome,created_at) values ('w','Workspace',current_timestamp),('other','Other',current_timestamp)");
         jdbc.update("insert into observacao_territorial(workspace_id,categoria,titulo,descricao,urgencia,status,created_at) values ('w','Resíduos','Lixo na praça','Relato sintético','MEDIA','ABERTA',current_timestamp)");

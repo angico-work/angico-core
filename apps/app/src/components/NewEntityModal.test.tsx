@@ -2,6 +2,8 @@ import '@testing-library/jest-dom/vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import NewEntityModal from './NewEntityModal';
+import { requestAnalysis, sendIntelligenceFeedback } from '../lib/intelligenceApi';
+vi.mock('../lib/intelligenceApi', () => ({ requestAnalysis: vi.fn(), sendIntelligenceFeedback: vi.fn().mockResolvedValue(undefined) }));
 import { captureDomainMutation, captureObservation } from '../lib/offlineSync';
 import { createTerritorio, listEntities, listTerritorios, resolveCoords, searchGeocoding } from '../lib/api';
 
@@ -54,7 +56,7 @@ describe('field observation capture', () => {
     const title = screen.getByLabelText('Título');
     fireEvent.change(title, { target: { value: 'Esgoto vazando e água contaminada' } });
     fireEvent.change(screen.getByLabelText('Urgência'), { target: { value: 'BAIXA' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Sugerir categoria com IA' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Sugerir categoria local' }));
     expect(await screen.findByRole('button', { name: 'Usar Água e Saneamento' })).toBeInTheDocument();
     expect(screen.getByLabelText('Categoria')).toHaveValue('Resíduos');
     fireEvent.click(screen.getByRole('button', { name: 'Usar Água e Saneamento' }));
@@ -64,7 +66,7 @@ describe('field observation capture', () => {
     fireEvent.change(title, { target: { value: 'Calçada quebrada atrapalha pedestres' } });
     expect(screen.queryByRole('button', { name: 'Usar Água e Saneamento' })).not.toBeInTheDocument();
     expect(screen.getByLabelText('Categoria')).toHaveValue('Água e Saneamento');
-    fireEvent.click(screen.getByRole('button', { name: 'Sugerir categoria com IA' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Sugerir categoria local' }));
     expect(screen.getByRole('button', { name: 'Usar Mobilidade' })).toBeInTheDocument();
   });
 
@@ -271,4 +273,17 @@ describe('field observation capture', () => {
       expect.objectContaining({ workspaceId: 'territorio-teste', titulo: 'Horta comunitária' })
     );
   });
+});
+
+it('applies external analysis to the draft only, preserving urgency and the save flow', async () => {
+  vi.mocked(requestAnalysis).mockResolvedValue({ analysisId:'analysis',status:'READY',category:'Água e Saneamento',summary:'Relato de água',message:'',sources:[],connections:[],recommendations:[] });
+  render(<NewEntityModal workspaceId="territorio-teste" onClose={() => undefined} onCreated={() => undefined} />);
+  fireEvent.change(screen.getByLabelText('Título'), { target:{ value:'Água turva' } });
+  fireEvent.change(screen.getByLabelText('Urgência'), { target:{ value:'BAIXA' } });
+  fireEvent.click(screen.getByRole('button', { name:'Analisar com IA' }));
+  fireEvent.click(await screen.findByRole('button', { name:'Aplicar Água e Saneamento' }));
+  expect(screen.getByLabelText('Categoria')).toHaveValue('Água e Saneamento');
+  expect(screen.getByLabelText('Urgência')).toHaveValue('BAIXA');
+  expect(captureObservation).not.toHaveBeenCalled();
+  await waitFor(() => expect(sendIntelligenceFeedback).toHaveBeenCalled());
 });

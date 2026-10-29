@@ -16,6 +16,7 @@ class IntelligenceServiceTest {
     final IntelligenceTestDatabase db = new IntelligenceTestDatabase();
     final WorkspaceAuthorizationService auth = mock(WorkspaceAuthorizationService.class);
     final AtomicInteger calls = new AtomicInteger();
+    List<?> observedExamples=List.of();
     String output = "{\"category\":\"Resíduos\",\"summary\":\"O relato menciona lixo, sem comprovação independente.\",\"connections\":[{\"sourceId\":\"OBSERVACAO:1\",\"relationType\":null,\"reason\":\"Tema semelhante; verificar se é o mesmo local.\"}],\"recommendations\":[{\"text\":\"Verificar coleta no local.\",\"sourceIds\":[\"OBSERVACAO:1\"]}]}";
     Runnable onProvider = () -> {};
     final IntelligenceSettings settings = new IntelligenceSettings(true,"test-secret","test-model",100);
@@ -30,11 +31,11 @@ class IntelligenceServiceTest {
         repository = new IntelligenceAnalysisRepository(db.jdbc,db.tx,mapper,config);
         var provider = new OpenAiResponsesClient(config,mapper,r -> { throw new AssertionError("No HTTP calls"); }) {
             @Override public Result analyze(IntelligenceRequest input, List<IntelligenceSource> sources, List<?> examples) {
-                calls.incrementAndGet(); onProvider.run();
+                calls.incrementAndGet(); observedExamples=examples; onProvider.run();
                 return new Result(mapper.readTree(output),120,40,"test-model");
             }
         };
-        return new IntelligenceService(repository,new IntelligenceContextService(db.jdbc,auth),provider,auth,config,mapper,new OntologyService());
+        return new IntelligenceService(repository,new IntelligenceContextService(db.jdbc,auth),provider,auth,config,mapper,new OntologyService(),new IntelligenceFeedbackService(repository,db.jdbc,db.tx,auth,mapper));
     }
     IntelligenceRequest input(String id) { return new IntelligenceRequest("w",id,"OBSERVACAO","Lixo na praça","Relato sintético"); }
     IntelligenceRequest next() { return input(UUID.randomUUID().toString()); }
@@ -104,6 +105,14 @@ class IntelligenceServiceTest {
             assertEquals("READY",first.get().status());
         }
         assertEquals(1,calls.get());
+    }
+    @Test void nextAnalysisReceivesPreviouslyReviewedRelevantExamples() {
+        var response=service.analyze(next());
+        var feedback=new IntelligenceFeedbackService(repository,db.jdbc,db.tx,auth,mapper);
+        feedback.review(response.analysisId(), new IntelligenceFeedbackService.Feedback("category","corrected","Água e Saneamento",UUID.randomUUID().toString()));
+        service.analyze(next());
+        assertEquals(1,observedExamples.size());
+        assertEquals("Água e Saneamento",((IntelligenceFeedbackService.Example)observedExamples.getFirst()).category());
     }
     @Test void providerFailureIsRedactedAndIdempotent() {
         onProvider=() -> { throw new OpenAiResponsesClient.ProviderFailure(); };

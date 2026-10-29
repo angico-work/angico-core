@@ -7,6 +7,7 @@ import type { GeoResult, ObservacaoInput, PotencialidadeInput, ProblemaInput, Te
 import AddressField from './AddressField';
 import MapView from './MapView';
 import ModalDialog from './ModalDialog';
+import IntelligenceReview from './IntelligenceReview';
 
 export type EntityType = 'observacao' | 'problema' | 'potencialidade';
 
@@ -483,13 +484,14 @@ export default function NewEntityModal({
                   placeholder="Descreva o que viu, sem interpretar além do que pode comprovar."
                 />
               </div>
+              <IntelligenceReview workspaceId={workspaceId} entityType={type} title={title} description={description} categories={meta.categories} onApplyCategory={setCategory} />
               {type !== 'potencialidade' && (
                 <aside className="evidence-note" aria-label="Assistente Angico">
-                  <h4>Assistente Angico · IA experimental</h4>
+                  <h4>Sugestão local · experimental</h4>
                   <p>Uma sugestão de categoria a partir do seu relato. Você revisa e decide.</p>
                   <button type="button" className="ghost-button" disabled={!title.trim() && !description.trim()}
                     onClick={() => setAnalysis({ source: analysisSource, suggestion: suggestCategory(`${title} ${description}`) })}>
-                    Sugerir categoria com IA
+                    Sugerir categoria local
                   </button>
                   <div aria-live="polite">
                     {currentAnalysis && (currentAnalysis.suggestion ? (

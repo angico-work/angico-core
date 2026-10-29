@@ -17,11 +17,12 @@ public class IntelligenceService {
     private final IntelligenceSettings settings;
     private final ObjectMapper mapper;
     private final OntologyService ontology;
+    private final IntelligenceFeedbackService feedback;
     public IntelligenceService(IntelligenceAnalysisRepository repository, IntelligenceContextService context,
         OpenAiResponsesClient provider, WorkspaceAuthorizationService authorization, IntelligenceSettings settings,
-        ObjectMapper mapper, OntologyService ontology) {
+        ObjectMapper mapper, OntologyService ontology, IntelligenceFeedbackService feedback) {
         this.repository=repository; this.context=context; this.provider=provider; this.authorization=authorization;
-        this.settings=settings; this.mapper=mapper; this.ontology=ontology;
+        this.settings=settings; this.mapper=mapper; this.ontology=ontology; this.feedback=feedback;
     }
     public IntelligenceResponse analyze(IntelligenceRequest raw) {
         String workspace=authorization.requireWritableWorkspace(raw.workspaceId());
@@ -39,7 +40,7 @@ public class IntelligenceService {
         OpenAiResponsesClient.Result generated=null;
         try {
             authorization.requireMember(workspace);
-            generated=provider.analyze(input,sources,List.of());
+            generated=provider.analyze(input,sources,feedback.examples(workspace,type,input.title()+" "+Objects.toString(input.description(),"")));
             response=IntelligenceOutput.validate(row.id(),type,generated.content(),sources,ontology);
         } catch(OpenAiResponsesClient.ProviderFailure | IllegalArgumentException e) {
             response=IntelligenceResponse.state(row.id(),"FAILED","A IA não concluiu uma análise válida. O registro pode ser salvo sem ela.");
