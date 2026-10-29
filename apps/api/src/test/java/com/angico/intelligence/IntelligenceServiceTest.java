@@ -114,6 +114,15 @@ class IntelligenceServiceTest {
         assertEquals(1,observedExamples.size());
         assertEquals("Água e Saneamento",((IntelligenceFeedbackService.Example)observedExamples.getFirst()).category());
     }
+    @Test void failedProviderUsageIsPersistedAndUnknownUsageIsNotReportedAsZero() {
+        onProvider=()-> { throw new OpenAiResponsesClient.ProviderFailure(new OpenAiResponsesClient.Result(null,120,40,"test-model")); };
+        var failed=service.analyze(next());
+        assertEquals("FAILED",failed.status());
+        assertEquals(120,db.jdbc.queryForObject("select input_tokens from intelligence_analysis where id=?",Integer.class,failed.analysisId()));
+        onProvider=()-> { throw new OpenAiResponsesClient.ProviderFailure(); };
+        var unknown=service.analyze(next());
+        assertNull(db.jdbc.queryForObject("select input_tokens from intelligence_analysis where id=?",Integer.class,unknown.analysisId()));
+    }
     @Test void providerFailureIsRedactedAndIdempotent() {
         onProvider=() -> { throw new OpenAiResponsesClient.ProviderFailure(); };
         var input=next();

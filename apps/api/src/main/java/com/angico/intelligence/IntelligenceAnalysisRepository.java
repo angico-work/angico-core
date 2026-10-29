@@ -43,14 +43,14 @@ public class IntelligenceAnalysisRepository {
             String inputText=IntelligenceContextService.safeText(input.title()+"\n"+Objects.toString(input.description(),""),4256);
             jdbc.update("""
                 insert into intelligence_analysis (id,workspace_id,actor_id,request_id,input_hash,entity_type,input_text,model,prompt_version,status,sources_json,input_tokens,output_tokens,created_at)
-                values (?,?,?,?,?,?,?,?,?,'PENDING',?,0,0,?)
+                values (?,?,?,?,?,?,?,?,?,'PENDING',?,NULL,NULL,?)
                 """, id,input.workspaceId(),actor,input.requestId(),hash,input.entityType(),inputText,settings.model(),OpenAiResponsesClient.PROMPT_VERSION,mapper.writeValueAsString(sources),Timestamp.from(now));
             return new Reservation(new Row(id,input.workspaceId(),actor,hash,input.entityType(),inputText,"PENDING",null,now),true,false);
         });
     }
     void complete(String id,IntelligenceResponse response,OpenAiResponsesClient.Result result) {
         jdbc.update("update intelligence_analysis set status=?,response_json=?,input_tokens=?,output_tokens=?,model=coalesce(?,model),completed_at=? where id=? and status='PENDING'",
-            response.status(),mapper.writeValueAsString(response),result==null?0:result.inputTokens(),result==null?0:result.outputTokens(),result==null?null:result.model(),Timestamp.from(Instant.now()),id);
+            response.status(),mapper.writeValueAsString(response),result==null?null:result.inputTokens(),result==null?null:result.outputTokens(),result==null?null:result.model(),Timestamp.from(Instant.now()),id);
     }
     Optional<Row> find(String id) {
         return jdbc.query("select * from intelligence_analysis where id=?",(r,n) -> row(r),id).stream().findFirst();

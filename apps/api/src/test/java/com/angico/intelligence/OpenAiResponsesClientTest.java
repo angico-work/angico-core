@@ -62,6 +62,18 @@ class OpenAiResponsesClientTest {
             assertNull(error.getCause());
         }
     }
+    @Test void incompleteRefusedAndInvalidOutputPreserveValidatedUsage() {
+        for(String response:List.of(envelope("incomplete","{\"type\":\"output_text\",\"text\":\"{}\"}"),
+            envelope("completed","{\"type\":\"refusal\",\"refusal\":\"No\"}"),
+            envelope("completed","{\"type\":\"output_text\",\"text\":\"not json\"}"))) {
+            var client=new OpenAiResponsesClient(settings,mapper,r->new OpenAiResponsesClient.Reply(200,response));
+            var failure=assertThrows(OpenAiResponsesClient.ProviderFailure.class,()->client.analyze(input,List.of(),List.of()));
+            assertNotNull(failure.metadata());
+            assertEquals(120,failure.metadata().inputTokens());
+            assertEquals(40,failure.metadata().outputTokens());
+            assertNull(failure.metadata().content());
+        }
+    }
     @Test void timesOutWithoutRetryAndReturnsSafeError() {
         var calls = new java.util.concurrent.atomic.AtomicInteger();
         var client = new OpenAiResponsesClient(settings,mapper,r -> { calls.incrementAndGet(); throw new HttpTimeoutException("test-secret"); });

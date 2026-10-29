@@ -5,7 +5,7 @@ export interface IntelligenceReviewProps {
   workspaceId: string; entityType: string; title: string; description: string;
   categories: string[]; onApplyCategory: (category: string) => void;
 }
-interface ReviewState { input: IntelligenceFeedback; status: 'sending' | 'recorded' | 'failed' }
+interface ReviewState { analysisId: string; generation: number; input: IntelligenceFeedback; status: 'sending' | 'recorded' | 'failed' }
 
 function SourceLink({ source }: { source: IntelligenceSource }) {
   return <a href={`/app/rastro/${encodeURIComponent(source.entityType)}/${encodeURIComponent(source.entityId)}`} target="_blank" rel="noopener noreferrer">{source.title}</a>;
@@ -18,13 +18,15 @@ function ReviewSession({ workspaceId, entityType, title, description, categories
   const [correction, setCorrection] = useState(categories[0]);
   const [reviews, setReviews] = useState<Record<string, ReviewState>>({});
   const lifetime = useRef<AbortController | null>(null);
+  const generation = useRef(0);
+  const activeAnalysisId = useRef<string | null>(null);
   const requestId = useRef<string | null>(null);
   const correctionId = useId();
   useEffect(() => {
     const controller = new AbortController();
     lifetime.current = controller;
     const connectivity = () => setOnline(navigator.onLine);
-    const accessLost = () => { controller.abort(); setAnalysis(null); setBusy(false); setError('A sessão ou o acesso mudou. Reabra o registro para analisar novamente.'); };
+    const accessLost = () => { controller.abort(); activeAnalysisId.current = null; generation.current += 1; setAnalysis(null); setBusy(false); setError('A sessão ou o acesso mudou. Reabra o registro para analisar novamente.'); };
     window.addEventListener('online', connectivity);
     window.addEventListener('offline', connectivity);
     window.addEventListener('angico:unauthorized', accessLost);
@@ -42,10 +44,13 @@ function ReviewSession({ workspaceId, entityType, title, description, categories
     const signal = lifetime.current?.signal;
     if (busy || !online || !signal || signal.aborted) return;
     requestId.current ??= crypto.randomUUID();
+    const requestGeneration = ++generation.current;
+    activeAnalysisId.current = null;
     setBusy(true); setError(''); setAnalysis(null); setReviews({});
     try {
       const result = await requestAnalysis({ workspaceId, requestId: requestId.current, entityType, title, description }, signal);
-      if (signal.aborted) return;
+      if (signal.aborted || requestGeneration !== generation.current) return;
+      activeAnalysisId.current = result.status === 'READY' ? result.analysisId : null;
       setAnalysis(result);
       if (result.status !== 'PENDING') requestId.current = null;
     } catch {
@@ -54,27 +59,30 @@ function ReviewSession({ workspaceId, entityType, title, description, categories
       if (!signal.aborted) setBusy(false);
     }
   }
-  async function submitReview(input: IntelligenceFeedback) {
+  async function submitReview(analysisId: string, input: IntelligenceFeedback, reviewGeneration: number) {
     const signal = lifetime.current?.signal;
-    if (!analysis?.analysisId || !signal || signal.aborted) return;
-    setReviews(current => ({ ...current, [input.suggestionId]: { input, status: 'sending' } }));
+    const current = () => !signal?.aborted && generation.current === reviewGeneration && activeAnalysisId.current === analysisId;
+    if (!signal || !current()) return;
+    const state = { analysisId, generation: reviewGeneration, input };
+    setReviews(reviews => ({ ...reviews, [input.suggestionId]: { ...state, status: 'sending' } }));
     try {
       if (!navigator.onLine) throw new Error('offline');
-      await sendIntelligenceFeedback(analysis.analysisId, input, signal);
-      if (!signal.aborted) setReviews(current => ({ ...current, [input.suggestionId]: { input, status: 'recorded' } }));
+      await sendIntelligenceFeedback(analysisId, input, signal);
+      if (current()) setReviews(reviews => ({ ...reviews, [input.suggestionId]: { ...state, status: 'recorded' } }));
     } catch {
-      if (!signal.aborted) setReviews(current => ({ ...current, [input.suggestionId]: { input, status: 'failed' } }));
+      if (current()) setReviews(reviews => ({ ...reviews, [input.suggestionId]: { ...state, status: 'failed' } }));
     }
   }
   function review(suggestionId: string, decision: IntelligenceFeedback['decision'], correctedCategory: string | null = null) {
-    if (reviews[suggestionId]) return;
-    void submitReview({ suggestionId, decision, correctedCategory, requestId: crypto.randomUUID() });
+    const analysisId = activeAnalysisId.current;
+    if (reviews[suggestionId] || !analysisId) return;
+    void submitReview(analysisId, { suggestionId, decision, correctedCategory, requestId: crypto.randomUUID() }, generation.current);
   }
   function reviewControls(id: string) {
     const current = reviews[id];
     if (current?.status === 'recorded') return <p role="status">Revisão registrada.</p>;
     if (current?.status === 'sending') return <p role="status">Registrando revisão…</p>;
-    if (current?.status === 'failed') return <div role="status"><p>A revisão não foi enviada. Sua categoria no rascunho foi preservada.</p><button type="button" className="ghost-button" onClick={() => void submitReview(current.input)}>Reenviar revisão</button></div>;
+    if (current?.status === 'failed') return <div role="status"><p>A revisão não foi enviada. Sua categoria no rascunho foi preservada.</p><button type="button" className="ghost-button" onClick={() => void submitReview(current.analysisId, current.input, current.generation)}>Reenviar revisão</button></div>;
     return <div className="field-row"><button type="button" className="ghost-button" onClick={() => review(id,'accepted')}>Útil</button><button type="button" className="ghost-button" onClick={() => review(id,'rejected')}>Não útil</button></div>;
   }
   const ready = analysis?.status === 'READY' ? analysis : null;

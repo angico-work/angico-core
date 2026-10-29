@@ -11,8 +11,8 @@ CREATE TABLE intelligence_analysis (
     status VARCHAR(32) NOT NULL,
     sources_json TEXT NOT NULL,
     response_json TEXT,
-    input_tokens INTEGER NOT NULL DEFAULT 0,
-    output_tokens INTEGER NOT NULL DEFAULT 0,
+    input_tokens INTEGER,
+    output_tokens INTEGER,
     created_at TIMESTAMP WITH TIME ZONE NOT NULL,
     completed_at TIMESTAMP WITH TIME ZONE,
     CONSTRAINT uq_intelligence_request UNIQUE (workspace_id, actor_id, request_id)

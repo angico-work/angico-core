@@ -82,3 +82,16 @@ it('starts a fresh review when explicitly requesting another completed analysis'
   start();
   expect(await screen.findByRole('button', { name:'Aplicar Água e Saneamento' })).toBeInTheDocument();
 });
+
+it.each(['success','failure'])('ignores late %s feedback from a previous analysis', async (outcome) => {
+  let finish!: () => void;
+  vi.mocked(sendIntelligenceFeedback).mockReturnValueOnce(new Promise<void>((resolve,reject) => { finish = () => outcome === 'success' ? resolve() : reject(new Error('offline')); }));
+  render(<IntelligenceReview {...props} />); start(); await screen.findByText(analysis.summary);
+  fireEvent.click(screen.getByRole('button', { name:'Aplicar Água e Saneamento' }));
+  vi.mocked(requestAnalysis).mockResolvedValue({ ...analysis,analysisId:'analysis-2' });
+  start(); await screen.findByRole('button', { name:'Aplicar Água e Saneamento' });
+  await act(async () => finish());
+  expect(screen.getByRole('button', { name:'Aplicar Água e Saneamento' })).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name:'Reenviar revisão' })).not.toBeInTheDocument();
+  expect(screen.queryByText('Revisão registrada.')).not.toBeInTheDocument();
+});

@@ -42,12 +42,18 @@ public class IntelligenceService {
             authorization.requireMember(workspace);
             generated=provider.analyze(input,sources,feedback.examples(workspace,type,input.title()+" "+Objects.toString(input.description(),"")));
             response=IntelligenceOutput.validate(row.id(),type,generated.content(),sources,ontology);
-        } catch(OpenAiResponsesClient.ProviderFailure | IllegalArgumentException e) {
-            response=IntelligenceResponse.state(row.id(),"FAILED","A IA não concluiu uma análise válida. O registro pode ser salvo sem ela.");
+        } catch(OpenAiResponsesClient.ProviderFailure e) {
+            generated=e.metadata();
+            response=failed(row.id());
+        } catch(IllegalArgumentException e) {
+            response=failed(row.id());
         }
         repository.complete(row.id(),response,generated);
         authorization.requireMember(workspace);
         return response;
+    }
+    private static IntelligenceResponse failed(String id) {
+        return IntelligenceResponse.state(id,"FAILED","A IA não concluiu uma análise válida. O registro pode ser salvo sem ela.");
     }
     static String hash(String value) {
         try { return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.UTF_8))); }

@@ -40,7 +40,7 @@ Para interromper chamadas: configure `ANGICO_INTELLIGENCE_ENABLED=false` e publi
 
 ## Proveniência, retenção e métricas
 
-`intelligence_analysis` guarda workspace, autor, hash de entrada, texto mascarado, fontes consultadas, modelo retornado, versão de prompt, saída validada, status, tokens e horários. `intelligence_feedback` guarda decisão e correção em separado. A API não registra a chave nem respostas brutas de erro do provedor nos logs.
+`intelligence_analysis` guarda workspace, autor, hash de entrada, texto mascarado, fontes consultadas, modelo retornado, versão de prompt, saída validada, status, tokens e horários. `intelligence_feedback` guarda decisão e correção em separado. Tokens retornados em recusas e respostas incompletas também são preservados. Quando o provedor não informa consumo (por exemplo, timeout), os campos ficam `NULL`, não zero; reporte a quantidade de chamadas com consumo desconhecido junto dos totais conhecidos. A API não registra a chave nem respostas brutas de erro do provedor nos logs.
 
 Nesta entrega não há expurgo agendado: os registros permanecem até exclusão administrativa. Antes de uso com dados reais, defina prazo conforme a política do workspace e inclua as duas tabelas na rotina de exclusão/exportação. Para expurgo, remova primeiro feedback associado e depois análises antigas, em transação; mantenha ao menos o dia UTC atual para não reiniciar as cotas. No PostgreSQL, a FK também elimina feedback quando a análise é removida. Backups e retenção do provedor são controles separados.
 

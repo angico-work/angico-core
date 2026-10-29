@@ -29,8 +29,13 @@ public class OpenAiResponsesClient {
         """;
     @FunctionalInterface interface Transport { Reply send(HttpRequest request) throws Exception; }
     record Reply(int status, String body) {}
-    record Result(JsonNode content, int inputTokens, int outputTokens, String model) {}
-    static class ProviderFailure extends RuntimeException { ProviderFailure() { super("Não foi possível concluir a análise."); } }
+    record Result(JsonNode content, Integer inputTokens, Integer outputTokens, String model) {}
+    static class ProviderFailure extends RuntimeException {
+        private final Result metadata;
+        ProviderFailure() { this(null); }
+        ProviderFailure(Result metadata) { super("Não foi possível concluir a análise."); this.metadata=metadata; }
+        Result metadata() { return metadata; }
+    }
     private final IntelligenceSettings settings;
     private final ObjectMapper mapper;
     private final Transport transport;
@@ -46,6 +51,7 @@ public class OpenAiResponsesClient {
     }
     public Result analyze(IntelligenceRequest input, List<IntelligenceSource> sources, List<?> examples) {
         if (!settings.available()) throw new ProviderFailure();
+        Result metadata=null;
         try {
             String data=mapper.writeValueAsString(Map.of("input",Map.of(
                 "entityType",input.entityType(),"title",IntelligenceContextService.safeText(input.title(),255),
@@ -60,6 +66,7 @@ public class OpenAiResponsesClient {
             Reply reply=transport.send(request);
             if (reply.status()!=200 || reply.body()==null || reply.body().length()>256_000) throw new ProviderFailure();
             var response=mapper.readTree(reply.body());
+            metadata=usage(response);
             if (!"completed".equals(response.path("status").asText()) || !response.path("output").isArray()) throw new ProviderFailure();
             String text=null;
             for (var item : response.path("output")) {
@@ -70,16 +77,22 @@ public class OpenAiResponsesClient {
                     text=part.path("text").asText();
                 }
             }
-            if (text==null || text.length()>16_000 || !response.path("usage").path("input_tokens").isInt()
-                || !response.path("usage").path("output_tokens").isInt()) throw new ProviderFailure();
-            return new Result(mapper.readTree(text),response.path("usage").path("input_tokens").asInt(),
-                response.path("usage").path("output_tokens").asInt(),response.path("model").asText(settings.model()));
+            if (text==null || text.length()>16_000) throw new ProviderFailure();
+            return new Result(mapper.readTree(text),metadata.inputTokens(),metadata.outputTokens(),metadata.model());
         } catch (InterruptedException e) {
-            Thread.currentThread().interrupt(); throw new ProviderFailure();
+            Thread.currentThread().interrupt(); throw new ProviderFailure(metadata);
         } catch (Exception e) {
             // Provider bodies and exception causes may contain sensitive request data. Never propagate or log them.
-            throw new ProviderFailure();
+            throw new ProviderFailure(metadata);
         }
+    }
+    private Result usage(JsonNode response) {
+        var input=response.path("usage").path("input_tokens");
+        var output=response.path("usage").path("output_tokens");
+        boolean known=input.isInt() && input.asInt()>=0 && output.isInt() && output.asInt()>=0;
+        String model=response.path("model").asText(settings.model());
+        if(model.isBlank() || model.length()>100) model=settings.model();
+        return new Result(null,known?input.asInt():null,known?output.asInt():null,model);
     }
     private static Map<String,Object> object(Map<String,Object> properties) {
         return Map.of("type","object","properties",properties,"required",List.copyOf(properties.keySet()),"additionalProperties",false);

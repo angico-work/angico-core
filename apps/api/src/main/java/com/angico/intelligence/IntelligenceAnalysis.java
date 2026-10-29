@@ -19,8 +19,8 @@ public class IntelligenceAnalysis {
     @Column(nullable=false,length=32) private String status;
     @Column(nullable=false,columnDefinition="text") private String sourcesJson;
     @Column(columnDefinition="text") private String responseJson;
-    @Column(nullable=false) private int inputTokens;
-    @Column(nullable=false) private int outputTokens;
+    private Integer inputTokens;
+    private Integer outputTokens;
     @Column(nullable=false) private Instant createdAt;
     private Instant completedAt;
     protected IntelligenceAnalysis() {}

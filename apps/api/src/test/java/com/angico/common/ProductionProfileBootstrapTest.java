@@ -31,7 +31,7 @@ class ProductionProfileBootstrapTest {
 
     @Test
     void productionProfileBootstrapsAndVersionsACompletelyEmptyDatabase() {
-        assertEquals(List.of("0", "1", "2", "3", "4", "5", "6"), jdbcTemplate.queryForList(
+        assertEquals(List.of("0", "1", "2", "3", "4", "5", "6", "7", "8"), jdbcTemplate.queryForList(
                 "SELECT \"version\" FROM \"flyway_schema_history\" "
                         + "WHERE \"success\" = TRUE AND \"version\" IS NOT NULL "
                         + "ORDER BY \"installed_rank\"",
