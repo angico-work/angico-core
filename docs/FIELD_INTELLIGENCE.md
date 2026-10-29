@@ -42,3 +42,11 @@ por pessoas do território, separar treinamento e avaliação por território,
 medir erros e abstenções por categoria e validar correções com usuários. Análise
 de recorrência e conexões entre registros permanece uma direção de pesquisa,
 sem disponibilidade ou prazo prometido.
+
+## Inteligência com contexto via API
+
+O formulário de registro também oferece **Analisar com IA**, separado de **Sugerir categoria local**. A nova opção solicita ao backend uma interpretação do relato, sugestões de conexões com fontes do workspace e passos de verificação. O backend usa OpenAI apenas quando explicitamente configurado e ativado. A funcionalidade não é parte obrigatória de salvar ou sincronizar registros.
+
+A pessoa pode aplicar, rejeitar ou corrigir a categoria; avaliar conexões e recomendações; e abrir os registros citados no Rastro. As revisões permanecem auditáveis e exemplos de categorias revisadas podem ser recuperados em chamadas posteriores. Isso adiciona memória de trabalho ao Angico sem alterar os pesos de um modelo, treinar um modelo próprio ou executar reinforcement learning.
+
+Fontes recuperadas e respostas do modelo não são fatos automaticamente confirmados. Nenhuma sugestão cria relações canônicas ou muda urgência/severidade. Consultar [operação e avaliação](INTELLIGENCE_OPERATIONS.md) para configuração, limites, retenção e teste de ativação.
