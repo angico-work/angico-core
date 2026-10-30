@@ -108,7 +108,7 @@ if [[ -n "$UPGRADE_FROM_REF" ]]; then
     "Upgrade source $UPGRADE_FROM_REF"
   PREVIOUS_VERSIONS="$(flyway_versions)"
   case "$PREVIOUS_VERSIONS" in
-    "0"|"0,1"|"0,1,2"|"0,1,2,3"|"0,1,2,3,4"|"0,1,2,3,4,5"|"0,1,2,3,4,5,6") ;;
+    "0"|"0,1"|"0,1,2"|"0,1,2,3"|"0,1,2,3,4"|"0,1,2,3,4,5"|"0,1,2,3,4,5,6"|"0,1,2,3,4,5,6,7"|"0,1,2,3,4,5,6,7,8") ;;
     *)
       echo "Unexpected pre-upgrade Flyway history: $PREVIOUS_VERSIONS" >&2
       exit 1
@@ -120,7 +120,7 @@ fi
 run_app "$ROOT_DIR/target/angico-api-0.0.1-SNAPSHOT.jar" "Current production profile"
 
 VERSIONS="$(flyway_versions)"
-if [[ "$VERSIONS" != "0,1,2,3,4,5,6" ]]; then
+if [[ "$VERSIONS" != "0,1,2,3,4,5,6,7,8" ]]; then
   echo "Unexpected Flyway history: $VERSIONS" >&2
   exit 1
 fi
